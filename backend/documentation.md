@@ -1,0 +1,820 @@
+# Nalli Bokka API and Server Documentation
+
+This document is the implementation reference for frontend developers integrating with the Nalli Bokka Express API. It describes the routes, request and response shapes, authentication, validation, data models, pricing rules, server configuration, and known integration constraints.
+
+## 1. API at a glance
+
+- **Base URL (local):** `http://localhost:3000/api`
+- **Content type:** JSON (`application/json`) except the Razorpay webhook, which must send its signed raw JSON body.
+- **Authentication:** JWT bearer token for customer and store-admin protected routes.
+- **Database:** MongoDB through Mongoose.
+- **Money:** API product and order prices are in rupees as JSON numbers. Razorpay amounts are in paise (1 rupee = 100 paise).
+- **IDs:** MongoDB ObjectIds are returned as 24-character hexadecimal strings.
+- **Dates:** Mongoose timestamps are JSON ISO-8601 date strings.
+
+Endpoints in this document are relative to the base URL unless marked otherwise.
+
+## 2. Local setup and server configuration
+
+### Requirements and commands
+
+- Node.js 18 or newer
+- npm
+- MongoDB
+- Twilio Verify credentials for real OTP delivery
+- Razorpay credentials for online payment
+
+```powershell
+npm install
+Copy-Item .env.example .env
+npm run dev
+```
+
+The server connects to MongoDB before it listens. `npm start` starts without watch mode, `npm run dev` runs with Node's watch mode, `npm test` runs the automated tests, and `npm run create-store` provisions a store/admin account from an interactive terminal.
+
+### Environment variables
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `PORT` | No | HTTP port; defaults to `3000`. |
+| `MONGODB_URI` | Yes | MongoDB connection string. The server and store-creation script fail if it is missing. |
+| `JWT_SECRET` | Yes | Secret used to sign and verify JWTs. Must be at least 32 characters; startup fails otherwise. Use a unique, high-entropy secret. |
+| `JWT_EXPIRES_IN` | No | JWT lifetime accepted by `jsonwebtoken`, for example `7d`; defaults to `7d`. |
+| `CORS_ORIGIN` | No | Comma-separated allow-list of website origins. Defaults to `http://localhost:5173`. Requests without an `Origin` header are allowed. |
+| `TWILIO_ACCOUNT_SID` | For OTP | Twilio account SID. |
+| `TWILIO_AUTH_TOKEN` | For OTP | Twilio auth token. |
+| `TWILIO_VERIFY_SERVICE_SID` | For OTP | Twilio Verify service SID. |
+| `RAZORPAY_KEY_ID` | For payments | Razorpay key ID; returned to the frontend when creating a payment order. |
+| `RAZORPAY_KEY_SECRET` | For payments | Razorpay secret used for API access and client-payment signature verification. Never expose it to the frontend. |
+| `RAZORPAY_WEBHOOK_SECRET` | For webhooks | Secret configured for the Razorpay webhook endpoint. Never expose it to the frontend. |
+
+The server applies Helmet security headers, CORS, a 1 MB JSON body limit, a JSON 404 handler, and centralized error formatting. The Razorpay webhook route is mounted before the JSON parser so it can verify the original raw request bytes.
+
+### MongoDB deployment requirement
+
+Order checkout and payment settlement start MongoDB sessions and transactions. MongoDB multi-document transactions require a replica set or sharded cluster; a standalone MongoDB server cannot support these operations. Configure a replica set (including a single-node replica set for local development) before exercising checkout or payment flows.
+
+## 3. Authentication and standard request behavior
+
+### Customer authentication (OTP)
+
+1. Send `POST /auth/users/otp` with the customer's phone number in E.164 format.
+2. The server asks Twilio Verify to send an SMS and returns `202 Accepted`.
+3. Submit the phone and received code to `POST /auth/users/verify`.
+4. A successful verification returns a JWT and the customer profile. If this phone has no account yet, `name` is required to create it.
+5. Send the token as `Authorization: Bearer <token>` for customer routes.
+
+OTP request and verification share a rate limit of 5 requests per 10 minutes per client IP. Store login is limited to 10 attempts per 15 minutes per client IP. Rate-limit responses have an `error` string.
+
+### Store-admin authentication
+
+Store accounts are provisioned from the trusted server terminal; there is no public store registration endpoint. The password is hashed with bcrypt when stored and is not returned in API responses. Store admins sign in at `POST /auth/stores/login`, then use the returned JWT with store routes.
+
+### Tokens and authorization
+
+- Tokens are signed with HS256, identify the account in `sub`, contain role `user` or `store`, and use issuer `nalli-bokka-api`.
+- Token expiry uses `JWT_EXPIRES_IN` or defaults to seven days.
+- Customer routes require role `user`; store dashboard/operations routes require role `store`.
+- `GET /auth/me` accepts either role.
+- Missing/invalid/expired credentials return `401`; a valid token with the wrong role returns `403`.
+- This API does not currently expose refresh tokens or token revocation.
+
+### Validation, pagination, and errors
+
+Request bodies and query strings are validated with strict schemas. Unknown fields are rejected rather than silently accepted. JSON request bodies should use `Content-Type: application/json`.
+
+List endpoints accept:
+
+| Parameter | Default | Constraints |
+| --- | --- | --- |
+| `page` | `1` | Integer, at least 1. |
+| `limit` | `20` | Integer, 1–100. |
+
+Paged responses use `{ "data": [...], "pagination": { "page": 1, "limit": 20, "total": 0, "pages": 0 } }`. When there are no results, `pages` is `0`.
+
+Standard application errors use `{ "error": "message" }`. Validation errors are `400`; missing resources are usually `404`; state conflicts, unavailable stock, or duplicate unique values are `409`; authentication failures are `401`; role failures are `403`; configured external services that are unavailable return `503`. Unhandled server errors return `500` with a generic message and are logged by the server. Malformed JSON returns `400`; bodies over 1 MB return `413`.
+
+## 4. Endpoint reference
+
+### 4.1 Health and authentication
+
+#### `GET /health`
+
+Public liveness check. Does not query MongoDB.
+
+```json
+{ "status": "ok" }
+```
+
+#### `POST /auth/users/otp`
+
+Public. Requests a Twilio Verify SMS.
+
+Request:
+
+```json
+{ "phone": "+15551234567" }
+```
+
+`phone` must be E.164 format: plus sign followed by 8–15 digits, with a nonzero first digit.
+
+Success (`202`):
+
+```json
+{ "message": "Verification code sent" }
+```
+
+Possible errors: `400` invalid phone; `429` rate limit exceeded; `503` Twilio is not configured. Twilio/provider failures are reported through the centralized error handler.
+
+#### `POST /auth/users/verify`
+
+Public. Verifies the code using Twilio Verify and creates a user on the first successful verification.
+
+Request:
+
+```json
+{
+  "phone": "+15551234567",
+  "code": "123456",
+  "name": "Asha",
+  "email": "asha@example.com"
+}
+```
+
+- `phone`: E.164 format.
+- `code`: 4–10 digits.
+- `name`: optional for an existing user; required for a new user; 1–100 characters.
+- `email`: optional valid email, maximum 254 characters.
+
+Success (`200`):
+
+```json
+{
+  "token": "<jwt>",
+  "user": {
+    "_id": "<userId>",
+    "name": "Asha",
+    "phone": "+15551234567",
+    "addresses": [],
+    "createdAt": "<ISO-8601>",
+    "updatedAt": "<ISO-8601>"
+  }
+}
+```
+
+Possible errors: `400` invalid request or missing new-account name; `401` invalid/expired OTP; `409` duplicate email; `429` rate limit exceeded; `503` Twilio or JWT configuration unavailable. User fields such as `_id` and timestamps are generated by MongoDB/Mongoose.
+
+#### `POST /auth/stores/login`
+
+Public. Logs in a provisioned store admin.
+
+Request:
+
+```json
+{ "username": "shop", "password": "<store-password>" }
+```
+
+Success (`200`):
+
+```json
+{
+  "token": "<jwt>",
+  "store": {
+    "id": "<storeId>",
+    "storeName": "Nalli Bokka",
+    "username": "shop",
+    "location": "Hyderabad"
+  }
+}
+```
+
+Possible errors: `400` invalid body; `401` invalid credentials; `429` rate limit exceeded; `503` JWT configuration unavailable.
+
+#### `GET /auth/me`
+
+Customer or store token required.
+
+Success (`200`):
+
+```json
+{ "account": { "...": "current user or store document" }, "role": "user" }
+```
+
+The account is loaded from the database for the role and ID in the token. Store password is excluded.
+
+### 4.2 Customer profile and saved addresses
+
+All routes below require a customer token.
+
+#### `GET /users/me`
+
+Returns `{ "data": <user> }`, including `name`, `phone`, optional `email`, `addresses`, `_id`, `createdAt`, and `updatedAt`.
+
+#### `PATCH /users/me`
+
+Updates profile fields. At least one supported field is required; extra fields are rejected.
+
+Request:
+
+```json
+{ "name": "Asha Rao", "email": "asha@example.com" }
+```
+
+- `name`: optional, 1–100 characters.
+- `email`: optional valid email or empty string. Empty string clears the email.
+
+Success: `200 { "data": <updated user> }`. Duplicate email returns `409`.
+
+#### `POST /users/me/addresses`
+
+Adds an address to the authenticated user's embedded address list.
+
+Request:
+
+```json
+{
+  "label": "Home",
+  "fullAddress": "12 Example Road, Hyderabad",
+  "landmark": "Near the park",
+  "pincode": "500001"
+}
+```
+
+- `label`: required, 1–40 characters.
+- `fullAddress`: required, 5–500 characters.
+- `landmark`: optional, up to 200 characters; defaults to empty string.
+- `pincode`: required, exactly six digits and represented as a string.
+
+Success: `201 { "data": <new address including its generated _id> }`.
+
+#### `PATCH /users/me/addresses/:addressId`
+
+Updates one address owned by the current user. Path ID must be a valid ObjectId. Supply at least one field from the address shape above; each supplied field follows the same validation constraints as address creation.
+
+Success: `200 { "data": <updated address> }`. Returns `404` if the address is not found or does not belong to this user.
+
+#### `DELETE /users/me/addresses/:addressId`
+
+Deletes an address owned by the current user.
+
+Success: `204 No Content`. Returns `404` if not found.
+
+### 4.3 Public store and product catalog
+
+#### `GET /stores`
+
+Public, paginated. Optional `search` (up to 100 characters) matches store name case-insensitively.
+
+Success:
+
+```json
+{
+  "data": [
+    { "_id": "<storeId>", "storeName": "Nalli Bokka", "location": "Hyderabad" }
+  ],
+  "pagination": { "page": 1, "limit": 20, "total": 1, "pages": 1 }
+}
+```
+
+Only `storeName` and `location` are selected; passwords are never part of this public response.
+
+#### `GET /stores/:id`
+
+Public store detail. Returns `200 { "data": { "_id": "...", "storeName": "...", "location": "..." } }`. Invalid ObjectId returns `400`; unknown store returns `404`.
+
+#### `GET /products`
+
+Public, paginated, returns only products currently marked in stock. Optional filters:
+
+| Query | Meaning |
+| --- | --- |
+| `storeId` | Filter by store ObjectId. |
+| `productType` | One of `meat`, `vegetable`, `fruit`, `oil`, `rice`. |
+| `search` | Case-insensitive product-name substring, up to 100 characters. |
+| `page`, `limit` | Standard pagination. |
+
+Each product's `storeId` is populated with the store's `storeName` and `location`.
+
+#### `GET /products/:id`
+
+Public. Returns one in-stock product as `{ "data": <product with populated storeId> }`. Invalid ObjectId returns `400`; missing or out-of-stock products return `404`.
+
+### 4.4 Cart
+
+All cart routes require a customer token. There is one cart per user. Cart totals are not persisted; the server recalculates prices from current product data each time it returns the cart.
+
+Selections share this shape:
+
+```json
+{
+  "selectionType": "weight",
+  "selectedQuantity": 0.5
+}
+```
+
+- `selectionType`: `weight`, `pieces`, or `pack`.
+- `selectedQuantity`: positive number. For pieces and packs it must be an integer.
+- `selectedPackLabel`: required only for `pack` and must exactly match one of the product's pack labels.
+- Weight quantity is in kilograms: `0.25` = 250 g; `0.5` = 500 g.
+
+#### `GET /cart`
+
+Returns `{ "data": { "items": [...], "total": 0, "hasUnavailableItems": false } }`. If no cart exists, the empty-cart response is used.
+
+Available item fields include `itemId`, `productId`, `productName`, `imageUrl`, selection fields, `available`, `unitPrice`, and `lineTotal`. If a product was deleted or the stored selection is no longer sellable, the item has `available: false` and an `issue` string. When any item is unavailable, `total` is `null` and `hasUnavailableItems` is `true`; the frontend should prompt the user to remove or correct unavailable items before checkout.
+
+#### `POST /cart/items`
+
+Adds a product selection. The server validates current stock and product pricing. An identical product + selection type + pack label combines with the existing cart quantity.
+
+Request for weight or pieces:
+
+```json
+{
+  "productId": "<productId>",
+  "selectionType": "weight",
+  "selectedQuantity": 0.5
+}
+```
+
+Request for a pack:
+
+```json
+{
+  "productId": "<productId>",
+  "selectionType": "pack",
+  "selectedQuantity": 2,
+  "selectedPackLabel": "5 L"
+}
+```
+
+Success: `201 { "data": <recalculated cart response> }`. Possible errors include `400` invalid/incompatible selection, `404` unknown product, and `409` out of stock.
+
+#### `PATCH /cart/items/:itemId`
+
+Replaces the selected quantity/type for one existing cart line. The body uses the shared selection shape above (no productId; product is determined from the cart line).
+
+Success: `200 { "data": <recalculated cart response> }`. Possible errors: `400` invalid/incompatible selection; `404` cart item or product not found; `409` out of stock.
+
+#### `DELETE /cart/items/:itemId`
+
+Removes one cart line.
+
+Success: `200 { "data": <recalculated cart response> }`. Returns `404` if the cart line does not exist.
+
+### 4.5 Orders and checkout
+
+All customer order routes require a customer token. Each order belongs to exactly one store. If the cart contains products from multiple stores, `storeId` is required to check out that store's items; the other stores' cart items remain in the cart.
+
+#### `POST /orders`
+
+Creates an order from the current cart selection for one store. The request must specify an existing saved address. The server checks that products still exist and are in stock, recalculates prices, snapshots product names/prices and the delivery address, creates the order, and removes that store's items from the cart.
+
+Request:
+
+```json
+{
+  "addressId": "<savedAddressId>",
+  "storeId": "<storeId>"
+}
+```
+
+`storeId` may be omitted only when all cart products are from one store. The optional `Idempotency-Key` request header is scoped to the authenticated user. Reuse the same key when retrying the same checkout request; use a new unique key for a new checkout.
+
+Success: first creation returns `201 { "data": <order> }`; a recognized retry returns `200 { "data": <same order> }`.
+
+Order fields include `userId`, `storeId`, `deliveryAddress`, `items`, `totalAmount`, `orderStatus`, `paymentStatus`, `createdAt`, and `updatedAt`. The item `price` is the total for that line, not a unit price.
+
+Possible errors:
+
+- `400` invalid body, no matching selected store, or non-positive total.
+- `404` user or saved delivery address not found.
+- `409` empty cart, product missing, product out of stock or selection no longer valid, mixed-store cart without `storeId`, or concurrent/reused idempotency key still being processed.
+- Transaction/session errors can occur when MongoDB is not configured as a replica set or transaction-capable deployment.
+
+**Frontend retry guidance:** generate a random idempotency key before the first attempt and keep it for network retries of that same checkout. Do not generate a new key for a retry. The key is optional in the current implementation, so clients must send it to receive duplicate-checkout protection.
+
+#### `GET /orders`
+
+Lists only the authenticated user's orders, newest first. Accepts `page`, `limit`, and optional `orderStatus` (`placed`, `packing`, `out for delivery`, `delivered`, `cancelled`).
+
+Response: paginated envelope. `storeId` is populated with `storeName` and `location`.
+
+#### `GET /orders/:orderId`
+
+Returns one order owned by the current user, with populated store details:
+
+```json
+{ "data": { "...": "order", "storeId": { "_id": "...", "storeName": "...", "location": "..." } } }
+```
+
+Returns `404` when the order is missing or belongs to another user.
+
+#### `POST /orders/:orderId/cancel`
+
+Cancels the authenticated user's order only if the lifecycle allows cancellation (placed or packing), the order is not paid, and there is no active created payment transaction.
+
+Success: `200 { "data": <updated order> }`. Returns `404` for an inaccessible order and `409` if its status/payment state prevents cancellation.
+
+#### `PATCH /store/orders/:orderId/status`
+
+Store-admin operation documented in the store section. Order transitions are constrained; see section 6.
+
+### 4.6 Payments
+
+Payment routes integrate Razorpay. Never put `RAZORPAY_KEY_SECRET` or `RAZORPAY_WEBHOOK_SECRET` in browser code. The `keyId` returned by the create-payment endpoint is the frontend-facing Razorpay key.
+
+#### `POST /orders/:orderId/payment`
+
+Customer token required. Creates a Razorpay order for an order belonging to the customer, or reuses its existing transaction with `created` status.
+
+Success (`201`):
+
+```json
+{
+  "data": {
+    "transactionId": "<transactionId>",
+    "razorpayOrderId": "<razorpayOrderId>",
+    "keyId": "<RAZORPAY_KEY_ID>",
+    "amount": 12345,
+    "currency": "INR"
+  }
+}
+```
+
+`amount` is paise for the Razorpay Checkout SDK. The server amount is derived from the persisted order total. Do not calculate or submit a replacement amount from the frontend.
+
+Possible errors: `400` non-positive order total; `404` order not found or not owned by the current user; `409` order cancelled/already paid; `503` Razorpay is not configured.
+
+Frontend flow:
+
+1. Call this endpoint after creating an order.
+2. Open Razorpay Checkout with returned `keyId`, `razorpayOrderId`, `amount`, and `currency`.
+3. On successful checkout, send the Razorpay callback fields to `POST /payments/razorpay/verify`.
+4. Treat the verify endpoint response as authoritative; refresh the order to display its latest `paymentStatus`.
+
+#### `POST /payments/razorpay/verify`
+
+Customer token required. Verifies the checkout signature server-side, fetches the payment from Razorpay, checks its order ID, amount, currency and captured state, then updates the transaction/order.
+
+Request:
+
+```json
+{
+  "razorpayOrderId": "order_...",
+  "paymentId": "pay_...",
+  "signature": "<64-character-hex-signature>"
+}
+```
+
+Success:
+
+```json
+{ "data": { "orderId": "<orderId>", "paymentStatus": "paid" } }
+```
+
+Possible errors: `400` malformed signature or invalid signature; `404` unknown payment transaction/order; `409` payment is not captured or its order/amount/currency does not match; `503` Razorpay is not configured. The MongoDB state update uses a transaction and therefore requires transaction-capable MongoDB.
+
+#### `POST /api/payments/razorpay/webhook`
+
+External Razorpay endpoint; no JWT. Configure this exact full URL in the Razorpay dashboard:
+
+`https://<your-api-host>/api/payments/razorpay/webhook`
+
+The endpoint accepts signed `application/json` raw request bytes and validates the `x-razorpay-signature` header using `RAZORPAY_WEBHOOK_SECRET`. It processes `payment.captured` and `payment.failed`; other event types receive `{ "received": true }` without payment processing. For supported events, payment order ID, payment ID, amount, and currency must match a known transaction. Successful handling returns `200 { "received": true }`.
+
+**Current implementation caveat:** persisted webhook deduplication currently stores `payment.id` in the field named `razorpayEventId`; it does not persist Razorpay's distinct top-level webhook event ID. Because the dedupe key is the payment ID, subsequent webhook event types for that same payment can be treated as duplicates after the first event is processed. The endpoint also responds `404` for a payment order ID that has no local transaction. Frontend code should use the client verification endpoint for customer confirmation and refresh the order state; webhook delivery is asynchronous and is not a browser callback.
+
+### 4.7 Store dashboard and operations
+
+Every endpoint in this section requires a store-admin token. Queries and mutations are always scoped to the authenticated store; a frontend must not supply another store's ID to operate on its data.
+
+#### `GET /store/dashboard`
+
+Optional query `days` (integer 1–90, default 7) defines the paid-revenue lookback period.
+
+Response:
+
+```json
+{
+  "data": {
+    "inventory": { "inStock": 12, "outOfStock": 2 },
+    "ordersByStatus": { "placed": 3, "packing": 1 },
+    "paidRevenue": { "sinceDays": 7, "amount": 4200, "orders": 6 },
+    "recentOrders": []
+  }
+}
+```
+
+Counts are for this store. Revenue sums `totalAmount` on paid orders whose `createdAt` falls within the selected period. `recentOrders` contains up to 10 newest orders and includes the customer's `name` and `phone`.
+
+#### `GET /store/products`
+
+Paged list of all this store's products, including out-of-stock products. Optional `productType` and `search` filters. Response is a paginated envelope.
+
+#### `POST /store/products`
+
+Creates a product for the authenticated store. The client must not send `storeId`; it is set from the token.
+
+Common fields:
+
+```json
+{
+  "productType": "meat",
+  "productName": "Mutton",
+  "imageUrl": "https://cdn.example.com/mutton.jpg",
+  "inStock": true,
+  "pricePerKg": 800,
+  "pieceWeightGrams": 250
+}
+```
+
+Fields and constraints:
+
+- `productType`: required; one of `meat`, `vegetable`, `fruit`, `oil`, `rice`.
+- `productName`: required, 1–120 characters.
+- `imageUrl`: required, valid HTTP or HTTPS URL, maximum 2048 characters.
+- `inStock`: optional boolean; defaults to true.
+- `pricePerKg`: optional nonnegative rupee amount (required for meat/vegetable/fruit; also used for loose rice).
+- `pieceWeightGrams`: optional positive number; enables piece-based pricing on meat/vegetable/fruit.
+- `packs`: optional array of up to 50 `{ "label": "...", "price": 0 }` objects. Pack label is 1–40 characters; price is a nonnegative rupee amount. Labels must be unique within a product.
+
+Pricing mode rules:
+
+- Meat, vegetable, fruit: `pricePerKg` required; `packs` must be empty.
+- Oil: one or more `packs` required; `pricePerKg` cannot be set.
+- Rice: exactly one of `pricePerKg` (loose) or nonempty `packs` (packaged).
+
+Success: `201 { "data": <created product> }`. Invalid pricing combinations are rejected as `400`.
+
+#### `PATCH /store/products/:productId`
+
+Updates one product owned by this store. Body must include at least one editable field; accepted fields and validation follow product creation, except `pricePerKg` and `pieceWeightGrams` may be set to `null` to clear them. Product schema constraints are rechecked after the update. Returns `200 { "data": <updated product> }`, or `404` if product is not owned by this store.
+
+#### `PATCH /store/products/:productId/stock`
+
+Quick stock toggle:
+
+```json
+{ "inStock": false }
+```
+
+Success: `200 { "data": <updated product> }`. Returns `404` if not owned by this store.
+
+#### `DELETE /store/products/:productId`
+
+Deletes a product owned by this store. Success: `204 No Content`; missing/non-owned product returns `404`. Existing order snapshots are retained; cart lines referring to a deleted product will be reported unavailable.
+
+#### `GET /store/orders`
+
+Paged, newest-first list of this store's orders. Optional `orderStatus` filter. Customer `userId` is populated with `name` and `phone`.
+
+#### `GET /store/orders/:orderId`
+
+Returns one order belonging to this store, with customer name and phone populated. Missing or non-owned order returns `404`.
+
+#### `PATCH /store/orders/:orderId/status`
+
+Request:
+
+```json
+{ "orderStatus": "packing" }
+```
+
+Allowed requested values: `packing`, `out for delivery`, `delivered`, `cancelled`. The transition graph is constrained (see section 6). A paid order cannot be cancelled; an active payment attempt prevents cancellation; moving to `packing` requires payment status `paid`. Success: `200 { "data": <updated order> }`. Invalid state transition returns `409`.
+
+#### `GET /store/transactions`
+
+Paged list of transactions belonging to this store's orders, newest transaction timestamp first. Optional `status` filter: `created`, `paid`, `failed`.
+
+Returned transaction fields: `orderId`, `razorpayOrderId`, optional `paymentId`, `amount` (rupees), `status`, `timestamp`.
+
+#### `GET /store/transactions/:transactionId`
+
+Returns a transaction only if its associated order belongs to this store. Success: `200 { "data": <transaction summary> }`; missing or non-owned transaction returns `404`.
+
+## 5. Data models and relationships
+
+Mongoose models use MongoDB collections `stores`, `users`, `products`, `carts`, `orders`, `transactions`, and the additional implementation collections `idempotencykeys` and `webhookevents`. Each model uses MongoDB `_id`; timestamps are present on Store, User, Product, Cart, and Order. Transaction uses `timestamp` for payment activity. All references below are ObjectIds.
+
+### Store (`stores`)
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `storeName` | String | Required, trimmed. |
+| `username` | String | Required, unique, trimmed, lowercased. |
+| `password` | String | Required, minimum 8 characters before hashing; bcrypt hash with cost 12; excluded from normal queries and JSON. |
+| `location` | String | Required, trimmed. |
+| `createdAt`, `updatedAt` | Date | Mongoose timestamps. |
+
+Stores do not embed product or order arrays; products/orders reference `storeId`.
+
+### User (`users`)
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `name` | String | Required, trimmed. |
+| `phone` | String | Required, unique, trimmed; customer OTP identity. |
+| `email` | String | Optional, lowercase, trimmed; unique when it is a string. |
+| `addresses` | Array | Embedded address subdocuments with generated `_id`. |
+| `createdAt`, `updatedAt` | Date | Mongoose timestamps. |
+
+Each address contains required `label`, `fullAddress`, and six-digit string `pincode`, plus `landmark` defaulting to an empty string. Cart and orders reference the user; the user does not embed cart or order IDs.
+
+### Product (`products`)
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `storeId` | ObjectId → Store | Required and indexed. |
+| `productType` | String | Required enum: `meat`, `vegetable`, `fruit`, `oil`, `rice`. |
+| `productName` | String | Required, trimmed. |
+| `imageUrl` | String | Required, trimmed; API requires HTTP/HTTPS URL. |
+| `inStock` | Boolean | Defaults to true. |
+| `pricePerKg` | Number | Nonnegative when present; weight pricing in rupees/kg. |
+| `pieceWeightGrams` | Number | Positive when present; permits piece pricing for weight-based product types. |
+| `packs` | Array | `{ label, price }`; price is rupees, labels unique within the product. |
+| `createdAt`, `updatedAt` | Date | Mongoose timestamps. |
+
+Compound index: `{ storeId: 1, productType: 1 }`. Products do not store cart or order arrays.
+
+### Cart (`carts`)
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `userId` | ObjectId → User | Required, unique (one cart per user). |
+| `items` | Array | Embedded cart lines with generated line `_id`. |
+| `createdAt`, `updatedAt` | Date | Mongoose timestamps. |
+
+Each line has `productId`, `selectionType`, `selectedQuantity`, and optional `selectedPackLabel`. Weight is kilograms; pieces and pack counts are whole numbers. There is intentionally no stored cart total; response totals use current product prices.
+
+### Order (`orders`)
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `userId` | ObjectId → User | Required and indexed. |
+| `storeId` | ObjectId → Store | Required and indexed. |
+| `deliveryAddress` | Embedded snapshot | `label`, `fullAddress`, `landmark`, `pincode`; no live address reference. |
+| `items` | Array | Nonempty order-time product snapshots. |
+| `totalAmount` | Number | Server-calculated total in rupees, rounded to paise. |
+| `orderStatus` | String | `placed`, `packing`, `out for delivery`, `delivered`, `cancelled`; defaults to `placed`. |
+| `paymentStatus` | String | `pending`, `paid`, `failed`; defaults to `pending`. |
+| `createdAt`, `updatedAt` | Date | Mongoose timestamps. |
+
+Each order item stores `productId`, copied `productName`, `selectionType`, `quantity`, optional `packLabel`, and copied line `price`. Historical order names/prices and delivery address do not change when catalog or profile data changes. The order schema recalculates `totalAmount` from item line prices during validation.
+
+Indexes include `{ storeId: 1, createdAt: -1 }` and `{ userId: 1, createdAt: -1 }`.
+
+### Transaction (`transactions`)
+
+| Field | Type | Rules |
+| --- | --- | --- |
+| `orderId` | ObjectId → Order | Required and indexed. |
+| `razorpayOrderId` | String | Required, unique, trimmed. |
+| `paymentId` | String | Optional, unique when present (sparse index). |
+| `amount` | Number | Required, nonnegative rupees. |
+| `status` | String | `created`, `paid`, `failed`; defaults to `created`. |
+| `timestamp` | Date | Defaults to current time. |
+
+Partial unique index `{ orderId: 1, status: 1 }` for `status: "created"` permits at most one created transaction per order. Transaction is the payment record; order stores only its current `paymentStatus`.
+
+### IdempotencyKey (`idempotencykeys`)
+
+Additional operational model used by checkout:
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `key` | String | Client-supplied `Idempotency-Key` header. |
+| `userId` | ObjectId | Key owner. |
+| `orderId` | ObjectId → Order | Set to the order produced by a successful checkout. |
+| `status` | String | `in_progress`, `done`, or `failed`; defaults to `in_progress`. |
+| `createdAt` | Date | Creation time. |
+
+Unique compound index `{ key: 1, userId: 1 }` makes keys user-scoped.
+
+### WebhookEvent (`webhookevents`)
+
+Additional operational model used for webhook deduplication:
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `razorpayEventId` | String | Required, unique; current code stores the Razorpay payment ID here. |
+| `receivedAt` | Date | Defaults to current time. |
+| `processed` | Boolean | Defaults to false. |
+| `processedAt` | Date | Set after processing. |
+
+See the payment webhook caveat in section 4.6: this currently is not Razorpay's top-level webhook event ID.
+
+## 6. Pricing, checkout, and order lifecycle rules
+
+### Server-side pricing
+
+Clients send product selections, never authoritative prices. The server looks up current product pricing and calculates line totals.
+
+| Selection | Product support | Calculation |
+| --- | --- | --- |
+| `weight` | Meat, vegetable, fruit; loose rice with `pricePerKg` | `pricePerKg × selectedQuantityKg`. |
+| `pieces` | Meat, vegetable, fruit with `pieceWeightGrams` | `pricePerKg × pieceWeightGrams / 1000 × piece count`. |
+| `pack` | Oil and packaged rice | Matching pack's individual price × whole number of packs. |
+
+Line prices and order totals are rounded to two decimal places (paise precision). Pack prices are independent; the server does not assume a larger pack costs an exact multiple of a smaller pack.
+
+### Checkout transaction behavior
+
+When checkout runs, product lookup and pricing happen first. The order creation, cart cleanup, and idempotency record update are then grouped in a MongoDB transaction. Cart cleanup removes only items associated with the checked-out store.
+
+The optional idempotency key helps return an existing order on a retry. **Current implementation constraint:** the handler checks for a user and nonempty cart before looking up an existing key. A retry after the first request has emptied the cart may therefore receive `400` for an empty cart rather than the saved order. The frontend should retain the first successful response/order ID and avoid depending on replay as an order retrieval mechanism; use `GET /orders/:orderId` for subsequent reads.
+
+### Order state transitions
+
+Valid lifecycle transitions:
+
+```text
+placed -> packing -> out for delivery -> delivered
+   |          |
+   +----------+-> cancelled (subject to cancellation rules)
+```
+
+More precisely:
+
+- `placed` can advance to `packing` or be cancelled.
+- `packing` can advance to `out for delivery` or be cancelled.
+- `out for delivery` can advance only to `delivered`.
+- `delivered` and `cancelled` are terminal.
+- Store must confirm `paymentStatus: "paid"` before moving an order to `packing`.
+- Paid orders cannot be cancelled through this API; refunds are not implemented.
+- A created payment transaction prevents cancellation until it is no longer active.
+
+## 7. Frontend integration workflow
+
+Suggested customer flow:
+
+1. Browse stores with `GET /stores`; browse stock with `GET /products?storeId=<id>`.
+2. Authenticate using the OTP endpoints and store the returned user token securely.
+3. Load profile/address list from `GET /users/me`; create an address if needed.
+4. Add products to the cart using `POST /cart/items`; show prices from `GET /cart` and handle unavailable lines.
+5. Create an order using `POST /orders` with a saved `addressId`, the selected `storeId` if needed, and a generated `Idempotency-Key`.
+6. Start payment using `POST /orders/:orderId/payment`; open Razorpay Checkout with the returned payment parameters.
+7. Send the Razorpay callback values to `POST /payments/razorpay/verify`.
+8. Refresh the order using `GET /orders/:orderId` and display backend `orderStatus` and `paymentStatus`.
+
+Suggested store-admin flow:
+
+1. Sign in using the provisioned username/password at `POST /auth/stores/login`.
+2. Load `GET /store/dashboard`.
+3. Manage the store's inventory through `/store/products` and the stock endpoint.
+4. Load the store's orders and transactions through their paginated endpoints.
+5. Advance order status only when the current status and payment state permit it.
+
+Always handle errors from the API rather than assuming a request succeeded. In particular, refresh the cart before checkout, do not trust client-calculated prices, and do not mark payment successful until server verification or a later order refresh confirms it.
+
+## 8. MVC and source layout
+
+```text
+src/
+  app.js                 Express middleware and route mounting
+  server.js              Environment checks, MongoDB connection, HTTP listener
+  config/database.js     Mongoose connection
+  controllers/           Request handlers/business orchestration
+  middleware/            Authentication, validation, 404, error handling
+  models/                Mongoose document schemas and indexes
+  routes/                Endpoint declarations and role protection
+  services/              Twilio Verify and Razorpay client wrappers
+  utils/                 Application errors, pricing, regex escaping
+  validation/schemas.js  Zod request schemas
+scripts/
+  createStore.js         Trusted interactive store provisioning
+test/
+  api.test.js
+  models.test.js
+```
+
+The API router is mounted under `/api`. The raw Razorpay webhook route is mounted before `express.json()` to preserve the exact request bytes needed for signature verification. Route handlers use centralized validation and error middleware.
+
+## 9. Scope and known limitations
+
+- OTP delivery requires configured Twilio Verify credentials and may incur provider costs.
+- Online payment flows require configured Razorpay keys; webhook processing additionally requires its webhook secret.
+- Transactions require a replica set or equivalent transaction-capable MongoDB deployment.
+- The API has no customer registration/password flow, store self-registration, password-reset flow, refresh tokens, refunds, shipping-rate calculation, or file-upload endpoint.
+- Product images are represented by an externally hosted `imageUrl`; image storage/CDN management is outside this API.
+- Product discovery exposes only in-stock products; store inventory listing includes out-of-stock items.
+- Cart totals are recalculated using current catalog pricing. Order snapshots preserve the final selected item names and prices.
+- Rate limiting uses the process's configured default in-memory store; it is not shared across multiple server instances.
+- Webhook deduplication currently uses payment ID rather than Razorpay's top-level event ID; see the integration caveat above.
+
+## 10. Postman quick reference
+
+Set a Postman environment variable `baseUrl` to `http://localhost:3000/api`. For protected endpoints, set:
+
+```text
+Authorization: Bearer {{token}}
+Content-Type: application/json
+```
+
+For checkout, additionally send:
+
+```text
+Idempotency-Key: {{$guid}}
+```
+
+Use the ID values returned by the server rather than hard-coding IDs. Never store the Razorpay secret or webhook secret in a browser/Postman collection intended for frontend developers.
