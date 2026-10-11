@@ -15,12 +15,13 @@ The application has six core business collections:
 5. `orders`
 6. `transactions`
 
-There are also two implementation-support collections used for retry and webhook processing:
+There are also three supporting collections used for retries, webhooks, and customer notifications:
 
 7. `idempotencykeys`
 8. `webhookevents`
+9. `notifications`
 
-The additional collections do not change the six main business concepts; they support checkout retry tracking and payment webhook handling.
+These supporting collections track checkout retries, payment webhook handling, and customer-visible order-status updates.
 
 ### Core relationship diagram
 
@@ -31,12 +32,14 @@ Store 1 ───── * Order
 User  1 ───── 0..1 Cart
 User  1 ───── * Order
 User  1 ───── * IdempotencyKey
+User  1 ───── * Notification
 
 Cart.items[*] ───── Product
 Order.items[*] ───── Product (reference plus order-time snapshot)
 Order 1 ───── * Transaction
+Order 1 ───── * Notification
 IdempotencyKey.orderId ───── Order
-WebhookEvent ───── Razorpay payment event/payment identifier (not an Order reference)
+WebhookEvent ───── Razorpay webhook event identifier (not an Order reference)
 ```
 
 `1 ───── *` means the parent can be referenced by many child documents. These relationships are references, not nested arrays on the parent: a Store does not have embedded products or orders; query by `storeId`.
@@ -345,7 +348,7 @@ An order is a durable checkout record for one customer and one store. It contain
 | `items` | Array of embedded order lines | Yes | Nonempty array of order-time product/price snapshots. |
 | `totalAmount` | Number | Yes | Calculated total in rupees, rounded to two decimal places (paise precision). |
 | `orderStatus` | String enum | Yes | Order fulfillment state; defaults to `placed`. |
-| `paymentStatus` | String enum | Yes | Payment state; defaults to `pending`. |
+| `paymentStatus` | String enum | Yes | `pending`, `paid`, `failed`, `refund_pending`, `refunded`, or `refund_failed`; defaults to `pending`. |
 | `createdAt` | Date | Generated | Order creation time. |
 | `updatedAt` | Date | Generated | Last order save time. |
 
@@ -392,6 +395,9 @@ Order item subdocuments have no own `_id`.
 - `pending`
 - `paid`
 - `failed`
+- `refund_pending`
+- `refunded`
+- `refund_failed`
 
 The order lifecycle is constrained by the API:
 
@@ -401,7 +407,7 @@ placed -> packing -> out for delivery -> delivered
    +----------+-> cancelled (only when cancellation rules allow)
 ```
 
-Packing requires a paid order. Paid orders cannot be cancelled through the API because refunds are not implemented. A created payment attempt blocks cancellation.
+Packing requires a paid order, or an order whose refund has explicitly failed. Refund-pending orders cannot be fulfilled, cancelled, or charged again. A processed refund sets the payment status to `refunded` and cancels the order; a failed refund sets `refund_failed` and leaves the order paid for fulfillment purposes. A created payment attempt blocks cancellation.
 
 ### Indexes
 
@@ -462,6 +468,9 @@ Stores payment-provider transaction state and links it to an order. Payment deta
 | `paymentId` | String | No | Razorpay payment identifier, set after payment; unique when present (sparse unique index). |
 | `amount` | Number | Yes | Amount in rupees, copied from the order total. |
 | `status` | String enum | Yes | `created`, `paid`, or `failed`; defaults to `created`. |
+| `refundStatus` | String enum | Yes | `none`, `pending`, `processed`, or `failed`; defaults to `none`. |
+| `refundId` | String | No | Razorpay refund identifier, set when returned by the provider. |
+| `refundRequestId` | String | No | Internal request token passed in Razorpay refund notes to correlate signed refund webhooks. |
 | `timestamp` | Date | Generated | Last payment activity time; defaults to creation time and is updated on settlement. |
 
 This model does not enable Mongoose `createdAt`/`updatedAt` timestamps. Use `timestamp` as the payment activity time.
@@ -472,12 +481,16 @@ This model does not enable Mongoose `createdAt`/`updatedAt` timestamps. Use `tim
 - `razorpayOrderId`: unique.
 - `paymentId`: sparse unique (multiple documents may omit it; present values must be unique).
 - Partial unique index `{ orderId: 1, status: 1 }` for documents whose status is `created`, allowing at most one active created transaction per order.
+- Compound index `{ timestamp: -1, status: 1 }` supports bounded transaction-history and dashboard-period queries.
 
 ### Status interaction
 
 - Creating/reusing a Razorpay order produces a transaction with `status: "created"`.
 - Captured payment updates transaction status to `paid` and the related order's `paymentStatus` to `paid`.
 - Failed payment updates transaction status to `failed` and order payment status to `failed`, unless the order has already been paid.
+- A store refund request atomically reserves the transaction as `pending` before contacting Razorpay; repeat requests reuse this reservation rather than issuing duplicate refunds.
+- `refund.processed` atomically marks the transaction processed, sets order payment status to `refunded`, cancels the order, and creates a customer notification.
+- `refund.failed` marks the transaction failed and order payment status `refund_failed`; an uncertain provider response stays pending until a signed webhook or operational reconciliation resolves it.
 - Client verification and webhook processing are intended to update transaction and order together in a MongoDB transaction.
 
 ### Example document
@@ -517,7 +530,7 @@ An operational collection used to associate a client retry key with a checkout o
 
 - Unique compound index `{ key: 1, userId: 1 }`: the same key can be used by different users, but not twice by one user.
 - The record is created, linked to the order, and marked done as part of checkout's MongoDB transaction.
-- Current handler behavior checks user/cart before looking up an existing key. If an initial successful checkout empties the cart, an immediate retry can receive an empty-cart `400` before the saved key/order is read. Frontend clients should keep the first successful order ID and use `GET /orders/:orderId` for later access.
+- Completed idempotency keys are looked up before cart validation, allowing a successful checkout retry to return its original order after cart cleanup.
 - The schema has a `failed` value, but the checkout flow rolls back the transaction on failure rather than persisting a failed marker.
 
 ### Example document
@@ -542,7 +555,7 @@ An operational collection intended to remember webhook processing and prevent du
 | Field | Database type | Required | Description |
 | --- | --- | --- | --- |
 | `_id` | ObjectId | Generated | Internal identifier. |
-| `razorpayEventId` | String | Yes | Unique deduplication value. Current implementation stores the Razorpay payment ID in this field. |
+| `razorpayEventId` | String | Yes | Unique identifier from Razorpay's `x-razorpay-event-id` webhook header. |
 | `receivedAt` | Date | Generated | Defaults to the time the event is stored. |
 | `processed` | Boolean | No | Whether processing completed; defaults to `false`. |
 | `processedAt` | Date | No | Set after processing succeeds. |
@@ -550,7 +563,7 @@ An operational collection intended to remember webhook processing and prevent du
 ### Index and implementation caveat
 
 - `razorpayEventId`: unique index.
-- Although the field name suggests Razorpay's top-level event ID, the current webhook handler sets it to `payment.id` (the payment ID). Multiple event types concerning the same payment can therefore collide in the deduplication collection.
+- The webhook requires and stores Razorpay's event ID header, so different event types for one payment have distinct deduplication records.
 - The webhook event is not directly referenced by a Transaction document.
 - This is backend-internal data; frontend applications should not query or write it.
 
@@ -559,14 +572,40 @@ An operational collection intended to remember webhook processing and prevent du
 ```json
 {
   "_id": "66a000000000000000000070",
-  "razorpayEventId": "pay_example456",
+  "razorpayEventId": "evt_example456",
   "receivedAt": "2026-01-10T09:17:02.000Z",
   "processed": true,
   "processedAt": "2026-01-10T09:17:02.100Z"
 }
 ```
 
-## 10. Data flow by user action
+## 10. Notification collection — `notifications`
+
+Stores in-app customer updates when a store changes an order's fulfillment status. Notifications are created in the same MongoDB transaction as the corresponding order update, so an order status cannot change without its notification being persisted.
+
+### Fields
+
+| Field | Database type | Required | Description |
+| --- | --- | --- | --- |
+| `_id` | ObjectId | Generated | Notification identifier. |
+| `userId` | ObjectId → User | Yes | Customer who owns the notification. All reads and updates are scoped to this user. |
+| `orderId` | ObjectId → Order | Yes | Order whose fulfillment status changed. |
+| `orderStatus` | String enum | Yes | New status: `packing`, `out for delivery`, `delivered`, or `cancelled`. |
+| `title` | String | Yes | Short notification heading. |
+| `message` | String | Yes | Customer-facing status explanation. |
+| `readAt` | Date or null | No | Null until read; then the time the customer marked it read. |
+| `createdAt` | Date | Generated | Notification creation time. |
+| `updatedAt` | Date | Generated | Last read-state update time. |
+
+### Indexes and behavior
+
+- `{ userId: 1, createdAt: -1 }` supports a customer's newest-first notification list.
+- `{ userId: 1, readAt: 1, createdAt: -1 }` supports unread counts and filtering.
+- `{ orderId: 1, orderStatus: 1 }` is unique to prevent duplicate notifications for one order/status transition.
+- The customer API exposes paginated list, mark-one-read, and mark-all-read operations; it never accepts a client-supplied `userId`.
+- This feature is in-app only; it does not send SMS, WhatsApp, or email.
+
+## 11. Data flow by user action
 
 ### Browsing a product
 
@@ -599,15 +638,15 @@ An operational collection intended to remember webhook processing and prevent du
 4. Transaction and order payment status are updated together.
 5. Razorpay webhook may also update payment state asynchronously.
 
-## 11. Atomicity and deployment requirements
+## 12. Atomicity and deployment requirements
 
-Checkout writes an Order, modifies a Cart, and may create/update an IdempotencyKey. Payment settlement updates a Transaction and its Order. These operations rely on MongoDB transactions.
+Checkout writes an Order, modifies a Cart, and may create/update an IdempotencyKey. Payment settlement updates a Transaction and its Order. Store order-status changes update the Order and create its customer Notification together. These operations rely on MongoDB transactions.
 
 MongoDB transactions require a replica set or sharded cluster. A single-node replica set is suitable for local transaction testing; a standalone MongoDB deployment is not. If transactions are unavailable, checkout/payment operations can fail even while read-only endpoints work.
 
 The transaction boundary protects multi-document database changes, but calls to external services such as Razorpay happen outside MongoDB and are not part of a MongoDB transaction.
 
-## 12. What the frontend should treat as authoritative
+## 13. What the frontend should treat as authoritative
 
 | Concern | Authoritative source |
 | --- | --- |
@@ -616,6 +655,7 @@ The transaction boundary protects multi-document database changes, but calls to 
 | Checkout price and purchased product name | Created Order document; values are snapshots. |
 | Delivery address for an existing order | Order's `deliveryAddress` snapshot. |
 | Current fulfillment state | `orderStatus` returned by order endpoints. |
+| Customer-visible order update history | Notification API; the current state remains authoritative from the Order API. |
 | Current payment result | `paymentStatus` returned by the order after server verification/refresh. |
 | Payment provider transaction data | Transaction collection through authorized backend endpoints; do not access MongoDB directly. |
 | Store identity for store operations | Store JWT, not a client-supplied `storeId`. |
@@ -629,7 +669,7 @@ Do not:
 - Expose a store password hash, JWT signing secret, Razorpay secret, or webhook secret.
 - Store order/cart arrays inside Store or User documents; those relationships are queried by reference.
 
-## 13. Related documentation
+## 14. Related documentation
 
 - [API endpoint reference](./api-endpoints.md) — endpoint purpose, required request data, responses, and errors.
 - [Server and full API documentation](./documentation.md) — project setup, architecture, endpoint overview, validation, and operational notes.

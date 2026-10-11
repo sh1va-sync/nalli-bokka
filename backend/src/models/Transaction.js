@@ -47,6 +47,19 @@ const transactionSchema = new mongoose.Schema({
     enum: ['created', 'paid', 'failed'],
     default: 'created'
   },
+  refundStatus: {
+    type: String,
+    enum: ['none', 'pending', 'processed', 'failed'],
+    default: 'none'
+  },
+  refundId: {
+    type: String,
+    trim: true
+  },
+  refundRequestId: {
+    type: String,
+    trim: true
+  },
   timestamp: {
     type: Date,
     default: Date.now
@@ -57,6 +70,7 @@ transactionSchema.index(
   { orderId: 1, status: 1 },
   { unique: true, partialFilterExpression: { status: 'created' } }
 );
+transactionSchema.index({ timestamp: -1, status: 1 });
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 

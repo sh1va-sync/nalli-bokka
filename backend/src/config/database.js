@@ -8,7 +8,11 @@ async function connectDatabase() {
   }
 
   await mongoose.connect(MONGODB_URI);
-  console.log('Connected to MongoDB');
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: 'info',
+    event: 'database.connected'
+  }));
 }
 
 export default connectDatabase;

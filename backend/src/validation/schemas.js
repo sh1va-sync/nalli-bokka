@@ -19,6 +19,15 @@ const pagination = {
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20)
 };
+function dateRangeQuery(shape) {
+  return z.object({
+    ...shape,
+    from: z.string().datetime({ offset: true }).optional(),
+    to: z.string().datetime({ offset: true }).optional()
+  }).strict()
+    .refine(query => Boolean(query.from) === Boolean(query.to), 'Both from and to are required together')
+    .refine(query => !query.from || Date.parse(query.from) < Date.parse(query.to), 'from must be earlier than to');
+}
 const selection = z.object({
   selectionType: z.enum(['weight', 'pieces', 'pack']),
   selectedQuantity: z.number().positive(),
@@ -62,6 +71,12 @@ const schemas = {
     body: address.partial().strict().refine(value => Object.keys(value).length > 0, 'At least one address field is required')
   },
   addressParams: { params: z.object({ addressId: objectId }) },
+  notificationList: {
+    query: z.object(pagination).strict()
+  },
+  notificationParams: {
+    params: z.object({ notificationId: objectId })
+  },
   productList: {
     query: z.object({
       ...pagination,
@@ -133,10 +148,10 @@ const schemas = {
     }).strict()
   },
   orderList: {
-    query: z.object({
+    query: dateRangeQuery({
       ...pagination,
       orderStatus: z.enum(['placed', 'packing', 'out for delivery', 'delivered', 'cancelled']).optional()
-    }).strict()
+    })
   },
   orderParams: { params: z.object({ orderId: objectId }) },
   orderStatusUpdate: {
@@ -144,6 +159,10 @@ const schemas = {
     body: z.object({
       orderStatus: z.enum(['packing', 'out for delivery', 'delivered', 'cancelled'])
     }).strict()
+  },
+  storeOrderRefund: {
+    params: z.object({ orderId: objectId }),
+    body: z.object({}).strict().optional()
   },
   paymentCreate: { params: z.object({ orderId: objectId }) },
   paymentVerify: {
@@ -154,15 +173,20 @@ const schemas = {
     }).strict()
   },
   dashboard: {
-    query: z.object({
+    query: dateRangeQuery({
       days: z.coerce.number().int().min(1).max(90).default(7)
-    }).strict()
+    })
   },
   transactionList: {
-    query: z.object({
+    query: dateRangeQuery({
       ...pagination,
       status: z.enum(['created', 'paid', 'failed']).optional()
-    }).strict()
+    })
+  },
+  storeReportExport: {
+    query: dateRangeQuery({
+      type: z.enum(['orders', 'transactions'])
+    }).refine(query => Boolean(query.from), 'Both from and to are required')
   },
   transactionParams: {
     params: z.object({ transactionId: objectId })

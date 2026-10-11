@@ -1,0 +1,459 @@
+import assert from 'node:assert/strict';
+import { after, before, test } from 'node:test';
+import { createHmac } from 'node:crypto';
+import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
+import app from '../src/app.js';
+import Cart from '../src/models/Cart.js';
+import IdempotencyKey from '../src/models/IdempotencyKey.js';
+import Notification from '../src/models/Notification.js';
+import Order from '../src/models/Order.js';
+import Product from '../src/models/Product.js';
+import Store from '../src/models/Store.js';
+import Transaction from '../src/models/Transaction.js';
+import User from '../src/models/User.js';
+import WebhookEvent from '../src/models/WebhookEvent.js';
+import getRazorpayClient from '../src/services/razorpay.js';
+
+const originalEnvironment = {
+  JWT_SECRET: process.env.JWT_SECRET,
+  RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
+  RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
+  RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET
+};
+let replicaSet;
+let server;
+let baseUrl;
+
+before(async () => {
+  process.env.JWT_SECRET = 'test-secret-that-is-long-enough-for-integration-tests';
+  process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
+  process.env.RAZORPAY_KEY_SECRET = 'test-razorpay-secret';
+  process.env.RAZORPAY_WEBHOOK_SECRET = 'test-webhook-secret';
+  replicaSet = await MongoMemoryReplSet.create({
+    instanceOpts: [{ launchTimeout: 60_000 }],
+    replSet: { count: 1 }
+  });
+  await mongoose.connect(replicaSet.getUri(), { dbName: 'purchase_integration' });
+  await Promise.all([
+    Cart, IdempotencyKey, Notification, Order, Product, Store,
+    Transaction, User, WebhookEvent
+  ].map(model => model.init()));
+
+  server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  baseUrl = `http://127.0.0.1:${server.address().port}/api`;
+
+  const razorpay = getRazorpayClient();
+  razorpay.orders.create = async () => ({ id: 'razorpay_order_test' });
+  razorpay.payments.fetch = async () => ({
+    order_id: 'razorpay_order_test',
+    amount: 40000,
+    currency: 'INR',
+    status: 'captured'
+  });
+  razorpay.payments.refund = async (paymentId, params) => ({
+    id: `refund_${paymentId}`,
+    payment_id: paymentId,
+    amount: params.amount,
+    status: 'created',
+    notes: params.notes
+  });
+});
+
+after(async () => {
+  if (server) {
+    server.closeAllConnections();
+    await new Promise((resolve, reject) => {
+      server.close(error => error ? reject(error) : resolve());
+    });
+  }
+  await mongoose.disconnect();
+  if (replicaSet) await replicaSet.stop();
+  for (const [key, originalValue] of Object.entries(originalEnvironment)) {
+    if (originalValue === undefined) delete process.env[key];
+    else process.env[key] = originalValue;
+  }
+});
+
+test('customer purchase, payment, and store status notification flow works end to end', async () => {
+  const readinessResponse = await fetch(`${baseUrl}/health/ready`);
+  assert.equal(readinessResponse.status, 200);
+  assert.deepEqual(await readinessResponse.json(), { status: 'ready' });
+
+  const store = await Store.create({
+    storeName: 'Integration Store',
+    username: 'integration-store',
+    password: 'test-password-long-enough',
+    location: 'Hyderabad'
+  });
+  const user = await User.create({
+    name: 'Test Customer',
+    phone: '+15551234567',
+    addresses: [{
+      label: 'Home',
+      fullAddress: '12 Example Road, Hyderabad',
+      pincode: '500001'
+    }]
+  });
+  const otherUser = await User.create({ name: 'Other Customer', phone: '+15551234568' });
+  const product = await Product.create({
+    storeId: store._id,
+    productType: 'meat',
+    productName: 'Mutton',
+    imageUrl: 'https://example.test/mutton.jpg',
+    inStock: true,
+    pricePerKg: 800
+  });
+  await Cart.create({
+    userId: user._id,
+    items: [{ productId: product._id, selectionType: 'weight', selectedQuantity: 0.5 }]
+  });
+  const customerToken = jwt.sign(
+    { role: 'user' },
+    process.env.JWT_SECRET,
+    { subject: String(user._id), expiresIn: '5m', issuer: 'nalli-bokka-api' }
+  );
+  const storeToken = jwt.sign(
+    { role: 'store' },
+    process.env.JWT_SECRET,
+    { subject: String(store._id), expiresIn: '5m', issuer: 'nalli-bokka-api' }
+  );
+  const otherCustomerToken = jwt.sign(
+    { role: 'user' },
+    process.env.JWT_SECRET,
+    { subject: String(otherUser._id), expiresIn: '5m', issuer: 'nalli-bokka-api' }
+  );
+
+  const createdResponse = await fetch(`${baseUrl}/orders`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${customerToken}`,
+      'content-type': 'application/json',
+      'Idempotency-Key': 'integration-checkout-key'
+    },
+    body: JSON.stringify({ addressId: String(user.addresses[0]._id), storeId: String(store._id) })
+  });
+  assert.equal(createdResponse.status, 201);
+  const { data: order } = await createdResponse.json();
+  assert.equal(order.totalAmount, 400);
+  assert.equal(order.items[0].price, 400);
+  assert.equal((await Cart.findOne({ userId: user._id })).items.length, 0);
+
+  const retryResponse = await fetch(`${baseUrl}/orders`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${customerToken}`,
+      'content-type': 'application/json',
+      'Idempotency-Key': 'integration-checkout-key'
+    },
+    body: JSON.stringify({ addressId: String(user.addresses[0]._id), storeId: String(store._id) })
+  });
+  assert.equal(retryResponse.status, 200);
+  assert.equal(String((await retryResponse.json()).data._id), String(order._id));
+
+  const paymentOrderResponse = await fetch(`${baseUrl}/orders/${order._id}/payment`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${customerToken}` }
+  });
+  assert.equal(paymentOrderResponse.status, 201);
+  const paymentOrder = (await paymentOrderResponse.json()).data;
+  assert.equal(paymentOrder.amount, 40000);
+
+  const paymentId = 'razorpay_payment_test';
+  const signature = createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+    .update(`${paymentOrder.razorpayOrderId}|${paymentId}`)
+    .digest('hex');
+  const verifyResponse = await fetch(`${baseUrl}/payments/razorpay/verify`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${customerToken}`,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      razorpayOrderId: paymentOrder.razorpayOrderId,
+      paymentId,
+      signature
+    })
+  });
+  assert.equal(verifyResponse.status, 200);
+  assert.equal((await Order.findById(order._id)).paymentStatus, 'paid');
+  assert.equal((await Transaction.findOne({ orderId: order._id })).status, 'paid');
+
+  const range = {
+    from: '2000-01-01T00:00:00.000Z',
+    to: '2100-01-01T00:00:00.000Z'
+  };
+  const ordersExportResponse = await fetch(`${baseUrl}/store/reports/export?${new URLSearchParams({ type: 'orders', ...range })}`, {
+    headers: { authorization: `Bearer ${storeToken}` }
+  });
+  assert.equal(ordersExportResponse.status, 200);
+  assert.match(ordersExportResponse.headers.get('content-type'), /text\/csv/);
+  const ordersCsv = await ordersExportResponse.text();
+  assert.match(ordersCsv, /order_id,created_at,order_status,payment_status,total_amount,items/);
+  assert.ok(ordersCsv.includes(String(order._id)));
+  assert.ok(ordersCsv.includes('Mutton'));
+  assert.equal(ordersCsv.includes('12 Example Road'), false);
+
+  const transactionsExportResponse = await fetch(`${baseUrl}/store/reports/export?${new URLSearchParams({ type: 'transactions', ...range })}`, {
+    headers: { authorization: `Bearer ${storeToken}` }
+  });
+  assert.equal(transactionsExportResponse.status, 200);
+  const transactionsCsv = await transactionsExportResponse.text();
+  assert.match(transactionsCsv, /timestamp,order_id,status,amount,refund_status,refund_id/);
+  assert.ok(transactionsCsv.includes(String(order._id)));
+  assert.ok(transactionsCsv.includes('"paid"'));
+
+  const statusResponse = await fetch(`${baseUrl}/store/orders/${order._id}/status`, {
+    method: 'PATCH',
+    headers: {
+      authorization: `Bearer ${storeToken}`,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({ orderStatus: 'packing' })
+  });
+  assert.equal(statusResponse.status, 200);
+  assert.equal((await Order.findById(order._id)).orderStatus, 'packing');
+
+  const notificationsResponse = await fetch(`${baseUrl}/users/me/notifications`, {
+    headers: { authorization: `Bearer ${customerToken}` }
+  });
+  assert.equal(notificationsResponse.status, 200);
+  const notifications = await notificationsResponse.json();
+  assert.equal(notifications.unreadCount, 1);
+  assert.equal(notifications.data[0].message, 'Your order has been accepted and is being prepared.');
+
+  const otherCustomerNotifications = await fetch(`${baseUrl}/users/me/notifications`, {
+    headers: { authorization: `Bearer ${otherCustomerToken}` }
+  });
+  assert.equal(otherCustomerNotifications.status, 200);
+  assert.equal((await otherCustomerNotifications.json()).unreadCount, 0);
+  const deniedReadResponse = await fetch(`${baseUrl}/users/me/notifications/${notifications.data[0]._id}/read`, {
+    method: 'PATCH',
+    headers: { authorization: `Bearer ${otherCustomerToken}` }
+  });
+  assert.equal(deniedReadResponse.status, 404);
+
+  const markReadResponse = await fetch(`${baseUrl}/users/me/notifications/${notifications.data[0]._id}/read`, {
+    method: 'PATCH',
+    headers: { authorization: `Bearer ${customerToken}` }
+  });
+  assert.equal(markReadResponse.status, 200);
+  assert.ok((await markReadResponse.json()).data.readAt);
+  assert.equal(await Notification.countDocuments({ userId: user._id, readAt: null }), 0);
+
+  const deliveryResponse = await fetch(`${baseUrl}/store/orders/${order._id}/status`, {
+    method: 'PATCH',
+    headers: {
+      authorization: `Bearer ${storeToken}`,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({ orderStatus: 'out for delivery' })
+  });
+  assert.equal(deliveryResponse.status, 200);
+  const markAllReadResponse = await fetch(`${baseUrl}/users/me/notifications/read-all`, {
+    method: 'PATCH',
+    headers: { authorization: `Bearer ${customerToken}` }
+  });
+  assert.equal(markAllReadResponse.status, 200);
+  assert.equal((await markAllReadResponse.json()).data.updatedCount, 1);
+  assert.equal(await Notification.countDocuments({ userId: user._id, readAt: null }), 0);
+});
+
+test('store refunds are scoped, full, single-request, and settled by deduplicated webhooks', async () => {
+  const store = await Store.create({
+    storeName: 'Refund Store',
+    username: 'refund-store',
+    password: 'test-password-long-enough',
+    location: 'Hyderabad'
+  });
+  const otherStore = await Store.create({
+    storeName: 'Other Refund Store',
+    username: 'other-refund-store',
+    password: 'test-password-long-enough',
+    location: 'Hyderabad'
+  });
+  const user = await User.create({ name: 'Refund Customer', phone: '+15551234569' });
+  const storeToken = jwt.sign({ role: 'store' }, process.env.JWT_SECRET, {
+    subject: String(store._id), expiresIn: '5m', issuer: 'nalli-bokka-api'
+  });
+  const otherStoreToken = jwt.sign({ role: 'store' }, process.env.JWT_SECRET, {
+    subject: String(otherStore._id), expiresIn: '5m', issuer: 'nalli-bokka-api'
+  });
+  const customerToken = jwt.sign({ role: 'user' }, process.env.JWT_SECRET, {
+    subject: String(user._id), expiresIn: '5m', issuer: 'nalli-bokka-api'
+  });
+
+  async function createPaidOrder(suffix) {
+    const order = await Order.create({
+      userId: user._id,
+      storeId: store._id,
+      deliveryAddress: { label: 'Home', fullAddress: '12 Example Road', pincode: '500001' },
+      items: [{
+        productId: new mongoose.Types.ObjectId(),
+        productName: 'Mutton',
+        selectionType: 'pieces',
+        quantity: 1,
+        price: 400
+      }],
+      orderStatus: 'placed',
+      paymentStatus: 'paid'
+    });
+    const transaction = await Transaction.create({
+      orderId: order._id,
+      razorpayOrderId: `razorpay_order_${suffix}`,
+      paymentId: `razorpay_payment_${suffix}`,
+      amount: 400,
+      status: 'paid'
+    });
+    return { order, transaction };
+  }
+
+  async function sendRefundWebhook(eventName, eventId, transaction, requestId, status) {
+    const body = JSON.stringify({
+      event: eventName,
+      payload: {
+        refund: {
+          entity: {
+            id: `refund_${transaction.paymentId}`,
+            payment_id: transaction.paymentId,
+            amount: 40000,
+            currency: 'INR',
+            status,
+            notes: { refundRequestId: requestId }
+          }
+        }
+      }
+    });
+    const signature = createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET)
+      .update(body)
+      .digest('hex');
+    return fetch(`${baseUrl}/payments/razorpay/webhook`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-razorpay-signature': signature,
+        'x-razorpay-event-id': eventId
+      },
+      body
+    });
+  }
+
+  const { order, transaction } = await createPaidOrder('processed');
+  let providerCalls = 0;
+  const razorpay = getRazorpayClient();
+  razorpay.payments.refund = async (paymentId, params) => {
+    providerCalls += 1;
+    assert.match(paymentId, /^razorpay_payment_/);
+    assert.equal(params.amount, 40000);
+    return {
+      id: `refund_${paymentId}`,
+      payment_id: paymentId,
+      amount: params.amount,
+      status: 'created',
+      notes: params.notes
+    };
+  };
+
+  const forbiddenResponse = await fetch(`${baseUrl}/store/orders/${order._id}/refund`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${otherStoreToken}` }
+  });
+  assert.equal(forbiddenResponse.status, 404);
+  assert.equal(providerCalls, 0);
+
+  const partialRefundResponse = await fetch(`${baseUrl}/store/orders/${order._id}/refund`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${storeToken}`,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({ amount: 1 })
+  });
+  assert.equal(partialRefundResponse.status, 400);
+  assert.equal((await Order.findById(order._id)).paymentStatus, 'paid');
+
+  const refundResponse = await fetch(`${baseUrl}/store/orders/${order._id}/refund`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${storeToken}` }
+  });
+  assert.equal(refundResponse.status, 202);
+  const pendingRefund = (await refundResponse.json()).data;
+  assert.equal(pendingRefund.refundStatus, 'pending');
+  assert.equal((await Order.findById(order._id)).paymentStatus, 'refund_pending');
+
+  const repeatedRefundResponse = await fetch(`${baseUrl}/store/orders/${order._id}/refund`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${storeToken}` }
+  });
+  assert.equal(repeatedRefundResponse.status, 202);
+  assert.equal(providerCalls, 1);
+
+  const pausedFulfillmentResponse = await fetch(`${baseUrl}/store/orders/${order._id}/status`, {
+    method: 'PATCH',
+    headers: { authorization: `Bearer ${storeToken}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ orderStatus: 'packing' })
+  });
+  assert.equal(pausedFulfillmentResponse.status, 409);
+  const blockedPaymentResponse = await fetch(`${baseUrl}/orders/${order._id}/payment`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${customerToken}` }
+  });
+  assert.equal(blockedPaymentResponse.status, 409);
+  const blockedCancellationResponse = await fetch(`${baseUrl}/orders/${order._id}/cancel`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${customerToken}` }
+  });
+  assert.equal(blockedCancellationResponse.status, 409);
+
+  const processedWebhook = await sendRefundWebhook(
+    'refund.processed',
+    'evt_refund_processed',
+    transaction,
+    pendingRefund.refundRequestId || (await Transaction.findById(transaction._id)).refundRequestId,
+    'processed'
+  );
+  assert.equal(processedWebhook.status, 200);
+  assert.equal((await Order.findById(order._id)).paymentStatus, 'refunded');
+  assert.equal((await Order.findById(order._id)).orderStatus, 'cancelled');
+  assert.equal((await Transaction.findById(transaction._id)).refundStatus, 'processed');
+  assert.equal(await Notification.countDocuments({ orderId: order._id }), 1);
+
+  const duplicateWebhook = await sendRefundWebhook(
+    'refund.processed',
+    'evt_refund_processed',
+    transaction,
+    (await Transaction.findById(transaction._id)).refundRequestId,
+    'processed'
+  );
+  assert.equal(duplicateWebhook.status, 200);
+  assert.equal(await Notification.countDocuments({ orderId: order._id }), 1);
+
+  const { order: failedOrder, transaction: failedTransaction } = await createPaidOrder('failed');
+  const failedRefundResponse = await fetch(`${baseUrl}/store/orders/${failedOrder._id}/refund`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${storeToken}` }
+  });
+  assert.equal(failedRefundResponse.status, 202);
+  const failedPending = (await failedRefundResponse.json()).data;
+  const failedWebhook = await sendRefundWebhook(
+    'refund.failed',
+    'evt_refund_failed',
+    failedTransaction,
+    (await Transaction.findById(failedTransaction._id)).refundRequestId,
+    'failed'
+  );
+  assert.equal(failedWebhook.status, 200);
+  assert.equal((await Order.findById(failedOrder._id)).paymentStatus, 'refund_failed');
+  assert.equal((await Order.findById(failedOrder._id)).orderStatus, 'placed');
+  assert.equal((await Transaction.findById(failedTransaction._id)).refundStatus, 'failed');
+  assert.equal(failedPending.refundStatus, 'pending');
+
+  const failedRetryResponse = await fetch(`${baseUrl}/store/orders/${failedOrder._id}/refund`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${storeToken}` }
+  });
+  assert.equal(failedRetryResponse.status, 200);
+  assert.equal((await failedRetryResponse.json()).data.refundStatus, 'failed');
+});

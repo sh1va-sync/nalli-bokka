@@ -17,7 +17,7 @@ export const api = createApi({
       return headers
     },
   }),
-  tagTypes: ['Stores', 'Products', 'Cart', 'Profile', 'Orders', 'StoreDashboard', 'StoreProducts', 'StoreOrders', 'StoreTransactions'],
+  tagTypes: ['Stores', 'Products', 'Cart', 'Profile', 'Orders', 'Notifications', 'StoreDashboard', 'StoreProducts', 'StoreOrders', 'StoreTransactions'],
   endpoints: (builder) => ({
     getStores: builder.query({
       query: (params = {}) => ({ url: '/stores', params }),
@@ -35,6 +35,9 @@ export const api = createApi({
     }),
     verifyOtp: builder.mutation({
       query: (body) => ({ url: '/auth/users/verify', method: 'POST', body }),
+    }),
+    registerUser: builder.mutation({
+      query: (body) => ({ url: '/auth/users/register', method: 'POST', body }),
     }),
     getMe: builder.query({
       query: () => '/auth/me',
@@ -65,6 +68,21 @@ export const api = createApi({
         method: 'DELETE',
       }),
       invalidatesTags: ['Profile'],
+    }),
+    getUserNotifications: builder.query({
+      query: (params = {}) => ({ url: '/users/me/notifications', params }),
+      providesTags: ['Notifications'],
+    }),
+    markUserNotificationRead: builder.mutation({
+      query: (notificationId) => ({
+        url: `/users/me/notifications/${notificationId}/read`,
+        method: 'PATCH',
+      }),
+      invalidatesTags: ['Notifications'],
+    }),
+    markAllUserNotificationsRead: builder.mutation({
+      query: () => ({ url: '/users/me/notifications/read-all', method: 'PATCH' }),
+      invalidatesTags: ['Notifications'],
     }),
     getCart: builder.query({
       query: () => '/cart',
@@ -152,9 +170,20 @@ export const api = createApi({
       query: ({ orderId, orderStatus }) => ({ url: `/store/orders/${orderId}/status`, method: 'PATCH', body: { orderStatus } }),
       invalidatesTags: ['StoreOrders', 'StoreDashboard', 'StoreTransactions'],
     }),
+    refundStoreOrder: builder.mutation({
+      query: (orderId) => ({ url: `/store/orders/${orderId}/refund`, method: 'POST' }),
+      invalidatesTags: ['StoreOrders', 'StoreDashboard', 'StoreTransactions'],
+    }),
     getStoreTransactions: builder.query({
       query: (params = {}) => ({ url: '/store/transactions', params }),
       providesTags: ['StoreTransactions'],
+    }),
+    exportStoreReport: builder.mutation({
+      query: (params) => ({
+        url: '/store/reports/export',
+        params,
+        responseHandler: async (response) => response.ok ? response.blob() : response.json(),
+      }),
     }),
   }),
 })
@@ -164,12 +193,16 @@ export const {
   useGetProductsQuery,
   useRequestOtpMutation,
   useVerifyOtpMutation,
+  useRegisterUserMutation,
   useGetMeQuery,
   useGetProfileQuery,
   useUpdateProfileMutation,
   useAddAddressMutation,
   useUpdateAddressMutation,
   useDeleteAddressMutation,
+  useGetUserNotificationsQuery,
+  useMarkUserNotificationReadMutation,
+  useMarkAllUserNotificationsReadMutation,
   useGetCartQuery,
   useAddCartItemMutation,
   useUpdateCartItemMutation,
@@ -190,5 +223,7 @@ export const {
   useDeleteStoreProductMutation,
   useGetStoreOrdersQuery,
   useUpdateStoreOrderStatusMutation,
+  useRefundStoreOrderMutation,
   useGetStoreTransactionsQuery,
+  useExportStoreReportMutation,
 } = api

@@ -50,9 +50,13 @@ The server connects to MongoDB before it listens. `npm start` starts without wat
 
 The server applies Helmet security headers, CORS, a 1 MB JSON body limit, a JSON 404 handler, and centralized error formatting. The Razorpay webhook route is mounted before the JSON parser so it can verify the original raw request bytes.
 
+### Console logging
+
+Run `npm run dev` or `npm start` in the foreground to see live logs. Each completed request writes a structured JSON record to stdout with its timestamp, generated request ID, method, path (without query values), status, and duration. The same ID is returned in the `X-Request-Id` response header and included in centralized server-error logs. Successful database connection, server listening, and startup failures are also logged. Request bodies and authorization/cookie headers are never logged; capture the Node process stdout and stderr for production collection.
+
 ### MongoDB deployment requirement
 
-Order checkout and payment settlement start MongoDB sessions and transactions. MongoDB multi-document transactions require a replica set or sharded cluster; a standalone MongoDB server cannot support these operations. Configure a replica set (including a single-node replica set for local development) before exercising checkout or payment flows.
+Order checkout, payment settlement, and store order-status/notification updates start MongoDB sessions and transactions. MongoDB multi-document transactions require a replica set or sharded cluster; a standalone MongoDB server cannot support these operations. Configure a replica set (including a single-node replica set for local development) before exercising checkout, payment, or store fulfillment flows.
 
 ## 3. Authentication and standard request behavior
 
@@ -61,8 +65,9 @@ Order checkout and payment settlement start MongoDB sessions and transactions. M
 1. Send `POST /auth/users/otp` with the customer's phone number in E.164 format.
 2. The server asks Twilio Verify to send an SMS and returns `202 Accepted`.
 3. Submit the phone and received code to `POST /auth/users/verify`.
-4. A successful verification returns a JWT and the customer profile. If this phone has no account yet, `name` is required to create it.
-5. Send the token as `Authorization: Bearer <token>` for customer routes.
+4. Existing customers receive a JWT and profile. First-time customers receive a short-lived registration token.
+5. First-time customers submit that token, a required name, and optional email to `POST /auth/users/register`; the response contains their JWT and profile.
+6. Send the customer JWT as `Authorization: Bearer <token>` for customer routes.
 
 OTP request and verification share a rate limit of 5 requests per 10 minutes per client IP. Store login is limited to 10 attempts per 15 minutes per client IP. Rate-limit responses have an `error` string.
 
@@ -106,6 +111,18 @@ Public liveness check. Does not query MongoDB.
 { "status": "ok" }
 ```
 
+#### `GET /health/ready`
+
+Public readiness check for deployment probes. Returns `200` only when the MongoDB connection is ready; otherwise returns `503`.
+
+```json
+{ "status": "ready" }
+```
+
+```json
+{ "status": "not_ready" }
+```
+
 #### `POST /auth/users/otp`
 
 Public. Requests a Twilio Verify SMS.
@@ -128,41 +145,19 @@ Possible errors: `400` invalid phone; `429` rate limit exceeded; `503` Twilio is
 
 #### `POST /auth/users/verify`
 
-Public. Verifies the code using Twilio Verify and creates a user on the first successful verification.
+Public. Verifies the code using Twilio Verify. The request contains only `phone` (E.164) and `code` (4–10 digits).
 
-Request:
+Existing customers receive `{ "isNewUser": false, "token": "<jwt>", "user": <user> }` with status `200`. First-time customers receive `{ "isNewUser": true, "verificationToken": "<short-lived-registration-jwt>" }` with status `200`; this token expires after 10 minutes and is not an authenticated customer token.
 
-```json
-{
-  "phone": "+15551234567",
-  "code": "123456",
-  "name": "Asha",
-  "email": "asha@example.com"
-}
-```
+Possible errors: `400` invalid request; `401` invalid/expired OTP; `429` rate limit exceeded; `503` Twilio or JWT configuration unavailable.
 
-- `phone`: E.164 format.
-- `code`: 4–10 digits.
-- `name`: optional for an existing user; required for a new user; 1–100 characters.
-- `email`: optional valid email, maximum 254 characters.
+#### `POST /auth/users/register`
 
-Success (`200`):
+Public. Completes registration using a valid `verificationToken`, required `name` (1–100 characters), and optional valid `email` (maximum 254 characters).
 
-```json
-{
-  "token": "<jwt>",
-  "user": {
-    "_id": "<userId>",
-    "name": "Asha",
-    "phone": "+15551234567",
-    "addresses": [],
-    "createdAt": "<ISO-8601>",
-    "updatedAt": "<ISO-8601>"
-  }
-}
-```
+Success (`201`): `{ "isNewUser": true, "token": "<customer-jwt>", "user": <created user> }`.
 
-Possible errors: `400` invalid request or missing new-account name; `401` invalid/expired OTP; `409` duplicate email; `429` rate limit exceeded; `503` Twilio or JWT configuration unavailable. User fields such as `_id` and timestamps are generated by MongoDB/Mongoose.
+Possible errors: `400` invalid request; `401` invalid/expired registration token; `409` account already exists for the phone or email is already used.
 
 #### `POST /auth/stores/login`
 
@@ -396,7 +391,7 @@ Possible errors:
 
 #### `GET /orders`
 
-Lists only the authenticated user's orders, newest first. Accepts `page`, `limit`, and optional `orderStatus` (`placed`, `packing`, `out for delivery`, `delivered`, `cancelled`).
+Lists only the authenticated user's orders, newest first. Accepts `page`, `limit`, optional `orderStatus` (`placed`, `packing`, `out for delivery`, `delivered`, `cancelled`), and optional paired ISO-8601 `from`/`to` bounds on `createdAt` (`[from, to)`).
 
 Response: paginated envelope. `storeId` is populated with `storeName` and `location`.
 
@@ -483,7 +478,7 @@ External Razorpay endpoint; no JWT. Configure this exact full URL in the Razorpa
 
 The endpoint accepts signed `application/json` raw request bytes and validates the `x-razorpay-signature` header using `RAZORPAY_WEBHOOK_SECRET`. It processes `payment.captured` and `payment.failed`; other event types receive `{ "received": true }` without payment processing. For supported events, payment order ID, payment ID, amount, and currency must match a known transaction. Successful handling returns `200 { "received": true }`.
 
-**Current implementation caveat:** persisted webhook deduplication currently stores `payment.id` in the field named `razorpayEventId`; it does not persist Razorpay's distinct top-level webhook event ID. Because the dedupe key is the payment ID, subsequent webhook event types for that same payment can be treated as duplicates after the first event is processed. The endpoint also responds `404` for a payment order ID that has no local transaction. Frontend code should use the client verification endpoint for customer confirmation and refresh the order state; webhook delivery is asynchronous and is not a browser callback.
+Handled webhook events require Razorpay's `x-razorpay-event-id` header and are deduplicated by that event ID rather than the payment ID. This allows distinct events concerning one payment to be processed independently. The endpoint responds `404` for a payment order ID that has no local transaction. Frontend code should use the client verification endpoint for customer confirmation and refresh the order state; webhook delivery is asynchronous and is not a browser callback.
 
 ### 4.7 Store dashboard and operations
 
@@ -491,7 +486,7 @@ Every endpoint in this section requires a store-admin token. Queries and mutatio
 
 #### `GET /store/dashboard`
 
-Optional query `days` (integer 1–90, default 7) defines the paid-revenue lookback period.
+Optional query `days` (integer 1–90, default 7) defines the paid-revenue lookback period. Optional `from` and `to` ISO-8601 timestamps must be supplied together; they provide exact interval aggregates (inclusive `from`, exclusive `to`) for daily order and transaction metrics.
 
 Response:
 
@@ -501,12 +496,20 @@ Response:
     "inventory": { "inStock": 12, "outOfStock": 2 },
     "ordersByStatus": { "placed": 3, "packing": 1 },
     "paidRevenue": { "sinceDays": 7, "amount": 4200, "orders": 6 },
+    "periodMetrics": {
+      "from": "2026-10-09T18:30:00.000Z",
+      "to": "2026-10-10T18:30:00.000Z",
+      "orders": 4,
+      "paidRevenue": 2600,
+      "paidTransactions": 3,
+      "transactions": { "created": 1, "paid": 3, "failed": 0 }
+    },
     "recentOrders": []
   }
 }
 ```
 
-Counts are for this store. Revenue sums `totalAmount` on paid orders whose `createdAt` falls within the selected period. `recentOrders` contains up to 10 newest orders and includes the customer's `name` and `phone`.
+Counts are for this store. `paidRevenue` sums `totalAmount` on paid orders whose `createdAt` falls within the selected rolling period. When a date interval is supplied, `periodMetrics` counts orders by `createdAt` and transactions by `timestamp` within that exact interval. `recentOrders` contains up to 10 newest orders and includes the customer's `name` and `phone`.
 
 #### `GET /store/products`
 
@@ -567,7 +570,7 @@ Deletes a product owned by this store. Success: `204 No Content`; missing/non-ow
 
 #### `GET /store/orders`
 
-Paged, newest-first list of this store's orders. Optional `orderStatus` filter. Customer `userId` is populated with `name` and `phone`.
+Paged, newest-first list of this store's orders. Optional `orderStatus` filter and optional paired ISO-8601 `from`/`to` bounds on `createdAt` (`[from, to)`. Customer `userId` is populated with `name` and `phone`.
 
 #### `GET /store/orders/:orderId`
 
@@ -581,13 +584,21 @@ Request:
 { "orderStatus": "packing" }
 ```
 
-Allowed requested values: `packing`, `out for delivery`, `delivered`, `cancelled`. The transition graph is constrained (see section 6). A paid order cannot be cancelled; an active payment attempt prevents cancellation; moving to `packing` requires payment status `paid`. Success: `200 { "data": <updated order> }`. Invalid state transition returns `409`.
+Allowed requested values: `packing`, `out for delivery`, `delivered`, `cancelled`. The transition graph is constrained (see section 6). A paid order cannot be cancelled; an active payment attempt prevents cancellation; moving to `packing` requires payment status `paid` or `refund_failed`. Fulfillment cannot be advanced while a refund is pending. Success: `200 { "data": <updated order> }`. Invalid state transition returns `409`.
+
+#### `POST /store/orders/:orderId/refund`
+
+Store admins can request one full refund for an order they own while it is `placed` or `packing` and paid. The body is empty; the amount comes from the captured transaction. A transactionally reserved refund is sent to Razorpay with an internal correlation token in `notes`. Pending requests are returned as `202` on retries without issuing another provider request. An uncertain provider response returns `502` but leaves the operation pending; do not retry it manually.
+
+Razorpay's signed `refund.processed` webhook atomically marks the transaction refunded, cancels the order, and creates an in-app customer notification. `refund.failed` marks the order's payment state `refund_failed` and leaves fulfillment available. Both events must carry the locally generated refund request token and the exact full refund amount. Customers cannot cancel or pay again while a refund is pending or after a refund outcome.
 
 #### `GET /store/transactions`
 
-Paged list of transactions belonging to this store's orders, newest transaction timestamp first. Optional `status` filter: `created`, `paid`, `failed`.
+Paged list of transactions belonging to this store's orders, newest transaction timestamp first. Optional `status` filter (`created`, `paid`, `failed`) and optional paired ISO-8601 `from`/`to` bounds on `timestamp` (`[from, to)`).
 
-Returned transaction fields: `orderId`, `razorpayOrderId`, optional `paymentId`, `amount` (rupees), `status`, `timestamp`.
+Returned transaction fields: `orderId`, `razorpayOrderId`, optional `paymentId`, `amount` (rupees), `status`, `refundStatus`, optional `refundId`, and `timestamp`.
+
+**Success — `200 OK`:** CSV attachment with `Content-Type: text/csv`. Transaction export columns include `timestamp`, `order_id`, `status`, `amount`, `refund_status`, and `refund_id`.
 
 #### `GET /store/transactions/:transactionId`
 
@@ -595,7 +606,7 @@ Returns a transaction only if its associated order belongs to this store. Succes
 
 ## 5. Data models and relationships
 
-Mongoose models use MongoDB collections `stores`, `users`, `products`, `carts`, `orders`, `transactions`, and the additional implementation collections `idempotencykeys` and `webhookevents`. Each model uses MongoDB `_id`; timestamps are present on Store, User, Product, Cart, and Order. Transaction uses `timestamp` for payment activity. All references below are ObjectIds.
+Mongoose models use MongoDB collections `stores`, `users`, `products`, `carts`, `orders`, `transactions`, and the supporting collections `idempotencykeys`, `webhookevents`, and `notifications`. Each model uses MongoDB `_id`; timestamps are present on Store, User, Product, Cart, Order, and Notification. Transaction uses `timestamp` for payment activity. All references below are ObjectIds.
 
 ### Store (`stores`)
 
@@ -657,7 +668,7 @@ Each line has `productId`, `selectionType`, `selectedQuantity`, and optional `se
 | `items` | Array | Nonempty order-time product snapshots. |
 | `totalAmount` | Number | Server-calculated total in rupees, rounded to paise. |
 | `orderStatus` | String | `placed`, `packing`, `out for delivery`, `delivered`, `cancelled`; defaults to `placed`. |
-| `paymentStatus` | String | `pending`, `paid`, `failed`; defaults to `pending`. |
+| `paymentStatus` | String | `pending`, `paid`, `failed`, `refund_pending`, `refunded`, `refund_failed`; defaults to `pending`. |
 | `createdAt`, `updatedAt` | Date | Mongoose timestamps. |
 
 Each order item stores `productId`, copied `productName`, `selectionType`, `quantity`, optional `packLabel`, and copied line `price`. Historical order names/prices and delivery address do not change when catalog or profile data changes. The order schema recalculates `totalAmount` from item line prices during validation.
@@ -673,9 +684,12 @@ Indexes include `{ storeId: 1, createdAt: -1 }` and `{ userId: 1, createdAt: -1 
 | `paymentId` | String | Optional, unique when present (sparse index). |
 | `amount` | Number | Required, nonnegative rupees. |
 | `status` | String | `created`, `paid`, `failed`; defaults to `created`. |
+| `refundStatus` | String | `none`, `pending`, `processed`, `failed`; defaults to `none`. |
+| `refundId` | String | Optional Razorpay refund ID. |
+| `refundRequestId` | String | Optional internal token included in Razorpay notes to correlate refund webhooks. |
 | `timestamp` | Date | Defaults to current time. |
 
-Partial unique index `{ orderId: 1, status: 1 }` for `status: "created"` permits at most one created transaction per order. Transaction is the payment record; order stores only its current `paymentStatus`.
+Partial unique index `{ orderId: 1, status: 1 }` for `status: "created"` permits at most one created transaction per order. Refund initiation reserves the paid transaction before contacting Razorpay, and webhook outcomes update its refund state atomically with the order and customer notification. Transaction is the payment/refund record; order stores the current `paymentStatus`.
 
 ### IdempotencyKey (`idempotencykeys`)
 
@@ -722,7 +736,7 @@ Line prices and order totals are rounded to two decimal places (paise precision)
 
 When checkout runs, product lookup and pricing happen first. The order creation, cart cleanup, and idempotency record update are then grouped in a MongoDB transaction. Cart cleanup removes only items associated with the checked-out store.
 
-The optional idempotency key helps return an existing order on a retry. **Current implementation constraint:** the handler checks for a user and nonempty cart before looking up an existing key. A retry after the first request has emptied the cart may therefore receive `400` for an empty cart rather than the saved order. The frontend should retain the first successful response/order ID and avoid depending on replay as an order retrieval mechanism; use `GET /orders/:orderId` for subsequent reads.
+The optional idempotency key is checked before cart validation, so a retry after successful checkout returns the original order even after its items have been removed from the cart. The key is scoped to the authenticated user.
 
 ### Order state transitions
 
@@ -741,7 +755,7 @@ More precisely:
 - `out for delivery` can advance only to `delivered`.
 - `delivered` and `cancelled` are terminal.
 - Store must confirm `paymentStatus: "paid"` before moving an order to `packing`.
-- Paid orders cannot be cancelled through this API; refunds are not implemented.
+- Paid orders cannot be cancelled through the status endpoint. Store admins can use the full-refund endpoint for paid `placed` or `packing` orders. Refund-pending orders are paused; processed refunds cancel the order, and failed refunds leave it paid.
 - A created payment transaction prevents cancellation until it is no longer active.
 
 ## 7. Frontend integration workflow
@@ -763,7 +777,7 @@ Suggested store-admin flow:
 2. Load `GET /store/dashboard`.
 3. Manage the store's inventory through `/store/products` and the stock endpoint.
 4. Load the store's orders and transactions through their paginated endpoints.
-5. Advance order status only when the current status and payment state permit it.
+5. Advance order status only when the current status and payment state permit it; request a full refund for an eligible paid order through `POST /store/orders/:orderId/refund`.
 
 Always handle errors from the API rather than assuming a request succeeded. In particular, refresh the cart before checkout, do not trust client-calculated prices, and do not mark payment successful until server verification or a later order refresh confirms it.
 
@@ -795,12 +809,12 @@ The API router is mounted under `/api`. The raw Razorpay webhook route is mounte
 - OTP delivery requires configured Twilio Verify credentials and may incur provider costs.
 - Online payment flows require configured Razorpay keys; webhook processing additionally requires its webhook secret.
 - Transactions require a replica set or equivalent transaction-capable MongoDB deployment.
-- The API has no customer registration/password flow, store self-registration, password-reset flow, refresh tokens, refunds, shipping-rate calculation, or file-upload endpoint.
+- The API has no customer password flow, store self-registration, password-reset flow, refresh tokens, partial refunds, shipping-rate calculation, or file-upload endpoint.
 - Product images are represented by an externally hosted `imageUrl`; image storage/CDN management is outside this API.
 - Product discovery exposes only in-stock products; store inventory listing includes out-of-stock items.
 - Cart totals are recalculated using current catalog pricing. Order snapshots preserve the final selected item names and prices.
 - Rate limiting uses the process's configured default in-memory store; it is not shared across multiple server instances.
-- Webhook deduplication currently uses payment ID rather than Razorpay's top-level event ID; see the integration caveat above.
+- Refund requests with uncertain provider responses remain pending and are not automatically retried, preventing duplicate refunds; operations must reconcile these requests with Razorpay if the signed outcome webhook does not arrive.
 
 ## 10. Postman quick reference
 

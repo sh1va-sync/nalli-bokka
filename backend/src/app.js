@@ -5,9 +5,11 @@ import { handleRazorpayWebhook } from './controllers/paymentController.js';
 import routes from './routes/index.js';
 import errorHandler from './middleware/errorHandler.js';
 import notFound from './middleware/notFound.js';
+import requestLogger from './middleware/requestLogger.js';
 
 const app = express();
 app.disable('x-powered-by');
+app.use(requestLogger);
 
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
   .split(',')

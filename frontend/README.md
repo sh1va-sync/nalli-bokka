@@ -16,10 +16,10 @@ Razorpay Checkout uses its hosted browser SDK. Its public key comes from the pay
 - Choose and persist a store; browse its available products.
 - Search with a short debounce, filter by product type, sort, and paginate through the catalog.
 - Use a guest basket before signing in; selections persist locally and are synchronized to the server cart after OTP login.
-- Sign in or create a customer account with phone OTP; verification sends only the phone number and code. The backend must allow new customer creation without name/email in the OTP request; those details can be added later in the profile.
+- Sign in or create a customer account with phone OTP; first-time customers enter a name after OTP verification (email is optional) using the backend registration-token flow.
 - Manage customer profile details and saved delivery addresses.
 - Refresh authoritative cart prices, add/select an address without leaving checkout, create a one-store order, and pay by UPI through Razorpay with server-side payment verification.
-- Review order history and poll current order status while tracking.
+- Review order history and poll current order status while tracking; see store status changes in the in-app notification center.
 
 ## Checkout payment follow-up
 
@@ -36,15 +36,15 @@ When COD is implemented server-side, update the API contract and checkout flow t
 
 - Open the store portal at `/store/login`; authenticate with the username/password provisioned by the backend. Store credentials and JWT are kept separate from customer authentication.
 - Dashboard overview, orders, inventory, and transaction screens use the `/store/*` APIs and are isolated in `src/features/storeAdmin`.
-- Orders and transactions shown in daily views are filtered from local midnight. The dashboard refreshes live order data periodically. Accepting an order moves it to `packing`, which the API permits only after payment is marked paid; decline requests the API's `cancelled` transition.
+- Use the shared date selector on the overview, orders, or transactions screen to review a specific local calendar day; the same selection filters daily metrics, orders, and transactions. Daily order and transaction metrics use server-side aggregates bounded by local midnight timestamps from the browser, so counts and totals are not limited to the first page. Store inventory, selected-day orders, and selected-day transactions provide next/previous pagination. The dashboard refreshes live order data periodically. Accepting an order moves it to `packing`, which the API permits only after payment is marked paid; decline requests the API's `cancelled` transition.
+- Download the selected day's orders or payment transactions as a store-scoped CSV. The API also accepts longer date ranges and streams exports without including customer contact details or delivery addresses.
+- Request a full refund for a paid order while it is `placed` or `packing`. Fulfillment pauses during provider confirmation; processed refunds cancel the order and notify the customer, while failed refunds leave the paid order eligible to continue.
 - Inventory supports the product types currently accepted by the API (`meat`, `vegetable`, `fruit`, `oil`, `rice`), adding/editing weight-priced or pack-priced products, stock toggles, and deletion. Arbitrary new categories are not supported by the current product schema.
 
 Backend follow-ups before completing store operations:
 
 1. Add a store open/close endpoint and availability field; the dashboard currently shows the control as unavailable rather than pretending it changed store state.
 2. Expand product category validation and product/customer filtering if stores need custom categories beyond the five current enum values.
-3. Consider server-side `from`/`to` date filters and aggregate daily order/revenue/transaction metrics. The current dashboard calculates today's metrics from paginated store orders and transactions because those list endpoints expose pagination but no date filter or daily aggregate.
-
 Catalog errors and API validation errors are shown in the interface. The API remains authoritative for availability, prices, checkout totals, order state and payment state.
 For endpoint payloads and data relationships, see [backend-api-endpoints.md](./backend-api-endpoints.md) and [database-design.md](./database-design.md).
 

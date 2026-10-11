@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
 
-function errorHandler(err, _req, res, _next) {
+function errorHandler(err, req, res, _next) {
   let status = err instanceof AppError ? err.status : 500;
   let message = err instanceof AppError ? err.message : 'Internal server error';
 
@@ -23,7 +23,17 @@ function errorHandler(err, _req, res, _next) {
   }
 
   if (status >= 500) {
-    console.error(err);
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'error',
+      event: 'http.request.failed',
+      requestId: req.requestId,
+      method: req.method,
+      path: req.originalUrl.split('?')[0],
+      statusCode: status,
+      message: err.message,
+      stack: err.stack
+    }));
   }
   res.status(status).json({ error: message });
 }

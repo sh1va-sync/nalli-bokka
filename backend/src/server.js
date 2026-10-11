@@ -10,9 +10,20 @@ try {
   }
   await connectDatabase();
   app.listen(port, () => {
-    console.log(`API server listening on port ${port}`);
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'info',
+      event: 'server.listening',
+      port
+    }));
   });
 } catch (error) {
-  console.error('Failed to start API server:', error);
+  console.error(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: 'error',
+    event: 'server.start.failed',
+    message: error.message,
+    stack: error.stack
+  }));
   process.exitCode = 1;
 }

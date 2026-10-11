@@ -47,7 +47,9 @@ Checkout can additionally receive:
 Idempotency-Key: <unique-client-generated-key>
 ```
 
-The Razorpay webhook is the exception to the JSON-body rule: it receives the raw JSON bytes and a Razorpay `x-razorpay-signature` header.
+Every response includes an `X-Request-Id` header. The backend logs structured request completion records to the console without recording request bodies, authorization headers, or query-string values.
+
+The Razorpay webhook is the exception to the JSON-body rule: it receives the raw JSON bytes and Razorpay `x-razorpay-signature` and `x-razorpay-event-id` headers.
 
 ### Authentication roles
 
@@ -94,6 +96,22 @@ Pagination query parameters are `page` (default `1`, integer >= 1) and `limit` (
 { "status": "ok" }
 ```
 
+### `GET /health/ready`
+
+**Access:** Public. **Purpose:** Readiness check for deployment probes. Returns ready only when MongoDB is connected.
+
+**Success — `200 OK`:**
+
+```json
+{ "status": "ready" }
+```
+
+**MongoDB unavailable — `503 Service Unavailable`:**
+
+```json
+{ "status": "not_ready" }
+```
+
 ### `POST /auth/users/otp`
 
 **Access:** Public  
@@ -123,16 +141,14 @@ Pagination query parameters are `page` (default `1`, integer >= 1) and `limit` (
 ### `POST /auth/users/verify`
 
 **Access:** Public  
-**Purpose:** Validates the SMS code. A verified phone number is signed in; if there is no existing account for that phone, the endpoint creates one.
+**Purpose:** Validates the SMS code. Existing customers receive a customer token; first-time customers receive a short-lived registration token and must finish account creation.
 
 **Request body:**
 
 ```json
 {
   "phone": "+15551234567",
-  "code": "123456",
-  "name": "Asha Rao",
-  "email": "asha@example.com"
+  "code": "123456"
 }
 ```
 
@@ -140,10 +156,8 @@ Pagination query parameters are `page` (default `1`, integer >= 1) and `limit` (
 | --- | --- |
 | `phone` | Required; E.164 format and should be the number used to request the OTP. |
 | `code` | Required; 4–10 numeric digits. |
-| `name` | Optional for an existing customer; required for a new customer; 1–100 characters. |
-| `email` | Optional valid email, maximum 254 characters. |
 
-**Success — `200 OK`:**
+**Success for an existing customer — `200 OK`:**
 
 ```json
 {
@@ -162,11 +176,39 @@ Pagination query parameters are `page` (default `1`, integer >= 1) and `limit` (
 
 The frontend should retain the token and send it as a bearer token on customer routes. The password-free user object is the authenticated account profile.
 
+For a first-time customer, the response is instead:
+
+```json
+{
+  "isNewUser": true,
+  "verificationToken": "<short-lived-registration-jwt>"
+}
+```
+
+### `POST /auth/users/register`
+
+**Access:** Public; requires a valid registration token returned by OTP verification.
+**Purpose:** Creates the new customer account after the phone number is verified.
+
+**Request body:**
+
+```json
+{
+  "verificationToken": "<short-lived-registration-jwt>",
+  "name": "Asha Rao",
+  "email": "asha@example.com"
+}
+```
+
+`name` is required (1–100 characters); `email` is optional (valid email, maximum 254 characters).
+
+**Success — `201 Created`:** `{ "isNewUser": true, "token": "<customer-jwt>", "user": <customer> }`
+
 **Important errors and behavior:**
 
-- `400`: Invalid body or `name` omitted for a phone that does not yet have an account.
+- `400`: Invalid body or extra/unrecognized request fields.
 - `401`: Invalid or expired code.
-- `409`: Email is already used by another account.
+- `409`: An account already exists for the verified phone, or email is already used by another account.
 - `429`: OTP endpoint rate limit exceeded.
 - `503`: Twilio or secure JWT configuration is unavailable.
 
@@ -349,6 +391,45 @@ Use the returned `_id` for future address operations and order checkout.
 **Success — `204 No Content`:** Response has no body.
 
 **Important errors:** `400` invalid ID; `401` unauthorized; `404` address not found. If an address is used for a later order, that order retains its own delivery-address snapshot.
+
+### `GET /users/me/notifications`
+
+**Purpose:** Lists order-status notifications for the authenticated customer, newest first. Accepts `page` and `limit` pagination parameters.
+
+**Success — `200 OK`:**
+
+```json
+{
+  "data": [
+    {
+      "_id": "<notificationId>",
+      "orderId": "<orderId>",
+      "orderStatus": "out for delivery",
+      "title": "Order status updated",
+      "message": "Your order is out for delivery.",
+      "readAt": null,
+      "createdAt": "<ISO-8601>",
+      "updatedAt": "<ISO-8601>"
+    }
+  ],
+  "unreadCount": 1,
+  "pagination": { "page": 1, "limit": 20, "total": 1, "pages": 1 }
+}
+```
+
+### `PATCH /users/me/notifications/:notificationId/read`
+
+**Purpose:** Marks one notification belonging to the authenticated customer as read.
+
+**Success — `200 OK`:** `{ "data": <updated notification> }`.
+
+**Important errors:** `400` malformed notification ID; `401` unauthorized; `404` notification not found for this customer.
+
+### `PATCH /users/me/notifications/read-all`
+
+**Purpose:** Marks all unread notifications belonging to the authenticated customer as read.
+
+**Success — `200 OK`:** `{ "data": { "updatedCount": 3 } }`.
 
 ## Public stores and products
 
@@ -572,7 +653,7 @@ Content-Type: application/json
 Idempotency-Key: <unique-key-for-this-checkout>
 ```
 
-The `Idempotency-Key` is optional in the current implementation. Send one to help make retry attempts safe, and reuse that same key for retries of that logical checkout. The key is scoped by customer.
+The `Idempotency-Key` is optional. Send one to make retries safe, and reuse that same key for retries of that logical checkout. The key is scoped by customer; a replay of a completed checkout returns the original order even after its cart items have been removed.
 
 **Request body:**
 
@@ -619,7 +700,7 @@ The `Idempotency-Key` is optional in the current implementation. Send one to hel
 
 Each order line's `price` is the full line total, not unit price. `totalAmount` and line `price` are in rupees, rounded to paise precision. Order name, price, quantity, and address are snapshots; later product/address edits do not change this order.
 
-A successfully recognized replay may return `200 OK` with the existing order. Implementation caveat: the handler validates that the cart is nonempty before checking the key, so a replay after the first checkout emptied that store's cart can return `400` rather than replaying the saved order. For later reads use `GET /orders/:orderId`.
+The first request returns `201 Created`; a replay of a completed key returns `200 OK` with the original order, even after checkout has emptied the cart.
 
 **Important errors:**
 
@@ -634,7 +715,7 @@ A successfully recognized replay may return `200 OK` with the existing order. Im
 
 **Purpose:** Lists the authenticated customer's orders, newest first.
 
-**Query parameters:** Standard pagination and optional `orderStatus`: `placed`, `packing`, `out for delivery`, `delivered`, or `cancelled`.
+**Query parameters:** Standard pagination; optional `orderStatus` (`placed`, `packing`, `out for delivery`, `delivered`, or `cancelled`); optional `from` and `to` ISO-8601 timestamps, supplied together, to restrict `createdAt` to `[from, to)`.
 
 **Success — `200 OK`:** Paginated response. Each order's `storeId` is populated with public store fields (`_id`, `storeName`, `location`).
 
@@ -679,7 +760,7 @@ Other order fields such as the delivery-address snapshot and timestamps are incl
 **Cancellation is rejected (`409`) if:**
 
 - The order is already out for delivery, delivered, or cancelled.
-- The payment status is `paid` (refunds are not supported by this API).
+- The payment has been captured or a refund is pending, failed, or complete (`paid`, `refund_pending`, `refund_failed`, or `refunded`).
 - A payment transaction is still `created`.
 
 Also returns `404` for an unknown/non-owned order and `401` for unauthorized access.
@@ -711,7 +792,7 @@ Payment endpoints should be called only after order creation. Browser code must 
 
 `amount` is paise (example: ₹400.00 is `40000`). Use the returned values to initialize Razorpay Checkout. The server derives the amount from the persisted order; the frontend must not substitute its own amount.
 
-**Important errors:** `400` amount is not positive; `401` unauthorized; `404` order missing/not owned; `409` order is cancelled or already paid; `503` Razorpay is not configured. MongoDB unique constraints can also reject a concurrent duplicate created transaction with `409`.
+**Important errors:** `400` amount is not positive; `401` unauthorized; `404` order missing/not owned; `409` order is cancelled, paid, or in a refund state; `503` Razorpay is not configured. MongoDB unique constraints can also reject a concurrent duplicate created transaction with `409`.
 
 ### `POST /payments/razorpay/verify`
 
@@ -761,9 +842,9 @@ The frontend should then reload `GET /orders/:orderId` to display the persisted 
 https://<api-host>/api/payments/razorpay/webhook
 ```
 
-The webhook must be delivered with `Content-Type: application/json`, original raw JSON bytes, and a valid `x-razorpay-signature` generated using the configured webhook secret.
+The webhook must be delivered with `Content-Type: application/json`, original raw JSON bytes, a valid `x-razorpay-signature` generated using the configured webhook secret, and Razorpay's `x-razorpay-event-id` header.
 
-**Handled event types:** `payment.captured` and `payment.failed`. Other event names are acknowledged but ignored.
+**Handled event types:** `payment.captured`, `payment.failed`, `refund.processed`, and `refund.failed`. Other event names are acknowledged but ignored.
 
 **Success — `200 OK`:**
 
@@ -773,9 +854,9 @@ The webhook must be delivered with `Content-Type: application/json`, original ra
 
 For handled events, the payment entity must include `order_id`, `id`, `amount`, and `currency`; `order_id` must match a locally stored Razorpay order and amount/currency must match its transaction.
 
-**Important errors:** `400` missing/invalid signature, malformed JSON, or missing payment details; `404` no local transaction for the Razorpay order; `409` amount/currency mismatch; `503` webhook secret is not configured. Settlement uses a MongoDB transaction.
+**Important errors:** `400` missing/invalid signature, missing event ID, malformed JSON, or missing payment details; `404` no local transaction for the Razorpay order; `409` amount/currency mismatch; `503` webhook secret is not configured. Settlement uses a MongoDB transaction.
 
-**Implementation note:** Current webhook deduplication stores the payment ID in `WebhookEvent.razorpayEventId`, rather than a distinct Razorpay top-level event identifier. Thus multiple event types for the same payment can be conflated after one is processed. Webhook responses are server-to-server; the frontend should use payment verification and reload the order for UI state.
+Webhook delivery is deduplicated by Razorpay's event ID, so distinct event types for one payment are processed independently. Webhook responses are server-to-server; the frontend should use payment verification and reload the order for UI state.
 
 ## Store dashboard and operations
 
@@ -785,7 +866,7 @@ All routes in this section require a store JWT. Data access is always scoped to 
 
 **Purpose:** Returns inventory counts, order counts, paid revenue, and recent orders for the signed-in store.
 
-**Query parameters:** Optional `days` integer 1–90; defaults to `7`.
+**Query parameters:** Optional `days` integer 1–90 (default `7`) controls the rolling paid-revenue summary. Optional `from` and `to` ISO-8601 timestamps must be supplied together and define an exact reporting interval (inclusive `from`, exclusive `to`) for the daily order and transaction aggregates.
 
 **Success — `200 OK`:**
 
@@ -805,14 +886,22 @@ All routes in this section require a store JWT. Data access is always scoped to 
       "amount": 4200,
       "orders": 6
     },
+    "periodMetrics": {
+      "from": "2026-10-09T18:30:00.000Z",
+      "to": "2026-10-10T18:30:00.000Z",
+      "orders": 4,
+      "paidRevenue": 2600,
+      "paidTransactions": 3,
+      "transactions": { "created": 1, "paid": 3, "failed": 0 }
+    },
     "recentOrders": []
   }
 }
 ```
 
-Revenue is in rupees and includes paid orders created within the selected lookback period. `recentOrders` contains up to 10 newest orders and includes customer `name` and `phone`.
+Revenue is in rupees. `paidRevenue` includes paid orders created within the selected lookback period. When `from` and `to` are supplied, `periodMetrics` counts orders by order creation time and transaction amounts/statuses by transaction time for the exact interval. `recentOrders` contains up to 10 newest orders and includes customer `name` and `phone`.
 
-**Important errors:** `400` invalid `days`; `401` missing/invalid token; `403` non-store token.
+**Important errors:** `400` invalid `days` or date interval; `401` missing/invalid token; `403` non-store token.
 
 ### `GET /store/products`
 
@@ -918,7 +1007,7 @@ Example:
 
 **Purpose:** Lists orders belonging to this store, newest first.
 
-**Query parameters:** Standard pagination; optional `orderStatus` enum: `placed`, `packing`, `out for delivery`, `delivered`, `cancelled`.
+**Query parameters:** Standard pagination; optional `orderStatus` enum: `placed`, `packing`, `out for delivery`, `delivered`, `cancelled`; optional `from` and `to` ISO-8601 timestamps, supplied together, to restrict `createdAt` to `[from, to)`.
 
 **Success — `200 OK`:** Paginated orders. `userId` is populated with the customer `name` and `phone`; `storeId` is populated with public store fields.
 
@@ -949,17 +1038,29 @@ Allowed requested states: `packing`, `out for delivery`, `delivered`, `cancelled
 - `out for delivery` → `delivered`
 - `delivered` and `cancelled` are terminal
 
-Moving to `packing` requires the order to be paid. Cancelling a paid order is not supported, and an active (`created`) payment transaction prevents cancellation.
+Moving to `packing` requires a captured payment. Cancelling a paid order through this status endpoint is not supported; use the full-refund endpoint. Fulfillment is paused while a refund is pending. An active (`created`) payment transaction prevents cancellation.
 
 **Success — `200 OK`:** `{ "data": <updated order> }`.
 
 **Important errors:** `400` invalid ID/body; `401` unauthorized; `403` customer token; `404` order missing or not owned by this store; `409` illegal transition or cancellation/payment restriction.
 
+### `POST /store/orders/:orderId/refund`
+
+**Purpose:** Requests a full Razorpay refund and cancels an eligible order after Razorpay confirms processing.
+
+**Access:** Authenticated store admin. The order must belong to the store in the token, be paid, and be in `placed` or `packing`. No request body is accepted. Partial refunds are not supported.
+
+**Success — `202 Accepted`:** Refund request is pending provider confirmation. Response data contains `orderId`, `refundStatus: "pending"`, and `paymentStatus: "refund_pending"`. Repeating the request returns the existing state and never submits a second Razorpay refund.
+
+**Success — `200 OK`:** Razorpay has already returned a terminal `processed` or `failed` outcome. A processed refund sets `paymentStatus` to `refunded`, cancels the order, and creates a customer notification. A failed refund sets `paymentStatus` to `refund_failed`; the order remains paid and can continue fulfillment.
+
+**Important errors:** `401` unauthorized; `404` order missing or not owned by this store; `409` order is not eligible or payment/refund state is inconsistent; `502` provider response is uncertain or invalid. For an uncertain provider result, the local refund remains pending; do not retry manually, and wait for the signed webhook or reconcile with Razorpay.
+
 ### `GET /store/transactions`
 
 **Purpose:** Lists payment transactions for orders belonging to this store.
 
-**Query parameters:** Standard pagination; optional `status`: `created`, `paid`, or `failed`.
+**Query parameters:** Standard pagination; optional `status` (`created`, `paid`, or `failed`); optional `from` and `to` ISO-8601 timestamps, supplied together, to restrict `timestamp` to `[from, to)`.
 
 **Success — `200 OK`:** Paginated transaction data containing fields such as:
 
@@ -973,6 +1074,8 @@ Moving to `packing` requires the order to be paid. Cancelling a paid order is no
       "paymentId": "pay_...",
       "amount": 400,
       "status": "paid",
+      "refundStatus": "none",
+      "refundId": null,
       "timestamp": "<ISO-8601>"
     }
   ],
@@ -991,6 +1094,19 @@ Moving to `packing` requires the order to be paid. Cancelling a paid order is no
 **Success — `200 OK`:** `{ "data": <transaction summary> }`, including order ID, Razorpay IDs, amount in rupees, status, and timestamp.
 
 **Important errors:** `400` invalid ObjectId; `401` unauthorized; `403` customer token; `404` transaction missing or associated order belongs to another store.
+
+### `GET /store/reports/export`
+
+**Purpose:** Downloads a store-scoped CSV report for orders or payment transactions. The date range has no maximum duration and is streamed so the complete report is not accumulated in application memory. Delivery addresses and customer contact details are excluded.
+
+**Query parameters:**
+
+- `type`: Required; `orders` or `transactions`.
+- `from`, `to`: Required ISO-8601 timestamps; `from` is inclusive and `to` is exclusive.
+
+**Success — `200 OK`:** CSV attachment with `Content-Type: text/csv`. Order columns are `order_id`, `created_at`, `order_status`, `payment_status`, `total_amount`, and `items`. Transaction columns are `timestamp`, `order_id`, `status`, `amount`, `refund_status`, and `refund_id`.
+
+**Important errors:** `400` missing/invalid report type or date bounds; `401` unauthorized; `403` customer token.
 
 ## Common errors
 

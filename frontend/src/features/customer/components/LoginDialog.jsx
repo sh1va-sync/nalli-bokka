@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useDispatch } from 'react-redux'
 import { ArrowLeft, CheckCircle2, Phone, ShieldCheck, X } from 'lucide-react'
 import { signedIn } from '../../auth/authSlice.js'
-import { useRequestOtpMutation, useVerifyOtpMutation } from '../../api/api.js'
+import { useRegisterUserMutation, useRequestOtpMutation, useVerifyOtpMutation } from '../../api/api.js'
 import { getErrorMessage } from '../utils.js'
 
 export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
@@ -10,13 +10,27 @@ export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
   const [step, setStep] = useState('phone')
+  const [registrationToken, setRegistrationToken] = useState('')
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
   const [message, setMessage] = useState('')
   const [requestOtp, requestState] = useRequestOtpMutation()
   const [verifyOtp, verifyState] = useVerifyOtpMutation()
+  const [registerUser, registerState] = useRegisterUserMutation()
   if (!open) return null
 
   const normalizedPhone = phone.startsWith('+') ? phone.replace(/[^\d+]/g, '') : `+91${phone.replace(/\D/g, '')}`
-  const busy = requestState.isLoading || verifyState.isLoading
+  const busy = requestState.isLoading || verifyState.isLoading || registerState.isLoading
+
+  async function finishSignIn(result) {
+    dispatch(signedIn({ token: result.token, user: result.user }))
+    const syncError = await onSignedIn()
+    if (syncError) {
+      setMessage(syncError)
+    } else {
+      onClose()
+    }
+  }
 
   async function submitPhone(event) {
     event.preventDefault()
@@ -37,13 +51,27 @@ export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
         phone: normalizedPhone,
         code,
       }).unwrap()
-      dispatch(signedIn({ token: result.token, user: result.user }))
-      const syncError = await onSignedIn()
-      if (syncError) {
-        setMessage(syncError)
+      if (result.isNewUser) {
+        setRegistrationToken(result.verificationToken)
+        setStep('registration')
       } else {
-        onClose()
+        await finishSignIn(result)
       }
+    } catch (error) {
+      setMessage(getErrorMessage(error))
+    }
+  }
+
+  async function submitRegistration(event) {
+    event.preventDefault()
+    setMessage('')
+    try {
+      const result = await registerUser({
+        verificationToken: registrationToken,
+        name: name.trim(),
+        ...(email.trim() ? { email: email.trim() } : {}),
+      }).unwrap()
+      await finishSignIn(result)
     } catch (error) {
       setMessage(getErrorMessage(error))
     }
@@ -55,8 +83,8 @@ export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
         <button className="absolute right-5 top-5 rounded-full p-2 text-[#797b70] hover:bg-[#eeede6]" onClick={onClose} aria-label="Close sign in"><X size={19} /></button>
         <span className="mb-5 grid h-11 w-11 place-items-center rounded-full bg-[#f3e2dc] text-[#861923]">{step === 'phone' ? <Phone size={19} /> : <ShieldCheck size={20} />}</span>
         <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#9a8176]">NalliBokka account</p>
-        <h2 id="login-title" className="mt-1 font-display text-2xl font-medium text-[#392824]">{step === 'phone' ? 'Good food starts here' : 'Check your messages'}</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-500">{reason || (step === 'phone' ? 'Sign in with your phone number. We’ll send you a one-time code.' : `Enter the verification code sent to ${normalizedPhone}.`)}</p>
+        <h2 id="login-title" className="mt-1 font-display text-2xl font-medium text-[#392824]">{step === 'phone' ? 'Good food starts here' : step === 'code' ? 'Check your messages' : 'Create your account'}</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-500">{step === 'phone' ? reason || 'Sign in with your phone number. We’ll send you a one-time code.' : step === 'code' ? `Enter the verification code sent to ${normalizedPhone}.` : 'Your phone number is verified. Add your name to finish creating your account.'}</p>
         {step === 'phone' ? (
           <form className="mt-6 space-y-4" onSubmit={submitPhone}>
             <label className="block text-xs font-bold text-[#76534a]">PHONE NUMBER
@@ -64,11 +92,22 @@ export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
             </label>
             <button disabled={busy || phone.replace(/\D/g, '').length !== 10} className="flex h-12 w-full items-center justify-center rounded-xl bg-[#861923] text-sm font-medium text-white transition hover:bg-[#70131c] disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'Sending code…' : 'Send verification code'}</button>
           </form>
-        ) : (
+        ) : step === 'code' ? (
           <form className="mt-6 space-y-3" onSubmit={submitCode}>
-            <button type="button" onClick={() => setStep('phone')} className="mb-1 flex items-center gap-1 text-xs font-semibold text-[#9b5148]"><ArrowLeft size={14} /> Change phone number</button>
+            <button type="button" onClick={() => { setStep('phone'); setCode(''); setRegistrationToken('') }} className="mb-1 flex items-center gap-1 text-xs font-semibold text-[#9b5148]"><ArrowLeft size={14} /> Change phone number</button>
             <input autoFocus required inputMode="numeric" minLength={4} maxLength={10} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="Enter OTP" className="h-12 w-full rounded-xl border border-[#eadfd7] bg-white px-4 text-center text-lg tracking-[.35em] outline-none focus:border-[#c98c7f]" />
             <button disabled={busy || code.length < 4} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#861923] text-sm font-medium text-white transition hover:bg-[#70131c] disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'Verifying…' : <><CheckCircle2 size={17} /> Verify & continue</>}</button>
+          </form>
+        ) : (
+          <form className="mt-6 space-y-3" onSubmit={submitRegistration}>
+            <button type="button" onClick={() => { setStep('phone'); setCode(''); setRegistrationToken('') }} className="mb-1 flex items-center gap-1 text-xs font-semibold text-[#9b5148]"><ArrowLeft size={14} /> Change phone number</button>
+            <label className="block text-xs font-bold text-[#76534a]">NAME
+              <input required maxLength={100} autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} className="mt-2 h-12 w-full rounded-xl border border-[#eadfd7] bg-white px-4 text-sm font-normal outline-none focus:border-[#c98c7f]" placeholder="Your name" />
+            </label>
+            <label className="block text-xs font-bold text-[#76534a]">EMAIL <span className="font-normal text-slate-400">(optional)</span>
+              <input type="email" maxLength={254} autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-2 h-12 w-full rounded-xl border border-[#eadfd7] bg-white px-4 text-sm font-normal outline-none focus:border-[#c98c7f]" placeholder="you@example.com" />
+            </label>
+            <button disabled={busy || !name.trim()} className="flex h-12 w-full items-center justify-center rounded-xl bg-[#861923] text-sm font-medium text-white transition hover:bg-[#70131c] disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'Creating account…' : 'Create account and continue'}</button>
           </form>
         )}
         {message && <p role="alert" className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-800">{message}</p>}

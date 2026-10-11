@@ -2,19 +2,23 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import mongoose from 'mongoose';
 import Cart from '../src/models/Cart.js';
+import IdempotencyKey from '../src/models/IdempotencyKey.js';
 import Order from '../src/models/Order.js';
+import Notification from '../src/models/Notification.js';
 import Product from '../src/models/Product.js';
 import Store from '../src/models/Store.js';
 import Transaction from '../src/models/Transaction.js';
 import User from '../src/models/User.js';
+import WebhookEvent from '../src/models/WebhookEvent.js';
 import { priceSelection } from '../src/utils/pricing.js';
 
 const objectId = () => new mongoose.Types.ObjectId();
 
-test('all six Mongoose models use their intended collections', () => {
+test('all nine Mongoose models use their intended collections', () => {
   assert.deepEqual(
-    [Store, User, Product, Cart, Order, Transaction].map(model => model.collection.collectionName),
-    ['stores', 'users', 'products', 'carts', 'orders', 'transactions']
+    [Store, User, Product, Cart, Order, Transaction, IdempotencyKey, WebhookEvent, Notification]
+      .map(model => model.collection.collectionName),
+    ['stores', 'users', 'products', 'carts', 'orders', 'transactions', 'idempotencykeys', 'webhookevents', 'notifications']
   );
 });
 
@@ -27,6 +31,21 @@ test('store password is excluded from normal queries and JSON serialization', ()
   });
   assert.equal(Store.schema.path('password').options.select, false);
   assert.equal(JSON.stringify(store).includes('password'), false);
+});
+
+test('order notifications are user-scoped, unread by default, and unique per order status', async () => {
+  const notification = new Notification({
+    userId: objectId(),
+    orderId: objectId(),
+    orderStatus: 'packing',
+    title: 'Order status updated',
+    message: 'Your order is being prepared.'
+  });
+  await notification.validate();
+  assert.equal(notification.readAt, null);
+  assert.ok(Notification.schema.indexes().some(([fields, options]) => (
+    fields.orderId === 1 && fields.orderStatus === 1 && options.unique
+  )));
 });
 
 test('product validation enforces weight and pack pricing modes', async () => {

@@ -1,9 +1,12 @@
 import mongoose from 'mongoose';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
 import Transaction from '../models/Transaction.js';
 import AppError from '../utils/AppError.js';
 import escapeRegex from '../utils/escapeRegex.js';
+import { roundToPaise } from '../utils/pricing.js';
 
 const PRODUCT_FIELDS = [
   'productType',
@@ -87,8 +90,10 @@ export async function updateStock(req, res) {
 
 export async function getDashboard(req, res) {
   const storeId = req.auth.id;
-  const since = new Date(Date.now() - req.validated.query.days * 24 * 60 * 60 * 1000);
-  const [products, orderCounts, revenue, recentOrders] = await Promise.all([
+  const { days, from, to } = req.validated.query;
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const period = from ? { $gte: new Date(from), $lt: new Date(to) } : null;
+  const [products, orderCounts, revenue, recentOrders, periodOrderCount, periodTransactions] = await Promise.all([
     Product.aggregate([
       { $match: { storeId: productStoreId(storeId) } },
       { $group: { _id: '$inStock', count: { $sum: 1 } } }
@@ -101,14 +106,55 @@ export async function getDashboard(req, res) {
       {
         $match: {
           storeId: productStoreId(storeId),
-          paymentStatus: 'paid',
+          paymentStatus: { $in: ['paid', 'refund_pending', 'refund_failed'] },
           createdAt: { $gte: since }
         }
       },
       { $group: { _id: null, total: { $sum: '$totalAmount' }, orders: { $sum: 1 } } }
     ]),
-    Order.find({ storeId }).sort({ createdAt: -1 }).limit(10).populate('userId', 'name phone')
+    Order.find({ storeId }).sort({ createdAt: -1 }).limit(10).populate('userId', 'name phone'),
+    period ? Order.countDocuments({ storeId, createdAt: period }) : null,
+    period ? Transaction.aggregate([
+      { $match: { timestamp: period } },
+      {
+        $lookup: {
+          from: Order.collection.name,
+          localField: 'orderId',
+          foreignField: '_id',
+          as: 'order'
+        }
+      },
+      { $unwind: '$order' },
+      { $match: { 'order.storeId': productStoreId(storeId) } },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          paidAmount: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ['$status', 'paid'] },
+                    { $ne: ['$refundStatus', 'processed'] }
+                  ]
+                },
+                '$amount',
+                0
+              ]
+            }
+          }
+        }
+      }
+    ]) : []
   ]);
+
+  const transactionCounts = Object.fromEntries(
+    periodTransactions.map(group => [group._id, group.count])
+  );
+  const paidRevenue = roundToPaise(
+    periodTransactions.find(group => group._id === 'paid')?.paidAmount || 0
+  );
 
   res.json({
     data: {
@@ -118,24 +164,41 @@ export async function getDashboard(req, res) {
       },
       ordersByStatus: Object.fromEntries(orderCounts.map(group => [group._id, group.count])),
       paidRevenue: {
-        sinceDays: req.validated.query.days,
+        sinceDays: days,
         amount: revenue[0]?.total || 0,
         orders: revenue[0]?.orders || 0
       },
+      ...(period ? {
+        periodMetrics: {
+          from,
+          to,
+          orders: periodOrderCount,
+          paidRevenue,
+          paidTransactions: transactionCounts.paid || 0,
+          transactions: {
+            created: transactionCounts.created || 0,
+            paid: transactionCounts.paid || 0,
+            failed: transactionCounts.failed || 0
+          }
+        }
+      } : {}),
       recentOrders
     }
   });
 }
 
 export async function listStoreTransactions(req, res) {
-  const { page, limit, status } = req.validated.query;
+  const { page, limit, status, from, to } = req.validated.query;
   const storeId = new mongoose.Types.ObjectId(req.auth.id);
-  const match = { 'order.storeId': storeId };
+  const transactionFilter = {
+    ...(from ? { timestamp: { $gte: new Date(from), $lt: new Date(to) } } : {})
+  };
   if (status) {
-    match.status = status;
+    transactionFilter.status = status;
   }
 
   const [result] = await Transaction.aggregate([
+    { $match: transactionFilter },
     {
       $lookup: {
         from: Order.collection.name,
@@ -145,7 +208,7 @@ export async function listStoreTransactions(req, res) {
       }
     },
     { $unwind: '$order' },
-    { $match: match },
+    { $match: { 'order.storeId': storeId } },
     {
       $facet: {
         data: [
@@ -159,6 +222,8 @@ export async function listStoreTransactions(req, res) {
               paymentId: 1,
               amount: 1,
               status: 1,
+              refundStatus: 1,
+              refundId: 1,
               timestamp: 1
             }
           }
@@ -193,6 +258,8 @@ export async function getStoreTransaction(req, res) {
         paymentId: 1,
         amount: 1,
         status: 1,
+        refundStatus: 1,
+        refundId: 1,
         timestamp: 1
       }
     }
@@ -204,6 +271,91 @@ export async function getStoreTransaction(req, res) {
   res.json({ data: transaction });
 }
 
+export async function exportStoreReport(req, res, next) {
+  const { type, from, to } = req.validated.query;
+  const storeId = new mongoose.Types.ObjectId(req.auth.id);
+  const period = { $gte: new Date(from), $lt: new Date(to) };
+  const headers = type === 'orders'
+    ? ['order_id', 'created_at', 'order_status', 'payment_status', 'total_amount', 'items']
+    : ['timestamp', 'order_id', 'status', 'amount', 'refund_status', 'refund_id'];
+  const filename = `store-${type}-${from.slice(0, 10)}-to-${to.slice(0, 10)}.csv`;
+  const cursor = type === 'orders'
+    ? Order.find({ storeId, createdAt: period })
+      .select('createdAt orderStatus paymentStatus totalAmount items')
+      .sort({ createdAt: -1 })
+      .cursor({ batchSize: 500 })
+    : Transaction.aggregate([
+      { $match: { timestamp: period } },
+      {
+        $lookup: {
+          from: Order.collection.name,
+          localField: 'orderId',
+          foreignField: '_id',
+          as: 'order'
+        }
+      },
+      { $unwind: '$order' },
+      { $match: { 'order.storeId': storeId } },
+      { $sort: { timestamp: -1 } },
+      { $project: { orderId: 1, status: 1, amount: 1, refundStatus: 1, refundId: 1, timestamp: 1 } }
+    ]).cursor({ batchSize: 500 });
+
+  let firstRow;
+  try {
+    firstRow = await cursor.next();
+  } catch (error) {
+    return next(error);
+  }
+
+  res.status(200)
+    .type('text/csv')
+    .set('Content-Disposition', `attachment; filename="${filename}"`)
+    .set('Cache-Control', 'no-store');
+
+  async function* csvRows() {
+    yield `\uFEFF${headers.join(',')}\r\n`;
+    if (firstRow) yield serializeReportRow(type, firstRow);
+    for await (const row of cursor) {
+      yield serializeReportRow(type, row);
+    }
+  }
+
+  try {
+    await pipeline(Readable.from(csvRows()), res);
+  } catch (error) {
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'error',
+      event: 'store.report.export.failed',
+      requestId: req.requestId,
+      reportType: type,
+      message: error.message,
+      stack: error.stack
+    }));
+    if (!res.destroyed) res.destroy(error);
+  }
+}
+
 function productStoreId(id) {
   return new mongoose.Types.ObjectId(id);
+}
+
+function serializeReportRow(type, row) {
+  const values = type === 'orders'
+    ? [
+      row._id,
+      row.createdAt.toISOString(),
+      row.orderStatus,
+      row.paymentStatus,
+      row.totalAmount,
+      row.items.map(item => `${item.productName} x ${item.quantity}${item.packLabel ? ` ${item.packLabel}` : ''}`).join('; ')
+    ]
+    : [row.timestamp.toISOString(), row.orderId, row.status, row.amount, row.refundStatus || 'none', row.refundId];
+  return `${values.map(csvCell).join(',')}\r\n`;
+}
+
+function csvCell(value) {
+  let text = String(value ?? '');
+  if (/^[\s]*[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replaceAll('"', '""')}"`;
 }

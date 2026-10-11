@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   createProduct,
   deleteProduct,
+  exportStoreReport,
   getDashboard,
   getStoreTransaction,
   listStoreProducts,
@@ -14,6 +15,7 @@ import {
   listStoreOrders,
   updateStoreOrderStatus
 } from '../controllers/orderController.js';
+import { refundStoreOrder } from '../controllers/paymentController.js';
 import authenticate from '../middleware/authenticate.js';
 import validate from '../middleware/validate.js';
 import { schemas } from '../validation/schemas.js';
@@ -30,7 +32,9 @@ router.delete('/products/:productId', validate(schemas.productParams), deletePro
 router.get('/orders', validate(schemas.orderList), listStoreOrders);
 router.get('/orders/:orderId', validate(schemas.orderParams), getStoreOrder);
 router.patch('/orders/:orderId/status', validate(schemas.orderStatusUpdate), updateStoreOrderStatus);
+router.post('/orders/:orderId/refund', validate(schemas.storeOrderRefund), refundStoreOrder);
 router.get('/transactions', validate(schemas.transactionList), listStoreTransactions);
 router.get('/transactions/:transactionId', validate(schemas.transactionParams), getStoreTransaction);
+router.get('/reports/export', validate(schemas.storeReportExport), exportStoreReport);
 
 export default router;

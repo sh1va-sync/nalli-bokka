@@ -15,6 +15,7 @@ import { getErrorMessage } from './features/customer/utils.js'
 const CheckoutPage = lazy(() => import('./features/customer/pages/CheckoutPage.jsx'))
 const ProfilePage = lazy(() => import('./features/customer/pages/ProfilePage.jsx'))
 const OrdersPage = lazy(() => import('./features/customer/pages/OrdersPage.jsx'))
+const NotificationsPage = lazy(() => import('./features/customer/pages/NotificationsPage.jsx'))
 const StoreLoginPage = lazy(() => import('./features/storeAdmin/pages/StoreLoginPage.jsx'))
 const StoreDashboardPage = lazy(() => import('./features/storeAdmin/pages/StoreDashboardPage.jsx'))
 
@@ -104,6 +105,7 @@ function App() {
             <Route path="/checkout" element={<CheckoutPage onLogin={openLogin} onOpenCart={() => setCartOpen(true)} />} />
             <Route path="/profile" element={token ? <ProfilePage /> : <Navigate to="/" replace />} />
             <Route path="/orders" element={token ? <OrdersPage /> : <Navigate to="/" replace />} />
+            <Route path="/notifications" element={token ? <NotificationsPage /> : <Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
