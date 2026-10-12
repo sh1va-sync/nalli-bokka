@@ -141,12 +141,6 @@ const schemas = {
     body: selection
   },
   cartItemParams: { params: z.object({ itemId: objectId }) },
-  orderCreate: {
-    body: z.object({
-      addressId: objectId,
-      storeId: objectId.optional()
-    }).strict()
-  },
   orderList: {
     query: dateRangeQuery({
       ...pagination,
@@ -165,11 +159,28 @@ const schemas = {
     body: z.object({}).strict().optional()
   },
   paymentCreate: { params: z.object({ orderId: objectId }) },
+  checkoutAttemptParams: {
+    params: z.object({
+      razorpayOrderId: z.string().min(1).max(100)
+    })
+  },
+  checkoutPaymentCreate: {
+    body: z.object({
+      addressId: objectId,
+      storeId: objectId.optional(),
+      idempotencyKey: z.string().uuid()
+    }).strict()
+  },
   paymentVerify: {
     body: z.object({
       razorpayOrderId: z.string().min(1).max(100),
       paymentId: z.string().min(1).max(100),
       signature: z.string().regex(/^[a-f\d]{64}$/i)
+    }).strict()
+  },
+  storeStatusUpdate: {
+    body: z.object({
+      isOpen: z.boolean()
     }).strict()
   },
   dashboard: {

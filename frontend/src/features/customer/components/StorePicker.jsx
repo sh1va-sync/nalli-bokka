@@ -30,23 +30,36 @@ export default function StorePicker({ open, onClose }) {
           <div className="mt-4 max-h-[48vh] space-y-2 overflow-y-auto">
             {(isLoading || isFetching) && stores.length === 0 && <p className="p-6 text-center text-sm text-slate-500">Finding nearby stores…</p>}
             {error && <div className="rounded-xl bg-rose-50 p-4 text-sm text-rose-800">{getErrorMessage(error)} <button className="ml-2 font-bold underline" onClick={refetch}>Try again</button></div>}
-            {stores.map((store) => (
-              <article key={store._id} className={`rounded-[14px] border p-3.5 transition ${selectedStore?._id === store._id ? 'border-[#d9aaa0] bg-[#fbf3ef]' : 'border-[#eadfd7] bg-white hover:border-[#d5b7aa]'}`}>
-                <div className="flex items-center gap-3">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#f7eee8] text-[#9b5148]"><MapPin size={17} strokeWidth={1.7} /></span>
-                  <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-[#373a32]">{store.storeName}</span><span className="mt-0.5 block truncate text-xs text-[#85867b]">{store.location}</span></span>
-                  {selectedStore?._id === store._id && <span className="rounded-full bg-[#f2e0dc] px-2.5 py-1 text-[10px] font-medium text-[#861923]">Selected</span>}
-                </div>
-                <p className="ml-[52px] mt-2 text-[10px] text-[#96968b]">NalliBokka neighbourhood store</p>
-                <button
-                  disabled={Boolean(selectedStore && hasBasketItems && selectedStore._id !== store._id)}
-                  onClick={() => { dispatch(setSelectedStore(store)); onClose() }}
-                  className="mt-3 h-10 w-full rounded-[8px] bg-[#861923] text-xs font-semibold text-white transition hover:bg-[#70131c] disabled:cursor-not-allowed disabled:bg-[#d5d0c7] disabled:text-[#77766f]"
-                >
-                  {selectedStore?._id === store._id ? 'Continue with this store' : selectedStore && hasBasketItems ? 'Empty basket before switching' : 'Choose this store'}
-                </button>
-              </article>
-            ))}
+            {stores.map((store) => {
+              const storePhone = store.storePhone || store.storeNumber || '—'
+              const mapsLink = store.googleMapsLink || store.googleMapLink || store.mapLink || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(store.location || store.storeName)}`
+              const isClosed = store.isOpen === false
+
+              return (
+                <article key={store._id} className={`rounded-[14px] border p-3.5 transition ${selectedStore?._id === store._id ? 'border-[#d9aaa0] bg-[#fbf3ef]' : 'border-[#eadfd7] bg-white hover:border-[#d5b7aa]'}`}>
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#f7eee8] text-[#9b5148]"><MapPin size={17} strokeWidth={1.7} /></span>
+                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-[#373a32]">{store.storeName}</span><span className="mt-0.5 block truncate text-xs text-[#85867b]">{store.location}</span></span>
+                    {selectedStore?._id === store._id && <span className="rounded-full bg-[#f2e0dc] px-2.5 py-1 text-[10px] font-medium text-[#861923]">Selected</span>}
+                  </div>
+                  <div className="ml-[52px] mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-[#96968b]">
+                    <span className={`rounded-full px-2 py-1 font-medium ${isClosed ? 'bg-[#f7eae8] text-[#8b4f49]' : 'bg-[#edf5ee] text-[#427255]'}`}>{isClosed ? 'Closed now' : 'Open now'}</span>
+                    {storePhone !== '—' && <span className="rounded-full bg-[#f6f0ea] px-2 py-1">{storePhone}</span>}
+                  </div>
+                  {storePhone !== '—' && <p className="ml-[52px] mt-2 text-[10px] text-[#7a6a63]">Call: {storePhone}</p>}
+                  <div className="ml-[52px] mt-3 flex items-center gap-2">
+                    <a href={mapsLink} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center rounded-lg border border-[#e7d5cc] bg-[#fff9f6] px-2.5 py-2 text-[10px] font-semibold text-[#7d4e45] hover:bg-[#f9f0ed]">Get directions</a>
+                  </div>
+                  <button
+                    disabled={Boolean(selectedStore && hasBasketItems && selectedStore._id !== store._id)}
+                    onClick={() => { dispatch(setSelectedStore(store)); onClose() }}
+                    className="mt-3 h-10 w-full rounded-[8px] bg-[#861923] text-xs font-semibold text-white transition hover:bg-[#70131c] disabled:cursor-not-allowed disabled:bg-[#d5d0c7] disabled:text-[#77766f]"
+                  >
+                    {selectedStore?._id === store._id ? 'Continue with this store' : selectedStore && hasBasketItems ? 'Empty basket before switching' : 'Choose this store'}
+                  </button>
+                </article>
+              )
+            })}
             {!isLoading && !error && stores.length === 0 && <p className="p-6 text-center text-sm text-slate-500">No stores found. Try a different search.</p>}
           </div>
         </div>

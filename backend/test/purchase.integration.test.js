@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import app from '../src/app.js';
 import Cart from '../src/models/Cart.js';
+import CheckoutAttempt from '../src/models/CheckoutAttempt.js';
 import IdempotencyKey from '../src/models/IdempotencyKey.js';
 import Notification from '../src/models/Notification.js';
 import Order from '../src/models/Order.js';
@@ -25,6 +26,8 @@ const originalEnvironment = {
 let replicaSet;
 let server;
 let baseUrl;
+let razorpayOrderSequence = 0;
+let capturedRazorpayOrderId;
 
 before(async () => {
   process.env.JWT_SECRET = 'test-secret-that-is-long-enough-for-integration-tests';
@@ -37,7 +40,7 @@ before(async () => {
   });
   await mongoose.connect(replicaSet.getUri(), { dbName: 'purchase_integration' });
   await Promise.all([
-    Cart, IdempotencyKey, Notification, Order, Product, Store,
+    Cart, CheckoutAttempt, IdempotencyKey, Notification, Order, Product, Store,
     Transaction, User, WebhookEvent
   ].map(model => model.init()));
 
@@ -46,9 +49,9 @@ before(async () => {
   baseUrl = `http://127.0.0.1:${server.address().port}/api`;
 
   const razorpay = getRazorpayClient();
-  razorpay.orders.create = async () => ({ id: 'razorpay_order_test' });
+  razorpay.orders.create = async () => ({ id: `razorpay_order_test_${++razorpayOrderSequence}` });
   razorpay.payments.fetch = async () => ({
-    order_id: 'razorpay_order_test',
+    order_id: capturedRazorpayOrderId,
     amount: 40000,
     currency: 'INR',
     status: 'captured'
@@ -126,40 +129,95 @@ test('customer purchase, payment, and store status notification flow works end t
     { subject: String(otherUser._id), expiresIn: '5m', issuer: 'nalli-bokka-api' }
   );
 
-  const createdResponse = await fetch(`${baseUrl}/orders`, {
+  const failedAttemptResponse = await fetch(`${baseUrl}/payments/razorpay/order`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${customerToken}`,
-      'content-type': 'application/json',
-      'Idempotency-Key': 'integration-checkout-key'
+      'content-type': 'application/json'
     },
-    body: JSON.stringify({ addressId: String(user.addresses[0]._id), storeId: String(store._id) })
+    body: JSON.stringify({
+      addressId: String(user.addresses[0]._id),
+      storeId: String(store._id),
+      idempotencyKey: '33333333-3333-4333-8333-333333333333'
+    })
   });
-  assert.equal(createdResponse.status, 201);
-  const { data: order } = await createdResponse.json();
-  assert.equal(order.totalAmount, 400);
-  assert.equal(order.items[0].price, 400);
-  assert.equal((await Cart.findOne({ userId: user._id })).items.length, 0);
+  assert.equal(failedAttemptResponse.status, 201);
+  const failedAttemptPayment = (await failedAttemptResponse.json()).data;
+  assert.equal(failedAttemptPayment.amount, 40000);
+  assert.equal(await Order.countDocuments({ userId: user._id }), 0);
+  assert.equal((await Cart.findOne({ userId: user._id })).items.length, 1);
 
-  const retryResponse = await fetch(`${baseUrl}/orders`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${customerToken}`,
-      'content-type': 'application/json',
-      'Idempotency-Key': 'integration-checkout-key'
-    },
-    body: JSON.stringify({ addressId: String(user.addresses[0]._id), storeId: String(store._id) })
-  });
-  assert.equal(retryResponse.status, 200);
-  assert.equal(String((await retryResponse.json()).data._id), String(order._id));
-
-  const paymentOrderResponse = await fetch(`${baseUrl}/orders/${order._id}/payment`, {
+  const failedResponse = await fetch(`${baseUrl}/payments/razorpay/${failedAttemptPayment.razorpayOrderId}/failed`, {
     method: 'POST',
     headers: { authorization: `Bearer ${customerToken}` }
+  });
+  assert.equal(failedResponse.status, 200);
+  assert.deepEqual((await failedResponse.json()).data, { status: 'failed', orderCreated: false });
+  assert.equal(await Order.countDocuments({ userId: user._id }), 0);
+  assert.equal((await Cart.findOne({ userId: user._id })).items.length, 1);
+
+  const webhookFailedAttemptResponse = await fetch(`${baseUrl}/payments/razorpay/order`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${customerToken}`,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      addressId: String(user.addresses[0]._id),
+      storeId: String(store._id),
+      idempotencyKey: '55555555-5555-4555-8555-555555555555'
+    })
+  });
+  assert.equal(webhookFailedAttemptResponse.status, 201);
+  const webhookFailedPayment = (await webhookFailedAttemptResponse.json()).data;
+  const failedWebhookBody = JSON.stringify({
+    event: 'payment.failed',
+    payload: {
+      payment: {
+        entity: {
+          id: 'razorpay_payment_failed',
+          order_id: webhookFailedPayment.razorpayOrderId,
+          amount: 40000,
+          currency: 'INR',
+          status: 'failed'
+        }
+      }
+    }
+  });
+  const failedWebhookSignature = createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET)
+    .update(failedWebhookBody)
+    .digest('hex');
+  const failedWebhookResponse = await fetch(`${baseUrl}/payments/razorpay/webhook`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-razorpay-signature': failedWebhookSignature,
+      'x-razorpay-event-id': 'evt_checkout_payment_failed'
+    },
+    body: failedWebhookBody
+  });
+  assert.equal(failedWebhookResponse.status, 200);
+  assert.equal(await Order.countDocuments({ userId: user._id }), 0);
+  assert.equal((await CheckoutAttempt.findOne({ razorpayOrderId: webhookFailedPayment.razorpayOrderId })).status, 'failed');
+  assert.equal((await Cart.findOne({ userId: user._id })).items.length, 1);
+
+  const paymentOrderResponse = await fetch(`${baseUrl}/payments/razorpay/order`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${customerToken}`,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      addressId: String(user.addresses[0]._id),
+      storeId: String(store._id),
+      idempotencyKey: '44444444-4444-4444-8444-444444444444'
+    })
   });
   assert.equal(paymentOrderResponse.status, 201);
   const paymentOrder = (await paymentOrderResponse.json()).data;
   assert.equal(paymentOrder.amount, 40000);
+  assert.equal(await Order.countDocuments({ userId: user._id }), 0);
+  capturedRazorpayOrderId = paymentOrder.razorpayOrderId;
 
   const paymentId = 'razorpay_payment_test';
   const signature = createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
@@ -177,8 +235,15 @@ test('customer purchase, payment, and store status notification flow works end t
       signature
     })
   });
-  assert.equal(verifyResponse.status, 200);
-  assert.equal((await Order.findById(order._id)).paymentStatus, 'paid');
+  const verifyBody = await verifyResponse.json();
+  assert.equal(verifyResponse.status, 200, JSON.stringify(verifyBody));
+  const verifiedPayment = verifyBody.data;
+  const order = await Order.findById(verifiedPayment.orderId);
+  assert.ok(order);
+  assert.equal(order.totalAmount, 400);
+  assert.equal(order.items[0].price, 400);
+  assert.equal(order.paymentStatus, 'paid');
+  assert.equal((await Cart.findOne({ userId: user._id })).items.length, 0);
   assert.equal((await Transaction.findOne({ orderId: order._id })).status, 'paid');
 
   const range = {
@@ -221,7 +286,7 @@ test('customer purchase, payment, and store status notification flow works end t
   });
   assert.equal(notificationsResponse.status, 200);
   const notifications = await notificationsResponse.json();
-  assert.equal(notifications.unreadCount, 1);
+  assert.equal(notifications.unreadCount, 2);
   assert.equal(notifications.data[0].message, 'Your order has been accepted and is being prepared.');
 
   const otherCustomerNotifications = await fetch(`${baseUrl}/users/me/notifications`, {
@@ -241,7 +306,7 @@ test('customer purchase, payment, and store status notification flow works end t
   });
   assert.equal(markReadResponse.status, 200);
   assert.ok((await markReadResponse.json()).data.readAt);
-  assert.equal(await Notification.countDocuments({ userId: user._id, readAt: null }), 0);
+  assert.equal(await Notification.countDocuments({ userId: user._id, readAt: null }), 1);
 
   const deliveryResponse = await fetch(`${baseUrl}/store/orders/${order._id}/status`, {
     method: 'PATCH',
@@ -257,7 +322,7 @@ test('customer purchase, payment, and store status notification flow works end t
     headers: { authorization: `Bearer ${customerToken}` }
   });
   assert.equal(markAllReadResponse.status, 200);
-  assert.equal((await markAllReadResponse.json()).data.updatedCount, 1);
+  assert.equal((await markAllReadResponse.json()).data.updatedCount, 2);
   assert.equal(await Notification.countDocuments({ userId: user._id, readAt: null }), 0);
 });
 
@@ -381,7 +446,11 @@ test('store refunds are scoped, full, single-request, and settled by deduplicate
   assert.equal(refundResponse.status, 202);
   const pendingRefund = (await refundResponse.json()).data;
   assert.equal(pendingRefund.refundStatus, 'pending');
-  assert.equal((await Order.findById(order._id)).paymentStatus, 'refund_pending');
+  const cancelledWhileRefundPending = await Order.findById(order._id);
+  assert.equal(cancelledWhileRefundPending.paymentStatus, 'refund_pending');
+  assert.equal(cancelledWhileRefundPending.orderStatus, 'cancelled');
+  const cancellationNotification = await Notification.findOne({ orderId: order._id });
+  assert.equal(cancellationNotification.message, 'The store cancelled your order and requested a full refund. Refund processing is pending.');
 
   const repeatedRefundResponse = await fetch(`${baseUrl}/store/orders/${order._id}/refund`, {
     method: 'POST',
@@ -419,6 +488,7 @@ test('store refunds are scoped, full, single-request, and settled by deduplicate
   assert.equal((await Order.findById(order._id)).orderStatus, 'cancelled');
   assert.equal((await Transaction.findById(transaction._id)).refundStatus, 'processed');
   assert.equal(await Notification.countDocuments({ orderId: order._id }), 1);
+  assert.equal((await Notification.findOne({ orderId: order._id })).message, 'Your order was cancelled and your full refund has been processed.');
 
   const duplicateWebhook = await sendRefundWebhook(
     'refund.processed',
@@ -446,9 +516,10 @@ test('store refunds are scoped, full, single-request, and settled by deduplicate
   );
   assert.equal(failedWebhook.status, 200);
   assert.equal((await Order.findById(failedOrder._id)).paymentStatus, 'refund_failed');
-  assert.equal((await Order.findById(failedOrder._id)).orderStatus, 'placed');
+  assert.equal((await Order.findById(failedOrder._id)).orderStatus, 'cancelled');
   assert.equal((await Transaction.findById(failedTransaction._id)).refundStatus, 'failed');
   assert.equal(failedPending.refundStatus, 'pending');
+  assert.match((await Notification.findOne({ orderId: failedOrder._id })).message, /order was cancelled, but the full refund could not be completed/);
 
   const failedRetryResponse = await fetch(`${baseUrl}/store/orders/${failedOrder._id}/refund`, {
     method: 'POST',

@@ -105,7 +105,10 @@ export async function loginStore(req, res) {
       id: store._id,
       storeName: store.storeName,
       username: store.username,
-      location: store.location
+      location: store.location,
+      isOpen: store.isOpen,
+      storePhone: store.storePhone || store.storeNumber,
+      googleMapsLink: store.googleMapsLink || store.googleMapLink || store.mapLink
     }
   });
 }

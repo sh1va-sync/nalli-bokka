@@ -14,7 +14,7 @@ const notificationSchema = new mongoose.Schema({
   orderStatus: {
     type: String,
     required: true,
-    enum: ['packing', 'out for delivery', 'delivered', 'cancelled']
+    enum: ['placed', 'packing', 'out for delivery', 'delivered', 'cancelled']
   },
   title: {
     type: String,

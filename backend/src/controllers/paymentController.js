@@ -1,10 +1,30 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import Cart from '../models/Cart.js';
+import CheckoutAttempt from '../models/CheckoutAttempt.js';
 import Notification from '../models/Notification.js';
 import Order from '../models/Order.js';
+import Product from '../models/Product.js';
 import Transaction from '../models/Transaction.js';
+import User from '../models/User.js';
 import WebhookEvent from '../models/WebhookEvent.js';
 import getRazorpayClient from '../services/razorpay.js';
 import AppError from '../utils/AppError.js';
+import { priceSelection, roundToPaise } from '../utils/pricing.js';
+
+async function setRefundNotification(order, title, message, session) {
+  await Notification.findOneAndUpdate(
+    { orderId: order._id, orderStatus: 'cancelled' },
+    {
+      $set: { title, message },
+      $setOnInsert: {
+        userId: order.userId,
+        orderId: order._id,
+        orderStatus: 'cancelled'
+      }
+    },
+    { upsert: true, session }
+  );
+}
 
 async function applyRefundResult(transactionId, requestId, refund, refundStatus, activeSession = null) {
   const session = activeSession || await Transaction.db.startSession();
@@ -45,16 +65,21 @@ async function applyRefundResult(transactionId, requestId, refund, refundStatus,
         order.paymentStatus = 'refunded';
         order.orderStatus = 'cancelled';
         await order.save({ session });
-        await Notification.create([{
-          userId: order.userId,
-          orderId: order._id,
-          orderStatus: 'cancelled',
-          title: 'Order refund processed',
-          message: 'Your full refund has been processed and the order was cancelled.'
-        }], { session });
+        await setRefundNotification(
+          order,
+          'Order refund processed',
+          'Your order was cancelled and your full refund has been processed.',
+          session
+        );
       } else {
         order.paymentStatus = 'refund_failed';
         await order.save({ session });
+        await setRefundNotification(
+          order,
+          'Refund needs attention',
+          'Your order was cancelled, but the full refund could not be completed. Please contact the store for assistance.',
+          session
+        );
       }
       applied = true;
     };
@@ -104,6 +129,16 @@ export async function refundStoreOrder(req, res) {
         if (!transaction || (transaction.refundStatus || 'none') === 'none') {
           throw new AppError(409, 'Refund state is inconsistent; contact support');
         }
+        if (transaction.refundStatus === 'pending' && order.orderStatus !== 'cancelled') {
+          order.orderStatus = 'cancelled';
+          await order.save({ session });
+          await setRefundNotification(
+            order,
+            'Order cancelled',
+            'The store cancelled your order and requested a full refund. Refund processing is pending.',
+            session
+          );
+        }
         reservation = { transaction, existing: true };
         return;
       }
@@ -146,7 +181,14 @@ export async function refundStoreOrder(req, res) {
       }
 
       order.paymentStatus = 'refund_pending';
+      order.orderStatus = 'cancelled';
       await order.save({ session });
+      await setRefundNotification(
+        order,
+        'Order cancelled',
+        'The store cancelled your order and requested a full refund. Refund processing is pending.',
+        session
+      );
       transaction.refundStatus = 'pending';
       transaction.refundRequestId = requestId;
       reservation = { transaction, existing: false };
@@ -169,7 +211,7 @@ export async function refundStoreOrder(req, res) {
       notes: { refundRequestId: transaction.refundRequestId }
     });
   } catch {
-    throw new AppError(502, 'Refund request could not be confirmed; its status is pending and must not be retried');
+    throw new AppError(502, 'The order was cancelled, but the refund status could not be confirmed. The refund remains pending; do not retry it.');
   }
 
   if (
@@ -178,7 +220,7 @@ export async function refundStoreOrder(req, res) {
     || refund.amount !== amount
     || !['created', 'pending', 'processed', 'failed'].includes(refund.status)
   ) {
-    throw new AppError(502, 'Razorpay returned an invalid refund response; refund status remains pending');
+    throw new AppError(502, 'The order was cancelled, but Razorpay returned an invalid refund response. The refund remains pending; do not retry it.');
   }
 
   const refundStatus = refund.status === 'processed'
@@ -229,6 +271,197 @@ async function settleTransaction(transaction, status, paymentId, session = null)
     await order.save();
   }
   return transaction;
+}
+
+function razorpayPaymentData(attempt) {
+  return {
+    razorpayOrderId: attempt.razorpayOrderId,
+    keyId: process.env.RAZORPAY_KEY_ID,
+    amount: Math.round(attempt.amount * 100),
+    currency: 'INR'
+  };
+}
+
+export async function createCheckoutPayment(req, res) {
+  const { addressId, storeId: requestedStoreId, idempotencyKey } = req.validated.body;
+  const existingAttempt = await CheckoutAttempt.findOne({
+    userId: req.auth.id,
+    idempotencyKey
+  });
+  if (existingAttempt) {
+    if (existingAttempt.status !== 'pending') {
+      throw new AppError(409, 'This checkout attempt is no longer active. Start checkout again to retry payment.');
+    }
+    return res.status(200).json({ data: razorpayPaymentData(existingAttempt) });
+  }
+
+  const [user, cart] = await Promise.all([
+    User.findById(req.auth.id),
+    Cart.findOne({ userId: req.auth.id })
+  ]);
+  if (!user) {
+    throw new AppError(404, 'User not found');
+  }
+  if (!cart || cart.items.length === 0) {
+    throw new AppError(400, 'Your cart is empty');
+  }
+
+  const address = user.addresses.id(addressId);
+  if (!address) {
+    throw new AppError(404, 'Delivery address not found');
+  }
+
+  const products = await Product.find({
+    _id: { $in: cart.items.map(item => item.productId) }
+  });
+  const byId = new Map(products.map(product => [String(product._id), product]));
+  const missing = cart.items.find(item => !byId.has(String(item.productId)));
+  if (missing) {
+    throw new AppError(409, 'A cart product is no longer available; update your cart');
+  }
+
+  const storeIds = new Set(products.map(product => String(product.storeId)));
+  const selectedStoreId = requestedStoreId || [...storeIds][0];
+  if (!storeIds.has(selectedStoreId)) {
+    throw new AppError(400, 'The selected store has no products in your cart');
+  }
+  if (!requestedStoreId && storeIds.size > 1) {
+    throw new AppError(409, 'Your cart contains products from multiple stores; specify storeId to check out one store at a time');
+  }
+
+  const items = cart.items
+    .filter(item => String(byId.get(String(item.productId)).storeId) === selectedStoreId)
+    .map(item => {
+      const product = byId.get(String(item.productId));
+      const priced = priceSelection(
+        product,
+        item.selectionType,
+        item.selectedQuantity,
+        item.selectedPackLabel
+      );
+      return {
+        productId: product._id,
+        productName: product.productName,
+        selectionType: priced.selectionType,
+        quantity: priced.quantity,
+        ...(priced.packLabel ? { packLabel: priced.packLabel } : {}),
+        price: priced.lineTotal
+      };
+    });
+  const totalCents = items.reduce((sum, item) => sum + Math.round(item.price * 100), 0);
+  if (totalCents <= 0) {
+    throw new AppError(400, 'Order total must be greater than zero');
+  }
+  const amount = roundToPaise(totalCents / 100);
+  const razorpay = getRazorpayClient();
+  const razorpayOrder = await razorpay.orders.create({
+    amount: Math.round(amount * 100),
+    currency: 'INR',
+    receipt: `NB${randomUUID().replaceAll('-', '').slice(0, 18)}`,
+    notes: { userId: String(req.auth.id), checkoutKey: idempotencyKey }
+  });
+
+  let attempt;
+  try {
+    attempt = await CheckoutAttempt.create({
+      userId: user._id,
+      storeId: selectedStoreId,
+      deliveryAddress: {
+        label: address.label,
+        fullAddress: address.fullAddress,
+        landmark: address.landmark,
+        pincode: address.pincode
+      },
+      items,
+      amount,
+      idempotencyKey,
+      razorpayOrderId: razorpayOrder.id
+    });
+  } catch (error) {
+    if (error.code !== 11000) throw error;
+    const concurrentAttempt = await CheckoutAttempt.findOne({
+      userId: req.auth.id,
+      idempotencyKey
+    });
+    if (!concurrentAttempt || concurrentAttempt.status !== 'pending') throw error;
+    attempt = concurrentAttempt;
+  }
+
+  res.status(201).json({ data: razorpayPaymentData(attempt) });
+}
+
+export async function markCheckoutPaymentFailed(req, res) {
+  const attempt = await CheckoutAttempt.findOne({
+    razorpayOrderId: req.validated.params.razorpayOrderId,
+    userId: req.auth.id
+  });
+  if (!attempt) {
+    throw new AppError(404, 'Checkout payment attempt not found');
+  }
+  if (attempt.status === 'paid') {
+    throw new AppError(409, 'Payment is already confirmed');
+  }
+  if (attempt.status !== 'failed') {
+    attempt.status = 'failed';
+    await attempt.save();
+  }
+  res.json({ data: { status: attempt.status, orderCreated: false } });
+}
+
+async function completeCheckoutAttempt(attemptId, paymentId, session) {
+  let attempt = await CheckoutAttempt.findById(attemptId).session(session);
+  if (!attempt) {
+    throw new AppError(404, 'Checkout payment attempt not found');
+  }
+  if (attempt.status === 'paid' && attempt.orderId) {
+    return attempt.orderId;
+  }
+
+  const [order] = await Order.create([{
+    userId: attempt.userId,
+    storeId: attempt.storeId,
+    deliveryAddress: attempt.deliveryAddress,
+    items: attempt.items,
+    totalAmount: attempt.amount,
+    paymentStatus: 'paid'
+  }], { session });
+  await Transaction.create([{
+    orderId: order._id,
+    razorpayOrderId: attempt.razorpayOrderId,
+    paymentId,
+    amount: attempt.amount,
+    status: 'paid'
+  }], { session });
+  await Notification.create([{
+    userId: attempt.userId,
+    orderId: order._id,
+    orderStatus: 'placed',
+    title: 'Order placed',
+    message: 'Payment was successful and your order is confirmed.'
+  }], { session });
+
+  const cart = await Cart.findOne({ userId: attempt.userId }).session(session);
+  if (cart) {
+    const purchasedItems = new Set(attempt.items.map(item => [
+      String(item.productId),
+      item.selectionType,
+      item.quantity,
+      item.packLabel || ''
+    ].join('|')));
+    cart.items = cart.items.filter(item => !purchasedItems.has([
+      String(item.productId),
+      item.selectionType,
+      item.selectedQuantity,
+      item.selectedPackLabel || ''
+    ].join('|')));
+    await cart.save({ session });
+  }
+
+  attempt.status = 'paid';
+  attempt.paymentId = paymentId;
+  attempt.orderId = order._id;
+  await attempt.save({ session });
+  return order._id;
 }
 
 export async function createPaymentOrder(req, res) {
@@ -284,13 +517,17 @@ export async function createPaymentOrder(req, res) {
 export async function verifyPayment(req, res) {
   const { razorpayOrderId, paymentId, signature } = req.validated.body;
   const transaction = await Transaction.findOne({ razorpayOrderId });
-  if (!transaction) {
+  const attempt = transaction
+    ? null
+    : await CheckoutAttempt.findOne({ razorpayOrderId, userId: req.auth.id });
+  if (!transaction && !attempt) {
     throw new AppError(404, 'Payment transaction not found');
   }
-
-  const order = await Order.findOne({ _id: transaction.orderId, userId: req.auth.id });
-  if (!order) {
-    throw new AppError(404, 'Order not found');
+  if (transaction) {
+    const order = await Order.findOne({ _id: transaction.orderId, userId: req.auth.id });
+    if (!order) {
+      throw new AppError(404, 'Order not found');
+    }
   }
 
   const secret = process.env.RAZORPAY_KEY_SECRET;
@@ -307,16 +544,37 @@ export async function verifyPayment(req, res) {
   }
 
   const payment = await getRazorpayClient().payments.fetch(paymentId);
+  const expectedAmount = transaction?.amount ?? attempt.amount;
   if (
     payment.order_id !== razorpayOrderId
-    || payment.amount !== Math.round(transaction.amount * 100)
+    || payment.amount !== Math.round(expectedAmount * 100)
     || payment.currency !== 'INR'
-    || payment.status !== 'captured'
   ) {
     throw new AppError(409, 'Payment is not captured for the expected amount and order');
   }
+  if (payment.status !== 'captured') {
+    if (attempt && payment.status === 'failed' && attempt.status !== 'paid') {
+      await CheckoutAttempt.updateOne(
+        { _id: attempt._id, status: { $ne: 'paid' } },
+        { $set: { status: 'failed', paymentId, updatedAt: new Date() } }
+      );
+    }
+    throw new AppError(409, 'Payment was not captured; no order was placed');
+  }
 
-  // Update DB atomically if possible to avoid race between client and webhook
+  if (attempt) {
+    const session = await Transaction.db.startSession();
+    let orderId;
+    try {
+      await session.withTransaction(async () => {
+        orderId = await completeCheckoutAttempt(attempt._id, paymentId, session);
+      });
+    } finally {
+      await session.endSession();
+    }
+    return res.json({ data: { orderId, paymentStatus: 'paid' } });
+  }
+
   const session = await Transaction.db.startSession();
   try {
     session.startTransaction();
@@ -413,14 +671,30 @@ export async function handleRazorpayWebhook(req, res) {
         throw new AppError(400, 'Webhook is missing payment details');
       }
       const transaction = await Transaction.findOne({ razorpayOrderId: payment.order_id }).session(session);
-      if (!transaction) {
-        throw new AppError(404, 'Payment transaction not found');
-      }
-      if (payment.amount !== Math.round(transaction.amount * 100) || payment.currency !== 'INR') {
-        throw new AppError(409, 'Webhook payment amount does not match the transaction');
-      }
       const status = event.event === 'payment.captured' ? 'paid' : 'failed';
-      await settleTransaction(transaction, status, payment.id, session);
+      if (transaction) {
+        if (payment.amount !== Math.round(transaction.amount * 100) || payment.currency !== 'INR') {
+          throw new AppError(409, 'Webhook payment amount does not match the transaction');
+        }
+        await settleTransaction(transaction, status, payment.id, session);
+      } else {
+        const attempt = await CheckoutAttempt.findOne({
+          razorpayOrderId: payment.order_id
+        }).session(session);
+        if (!attempt) {
+          throw new AppError(404, 'Payment transaction not found');
+        }
+        if (payment.amount !== Math.round(attempt.amount * 100) || payment.currency !== 'INR') {
+          throw new AppError(409, 'Webhook payment amount does not match the checkout attempt');
+        }
+        if (status === 'paid') {
+          await completeCheckoutAttempt(attempt._id, payment.id, session);
+        } else if (attempt.status !== 'paid') {
+          attempt.status = 'failed';
+          attempt.paymentId = payment.id;
+          await attempt.save({ session });
+        }
+      }
     }
     await WebhookEvent.updateOne({ razorpayEventId }, { $set: { processed: true, processedAt: new Date() } }, { session });
     await session.commitTransaction();

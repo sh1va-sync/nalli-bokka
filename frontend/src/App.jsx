@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { ShoppingBasket } from 'lucide-react'
@@ -9,8 +9,9 @@ import Header from './features/customer/components/Header.jsx'
 import StorePicker from './features/customer/components/StorePicker.jsx'
 import LoginDialog from './features/customer/components/LoginDialog.jsx'
 import CartDrawer from './features/customer/components/CartDrawer.jsx'
+import Toast from './features/customer/components/Toast.jsx'
 import HomePage from './features/customer/pages/HomePage.jsx'
-import { getErrorMessage } from './features/customer/utils.js'
+import { createUuid, getErrorMessage } from './features/customer/utils.js'
 
 const CheckoutPage = lazy(() => import('./features/customer/pages/CheckoutPage.jsx'))
 const ProfilePage = lazy(() => import('./features/customer/pages/ProfilePage.jsx'))
@@ -33,6 +34,7 @@ function App() {
   const [cartOpen, setCartOpen] = useState(false)
   const [loginReason, setLoginReason] = useState('')
   const [loginReturnTo, setLoginReturnTo] = useState('')
+  const [toast, setToast] = useState(null)
   const [addCartItem] = useAddCartItemMutation()
   const { data: meResponse, error: meError } = useGetMeQuery(undefined, { skip: !token || isStoreRoute })
   const { error: storesError } = useGetStoresQuery({ limit: 100 }, { skip: isStoreRoute })
@@ -59,6 +61,12 @@ function App() {
     setLoginReturnTo(returnTo)
     setLoginOpen(true)
   }
+
+  const showToast = useCallback((notice) => {
+    setToast({ ...notice, id: createUuid() })
+  }, [])
+
+  const dismissToast = useCallback(() => setToast(null), [])
 
   async function handleSignedIn() {
     for (const item of guestItems) {
@@ -102,7 +110,7 @@ function App() {
         <Suspense fallback={<div className="mx-auto max-w-7xl px-5 py-20 text-center text-slate-500">Loading your page…</div>}>
           <Routes>
             <Route path="/" element={<HomePage />} />
-            <Route path="/checkout" element={<CheckoutPage onLogin={openLogin} onOpenCart={() => setCartOpen(true)} />} />
+            <Route path="/checkout" element={<CheckoutPage onLogin={openLogin} onOpenCart={() => setCartOpen(true)} onToast={showToast} />} />
             <Route path="/profile" element={token ? <ProfilePage /> : <Navigate to="/" replace />} />
             <Route path="/orders" element={token ? <OrdersPage /> : <Navigate to="/" replace />} />
             <Route path="/notifications" element={token ? <NotificationsPage /> : <Navigate to="/" replace />} />
@@ -124,6 +132,9 @@ function App() {
           Couldn’t load stores: {getErrorMessage(storesError)}
         </div>
       )}
+      <div className="pointer-events-none fixed right-3 top-3 z-[80] w-[min(24rem,calc(100vw-1.5rem))] sm:right-5 sm:top-5">
+        <Toast key={toast?.id} toast={toast} onDismiss={dismissToast} />
+      </div>
       <StorePicker open={storeOpen} onClose={() => setStoreOpen(false)} />
       <LoginDialog open={loginOpen || Boolean(sessionNotice)} reason={sessionNotice || loginReason} onClose={() => { setLoginOpen(false); dispatch(clearSessionNotice()); if (!token) setLoginReturnTo('') }} onSignedIn={handleSignedIn} />
       <CartDrawer

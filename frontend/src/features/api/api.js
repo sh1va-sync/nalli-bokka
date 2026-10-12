@@ -17,7 +17,7 @@ export const api = createApi({
       return headers
     },
   }),
-  tagTypes: ['Stores', 'Products', 'Cart', 'Profile', 'Orders', 'Notifications', 'StoreDashboard', 'StoreProducts', 'StoreOrders', 'StoreTransactions'],
+  tagTypes: ['Stores', 'Products', 'Cart', 'Profile', 'Orders', 'Notifications', 'StoreMe', 'StoreDashboard', 'StoreProducts', 'StoreOrders', 'StoreTransactions'],
   endpoints: (builder) => ({
     getStores: builder.query({
       query: (params = {}) => ({ url: '/stores', params }),
@@ -104,14 +104,12 @@ export const api = createApi({
       query: (itemId) => ({ url: `/cart/items/${itemId}`, method: 'DELETE' }),
       invalidatesTags: ['Cart'],
     }),
-    createOrder: builder.mutation({
-      query: ({ idempotencyKey, ...body }) => ({
-        url: '/orders',
+    createCheckoutPayment: builder.mutation({
+      query: (body) => ({
+        url: '/payments/razorpay/order',
         method: 'POST',
-        headers: { 'Idempotency-Key': idempotencyKey },
         body,
       }),
-      invalidatesTags: ['Cart', 'Orders'],
     }),
     getOrders: builder.query({
       query: (params = {}) => ({ url: '/orders', params }),
@@ -128,15 +126,22 @@ export const api = createApi({
     createPayment: builder.mutation({
       query: (orderId) => ({ url: `/orders/${orderId}/payment`, method: 'POST' }),
     }),
+    markCheckoutPaymentFailed: builder.mutation({
+      query: (razorpayOrderId) => ({
+        url: `/payments/razorpay/${encodeURIComponent(razorpayOrderId)}/failed`,
+        method: 'POST',
+      }),
+    }),
     verifyPayment: builder.mutation({
       query: (body) => ({ url: '/payments/razorpay/verify', method: 'POST', body }),
-      invalidatesTags: ['Orders'],
+      invalidatesTags: ['Cart', 'Orders'],
     }),
     storeLogin: builder.mutation({
       query: (body) => ({ url: '/auth/stores/login', method: 'POST', body }),
     }),
     getStoreMe: builder.query({
       query: () => '/auth/me',
+      providesTags: ['StoreMe'],
     }),
     getStoreDashboard: builder.query({
       query: (params = {}) => ({ url: '/store/dashboard', params }),
@@ -178,6 +183,14 @@ export const api = createApi({
       query: (params = {}) => ({ url: '/store/transactions', params }),
       providesTags: ['StoreTransactions'],
     }),
+    toggleStoreStatus: builder.mutation({
+      query: (isOpen) => ({
+        url: '/store/status',
+        method: 'PATCH',
+        body: { isOpen },
+      }),
+      invalidatesTags: ['StoreMe', 'StoreDashboard'],
+    }),
     exportStoreReport: builder.mutation({
       query: (params) => ({
         url: '/store/reports/export',
@@ -207,11 +220,12 @@ export const {
   useAddCartItemMutation,
   useUpdateCartItemMutation,
   useRemoveCartItemMutation,
-  useCreateOrderMutation,
+  useCreateCheckoutPaymentMutation,
   useGetOrdersQuery,
   useGetOrderQuery,
   useCancelOrderMutation,
   useCreatePaymentMutation,
+  useMarkCheckoutPaymentFailedMutation,
   useVerifyPaymentMutation,
   useStoreLoginMutation,
   useGetStoreMeQuery,
@@ -225,5 +239,6 @@ export const {
   useUpdateStoreOrderStatusMutation,
   useRefundStoreOrderMutation,
   useGetStoreTransactionsQuery,
+  useToggleStoreStatusMutation,
   useExportStoreReportMutation,
 } = api

@@ -8,7 +8,8 @@ import {
   listStoreProducts,
   listStoreTransactions,
   updateProduct,
-  updateStock
+  updateStock,
+  updateStoreStatus
 } from '../controllers/storeController.js';
 import {
   getStoreOrder,
@@ -23,6 +24,7 @@ import { schemas } from '../validation/schemas.js';
 const router = Router();
 router.use(authenticate('store'));
 
+router.patch('/status', validate(schemas.storeStatusUpdate), updateStoreStatus);
 router.get('/dashboard', validate(schemas.dashboard), getDashboard);
 router.get('/products', validate(schemas.storeProductList), listStoreProducts);
 router.post('/products', validate(schemas.productCreate), createProduct);

@@ -3,6 +3,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
+import Store from '../models/Store.js';
 import Transaction from '../models/Transaction.js';
 import AppError from '../utils/AppError.js';
 import escapeRegex from '../utils/escapeRegex.js';
@@ -86,6 +87,28 @@ export async function updateStock(req, res) {
   product.inStock = req.validated.body.inStock;
   await product.save();
   res.json({ data: product });
+}
+
+export async function updateStoreStatus(req, res) {
+  const store = await Store.findById(req.auth.id);
+  if (!store) {
+    throw new AppError(404, 'Store not found');
+  }
+
+  const { isOpen } = req.validated.body;
+  store.isOpen = Boolean(isOpen);
+  await store.save();
+
+  res.json({
+    data: {
+      _id: store._id,
+      storeName: store.storeName,
+      isOpen: store.isOpen,
+      storePhone: store.storePhone || store.storeNumber,
+      googleMapsLink: store.googleMapsLink || store.googleMapLink || store.mapLink,
+      location: store.location
+    }
+  });
 }
 
 export async function getDashboard(req, res) {

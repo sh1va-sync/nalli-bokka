@@ -10,7 +10,8 @@ import {
   useCreateStoreProductMutation, useDeleteStoreProductMutation, useExportStoreReportMutation,
   useGetStoreDashboardQuery,
   useGetStoreMeQuery, useGetStoreOrdersQuery, useGetStoreProductsQuery,
-  useGetStoreTransactionsQuery, useSetStoreProductStockMutation, useUpdateStoreOrderStatusMutation,
+  useGetStoreTransactionsQuery, useSetStoreProductStockMutation, useToggleStoreStatusMutation,
+  useUpdateStoreOrderStatusMutation,
   useRefundStoreOrderMutation, useUpdateStoreProductMutation,
 } from '../../api/api.js'
 import { api } from '../../api/api.js'
@@ -22,6 +23,7 @@ const navItems = [
   { id: 'orders', label: 'Orders', icon: ClipboardList },
   { id: 'inventory', label: 'Inventory', icon: Boxes },
   { id: 'transactions', label: 'Transactions', icon: CreditCard },
+  { id: 'reports', label: 'Reports', icon: Download },
 ]
 const productTypes = ['meat', 'vegetable', 'fruit', 'oil', 'rice']
 const getLocalDateString = (date = new Date()) => {
@@ -39,7 +41,7 @@ const getLocalDayRange = (dateString) => {
 }
 const getData = (response) => response?.data || []
 
-function DateFilter({ selectedDate, today, onChange, onExport, exportingReport }) {
+function DateFilter({ selectedDate, today, onChange }) {
   function shiftDate(amount) {
     const next = new Date(`${selectedDate}T12:00:00`)
     next.setDate(next.getDate() + amount)
@@ -69,10 +71,6 @@ function DateFilter({ selectedDate, today, onChange, onExport, exportingReport }
       </label>
       <button type="button" onClick={() => shiftDate(1)} disabled={selectedDate >= today} aria-label="View next day" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#eadfd7] text-[#76534a] transition hover:translate-x-0.5 hover:bg-[#fff8f4] disabled:cursor-not-allowed disabled:opacity-40"><ChevronRight size={17} /></button>
       {selectedDate !== today && <button type="button" onClick={() => onChange(today)} className="h-10 shrink-0 rounded-xl bg-[#861923] px-3 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#70131c]">Today</button>}
-    </div>
-    <div className="flex w-full gap-2 sm:w-auto sm:border-l sm:border-[#f1e9e4] sm:pl-4">
-      <button type="button" disabled={Boolean(exportingReport)} onClick={() => onExport('orders')} className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#eadfd7] px-2.5 text-[11px] font-semibold text-[#76534a] transition hover:bg-[#fff8f4] disabled:opacity-50 sm:flex-none sm:px-3"><Download size={13} />{exportingReport === 'orders' ? 'Exporting…' : 'Orders CSV'}</button>
-      <button type="button" disabled={Boolean(exportingReport)} onClick={() => onExport('transactions')} className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#eadfd7] px-2.5 text-[11px] font-semibold text-[#76534a] transition hover:bg-[#fff8f4] disabled:opacity-50 sm:flex-none sm:px-3"><Download size={13} />{exportingReport === 'transactions' ? 'Exporting…' : 'Payments CSV'}</button>
     </div>
   </section>
 }
@@ -196,17 +194,21 @@ export default function StoreDashboardPage() {
   const [pendingAction, setPendingAction] = useState('')
   const [exportingReport, setExportingReport] = useState('')
   const [selectedDate, setSelectedDate] = useState(() => getLocalDateString())
+  const [reportFrom, setReportFrom] = useState(() => getLocalDateString())
+  const [reportTo, setReportTo] = useState(() => getLocalDateString())
   const followsToday = useRef(true)
   const [productPage, setProductPage] = useState(1)
   const [orderPage, setOrderPage] = useState(1)
   const [transactionPage, setTransactionPage] = useState(1)
   const [setStock] = useSetStoreProductStockMutation()
   const [exportStoreReport] = useExportStoreReportMutation()
+  const [toggleStoreStatus] = useToggleStoreStatusMutation()
   const [deleteProduct] = useDeleteStoreProductMutation()
   const [updateOrder] = useUpdateStoreOrderStatusMutation()
   const [refundOrder] = useRefundStoreOrderMutation()
   const today = getLocalDateString()
   const selectedDayRange = getLocalDayRange(selectedDate)
+  const storeOpenState = meResponse?.account?.isOpen ?? store?.isOpen ?? true
   const { data: dashboardResponse, error: dashboardError, isLoading: dashboardLoading, refetch: refetchDashboard } = useGetStoreDashboardQuery({ days: 1, ...selectedDayRange }, { skip: !token, pollingInterval: 30000 })
   const { data: productsResponse, error: productsError, isLoading: productsLoading } = useGetStoreProductsQuery({ page: productPage, limit: 100, search: productSearch || undefined }, { skip: !token || tab !== 'inventory' })
   const { data: ordersResponse, error: ordersError, isLoading: ordersLoading } = useGetStoreOrdersQuery({
@@ -279,7 +281,7 @@ export default function StoreDashboardPage() {
       order._id,
       'refund',
       () => refundOrder(order._id).unwrap(),
-      'Refund requested. The order will remain paused until Razorpay confirms the result.'
+      'Order cancelled. The full refund is pending Razorpay confirmation.'
     )
   }
 
@@ -296,15 +298,15 @@ export default function StoreDashboardPage() {
     setTransactionPage(1)
   }
 
-  async function downloadReport(type) {
+  async function downloadReport(type, range = selectedDayRange, rangeLabel = selectedDate) {
     setActionError('')
     setExportingReport(type)
     try {
-      const blob = await exportStoreReport({ type, ...selectedDayRange }).unwrap()
+      const blob = await exportStoreReport({ type, ...range }).unwrap()
       const objectUrl = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = objectUrl
-      link.download = `store-${type}-${selectedDate}.csv`
+      link.download = `store-${type}-${rangeLabel}.csv`
       document.body.append(link)
       link.click()
       link.remove()
@@ -314,6 +316,12 @@ export default function StoreDashboardPage() {
     } finally {
       setExportingReport('')
     }
+  }
+
+  async function toggleStatus() {
+    await runAction('status', 'toggle', async () => {
+      await toggleStoreStatus(!storeOpenState).unwrap()
+    }, `Store marked ${!storeOpenState ? 'open' : 'closed'}.`)
   }
 
   return <div className="min-h-screen bg-[#fbf7f1] text-[#392824]">
@@ -326,14 +334,16 @@ export default function StoreDashboardPage() {
     <div className="mx-auto grid max-w-7xl gap-5 px-4 py-5 sm:px-6 sm:py-7 lg:grid-cols-[210px_1fr]">
       <aside className="lg:sticky lg:top-[82px] lg:h-fit">
         <div className="mb-3 rounded-2xl border border-[#e7d5cc] bg-[#fbf0eb] p-3">
-          <div className="flex items-center justify-between gap-2"><span className="text-xs font-semibold text-[#493631]">Store status</span><span className="rounded-full bg-white/80 px-2 py-1 text-[9px] font-semibold text-[#987b70]">API unavailable</span></div>
-          <button type="button" disabled title="The store API does not currently provide an open/close control." className="mt-2 h-9 w-full cursor-not-allowed rounded-lg bg-[#d9d2cc] text-xs font-semibold text-[#72665f]">Open / close unavailable</button>
+          <div className="flex items-center justify-between gap-2"><span className="text-xs font-semibold text-[#493631]">Store status</span><span className={`rounded-full px-2 py-1 text-[9px] font-semibold ${storeOpenState ? 'bg-[#edf5ee] text-[#4a7758]' : 'bg-[#f7eae8] text-[#8b4f49]'}`}>{storeOpenState ? 'Open' : 'Closed'}</span></div>
+          <button type="button" onClick={toggleStatus} className={`mt-2 h-9 w-full rounded-lg text-xs font-semibold ${storeOpenState ? 'bg-[#edf5ee] text-[#4a7758] hover:bg-[#e2efe4]' : 'bg-[#f7eae8] text-[#8b4f49] hover:bg-[#f2e1de]'}`}>
+            {pendingAction === 'status-toggle' ? 'Updating…' : storeOpenState ? 'Mark store closed' : 'Mark store open'}
+          </button>
         </div>
         <nav className="no-scrollbar flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">{navItems.map(({ id, label, icon: Icon }) => <button key={id} onClick={() => { setTab(id); setActionError(''); setActionSuccess('') }} className={`flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs font-semibold transition lg:w-full ${tab === id ? 'bg-[#861923] text-white shadow-sm' : 'text-[#796a63] hover:bg-[#f4e8e2]'}`}><Icon size={16} />{label}</button>)}</nav>
       </aside>
 
       <main className="min-w-0">
-        {tab !== 'inventory' && <DateFilter selectedDate={selectedDate} today={today} onChange={changeSelectedDate} onExport={downloadReport} exportingReport={exportingReport} />}
+        {tab !== 'inventory' && tab !== 'reports' && <DateFilter selectedDate={selectedDate} today={today} onChange={changeSelectedDate} />}
         {(actionError || actionSuccess) && <p role={actionError ? 'alert' : 'status'} className={`mb-4 flex items-center gap-2 rounded-xl p-3 text-sm ${actionError ? 'bg-[#fbefec] text-[#8c4034]' : 'bg-[#eef4ed] text-[#4f7754]'}`}>{actionError ? <AlertCircle size={16} /> : <Check size={16} />}{actionError || actionSuccess}</p>}
         {tab === 'overview' && <>
           <SectionTitle eyebrow={selectedDate === today ? 'Today at a glance' : 'Daily snapshot'} title="Store overview"><button onClick={() => refetchDashboard()} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#eadfd7] bg-white px-3 text-xs font-semibold text-[#76534a] transition hover:bg-[#fff8f4]"><RefreshCw size={14} />Refresh</button></SectionTitle>
@@ -394,6 +404,55 @@ export default function StoreDashboardPage() {
             {selectedDayTransactions.length ? <div className="dashboard-stagger overflow-hidden rounded-[18px] border border-[#eadfd7] bg-white"><div className="hidden grid-cols-[1.4fr_1fr_1fr_1fr] gap-3 border-b border-[#f1e9e4] bg-[#fffdfa] px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-[#927f74] sm:grid"><span>Order</span><span>Time</span><span>Status</span><span className="text-right">Amount</span></div>{selectedDayTransactions.map((transaction) => <div key={transaction._id} className="grid gap-1 border-b border-[#f4eeea] px-4 py-3 last:border-0 transition-colors hover:bg-[#fffaf6] sm:grid-cols-[1.4fr_1fr_1fr_1fr] sm:items-center sm:gap-3"><span className="text-xs font-semibold">#{String(transaction.orderId?._id || transaction.orderId).slice(-8).toUpperCase()}</span><span className="text-[11px] text-[#82736d]">{new Date(transaction.timestamp).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</span><span className={`w-fit rounded-full px-2 py-1 text-[10px] font-semibold capitalize ${transaction.refundStatus === 'pending' || transaction.refundStatus === 'failed' ? 'bg-[#fbefec] text-[#9b5148]' : transaction.refundStatus === 'processed' ? 'bg-[#eef4ed] text-[#4f7754]' : transaction.status === 'paid' ? 'bg-[#eef4ed] text-[#4f7754]' : transaction.status === 'failed' ? 'bg-[#fbefec] text-[#9b5148]' : 'bg-[#f5eee8] text-[#87634f]'}`}>{transaction.refundStatus && transaction.refundStatus !== 'none' ? `refund ${transaction.refundStatus}` : transaction.status}</span><span className="text-xs font-semibold sm:text-right">{formatPrice(transaction.amount)}</span></div>)}</div> : <div className="rounded-[18px] border border-[#eadfd7] bg-white p-10 text-center"><CreditCard className="mx-auto text-[#c0988e]" size={26} /><h3 className="mt-3 text-sm font-semibold">No transactions on this day</h3><p className="mt-1 text-xs text-[#8b7d76]">Payment activity for the selected day will appear here.</p></div>}
           </>}
           {!transactionsLoading && <PaginationControls pagination={transactionsResponse?.pagination} page={transactionPage} onPageChange={setTransactionPage} />}
+        </>}
+
+        {tab === 'reports' && <>
+          <SectionTitle eyebrow="Exports" title="Reports & exports" />
+          <section className="dashboard-enter mb-5 rounded-[20px] border border-[#eadfd7] bg-white p-5 shadow-[0_16px_42px_-32px_rgba(91,43,33,.55)] sm:p-6">
+            <div className="flex items-start gap-3">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#fbefec] text-[#9b5148]"><CalendarDays size={20} /></span>
+              <div><h2 className="text-sm font-semibold text-[#493631]">Choose a date range</h2><p className="mt-1 text-xs leading-5 text-[#82736d]">Reports include activity from the start of the first day through the end of the last day, in your local timezone.</p></div>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
+              <label className="text-xs font-semibold text-[#76534a]">FROM
+                <input type="date" value={reportFrom} max={today} onChange={(event) => setReportFrom(event.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#eadfd7] bg-[#fffdfa] px-3 text-sm font-medium text-[#493631] outline-none focus:border-[#c98c7f]" />
+              </label>
+              <span className="hidden pb-3 text-xs text-[#ad7669] sm:block">through</span>
+              <label className="text-xs font-semibold text-[#76534a]">TO
+                <input type="date" value={reportTo} min={reportFrom} max={today} onChange={(event) => setReportTo(event.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#eadfd7] bg-[#fffdfa] px-3 text-sm font-medium text-[#493631] outline-none focus:border-[#c98c7f]" />
+              </label>
+            </div>
+            {reportTo < reportFrom && <p role="alert" className="mt-3 text-xs text-rose-700">The end date must be the same as or later than the start date.</p>}
+          </section>
+          <div className="dashboard-stagger grid gap-4 md:grid-cols-2">
+            {[
+              { type: 'orders', title: 'Orders report', description: 'Order dates, fulfillment and payment statuses, totals, and item summaries.' },
+              { type: 'transactions', title: 'Payments report', description: 'Payment and refund activity, transaction amounts, and provider references.' },
+            ].map(({ type, title, description }) => (
+              <article key={type} className="rounded-[20px] border border-[#eadfd7] bg-white p-5 transition duration-300 hover:-translate-y-1 hover:border-[#d9aaa0] hover:shadow-[0_18px_42px_-28px_rgba(91,43,33,.4)] sm:p-6">
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#f5eee8] text-[#87634f]"><Download size={18} /></span>
+                <h2 className="mt-4 text-base font-semibold text-[#493631]">{title}</h2>
+                <p className="mt-1 min-h-10 text-xs leading-5 text-[#82736d]">{description}</p>
+                <button
+                  type="button"
+                  disabled={Boolean(exportingReport) || !reportFrom || !reportTo || reportTo < reportFrom}
+                  onClick={() => {
+                    const end = new Date(`${reportTo}T00:00:00`)
+                    end.setDate(end.getDate() + 1)
+                    const rangeLabel = reportFrom === reportTo ? reportFrom : `${reportFrom}-to-${reportTo}`
+                    downloadReport(type, {
+                      from: new Date(`${reportFrom}T00:00:00`).toISOString(),
+                      to: end.toISOString(),
+                    }, rangeLabel)
+                  }}
+                  className="mt-5 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#861923] px-4 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#70131c] disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <Download size={14} />{exportingReport === type ? 'Preparing CSV…' : `Download ${type} CSV`}
+                </button>
+              </article>
+            ))}
+          </div>
+          <p className="mt-4 rounded-xl border border-[#e7d5cc] bg-[#fff9f6] p-3 text-xs leading-5 text-[#7e6d65]">Exports are scoped to your store. Customer phone numbers and delivery addresses are not included.</p>
         </>}
 
         {dashboardError && tab !== 'overview' && !dashboard && <p role="alert" className="mt-4 rounded-xl bg-[#fbefec] p-3 text-sm text-[#8c4034]">{getErrorMessage(dashboardError)}</p>}

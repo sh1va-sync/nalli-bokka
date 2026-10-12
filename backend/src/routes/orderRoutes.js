@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import {
   cancelUserOrder,
-  createOrder,
   getUserOrder,
   listUserOrders
 } from '../controllers/orderController.js';
@@ -12,7 +11,6 @@ import { schemas } from '../validation/schemas.js';
 
 const router = Router();
 router.use(authenticate('user'));
-router.post('/', validate(schemas.orderCreate), createOrder);
 router.get('/', validate(schemas.orderList), listUserOrders);
 router.get('/:orderId', validate(schemas.orderParams), getUserOrder);
 router.post('/:orderId/payment', validate(schemas.paymentCreate), createPaymentOrder);

@@ -95,7 +95,7 @@ An order can contain items from one store only. For multi-store carts, specify `
 
 Important notes on idempotency and transactions:
 
-- Checkout requests may be retried by clients. To make checkouts atomic and retry-safe the API accepts an `Idempotency-Key` header on `POST /api/orders`. When provided, the server will ensure the same idempotency key + user pair results in a single order (the request will return the previously created order if it already succeeded). Checkout, payment settlement, and store order-status/notification updates use MongoDB transactions — this requires the MongoDB deployment to run as a replica set (a single-node replica set is acceptable for many test environments).
+- New checkouts create a temporary `CheckoutAttempt` and Razorpay payment order first; they do not create an `Order` or clear the cart until server-side verification confirms a captured payment. Failed or dismissed checkouts remain outside the orders collection and keep their cart items. The checkout-payment API requires a UUID idempotency key. Order creation, cart cleanup, payment settlement, and notifications are committed in a MongoDB transaction, so MongoDB must run as a replica set (a single-node replica set is acceptable for many test environments).
 
 - Razorpay webhooks are deduplicated and processed idempotently: the server persists webhook event IDs and ignores duplicate deliveries once an event has been processed. This prevents out-of-order or duplicated webhook deliveries from causing inconsistent payment/order state. Ensure the same `RAZORPAY_WEBHOOK_SECRET` is set in the environment and configured in Razorpay.
 

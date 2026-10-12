@@ -18,7 +18,7 @@ Razorpay Checkout uses its hosted browser SDK. Its public key comes from the pay
 - Use a guest basket before signing in; selections persist locally and are synchronized to the server cart after OTP login.
 - Sign in or create a customer account with phone OTP; first-time customers enter a name after OTP verification (email is optional) using the backend registration-token flow.
 - Manage customer profile details and saved delivery addresses.
-- Refresh authoritative cart prices, add/select an address without leaving checkout, create a one-store order, and pay by UPI through Razorpay with server-side payment verification.
+- Refresh authoritative cart prices, add/select an address without leaving checkout, open Razorpay UPI checkout, and create a one-store order only after server-side payment verification confirms success. Failed or dismissed payments do not create an order and leave the cart intact.
 - Review order history and poll current order status while tracking; see store status changes in the in-app notification center.
 
 ## Checkout payment follow-up

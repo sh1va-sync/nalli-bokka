@@ -15,13 +15,14 @@ The application has six core business collections:
 5. `orders`
 6. `transactions`
 
-There are also three supporting collections used for retries, webhooks, and customer notifications:
+There are also four supporting collections used for pending checkout attempts, legacy retry records, webhooks, and customer notifications:
 
-7. `idempotencykeys`
-8. `webhookevents`
-9. `notifications`
+7. `checkoutattempts`
+8. `idempotencykeys` (legacy)
+9. `webhookevents`
+10. `notifications`
 
-These supporting collections track checkout retries, payment webhook handling, and customer-visible order-status updates.
+Checkout attempts hold cart/address snapshots until payment is verified; the other supporting collections track legacy idempotency records, webhook handling, and customer-visible order-status updates.
 
 ### Core relationship diagram
 
@@ -32,12 +33,14 @@ Store 1 ───── * Order
 User  1 ───── 0..1 Cart
 User  1 ───── * Order
 User  1 ───── * IdempotencyKey
+User  1 ───── * CheckoutAttempt
 User  1 ───── * Notification
 
 Cart.items[*] ───── Product
 Order.items[*] ───── Product (reference plus order-time snapshot)
 Order 1 ───── * Transaction
 Order 1 ───── * Notification
+CheckoutAttempt.orderId ───── Order (only after verified payment)
 IdempotencyKey.orderId ───── Order
 WebhookEvent ───── Razorpay webhook event identifier (not an Order reference)
 ```
@@ -119,7 +122,7 @@ Represents a customer authenticated by phone OTP. A user document embeds its sav
 
 | Field | Database type | Required | Description |
 | --- | --- | --- | --- |
-| `_id` | ObjectId | Generated | Address identifier used by address API routes and `POST /orders` `addressId`. |
+| `_id` | ObjectId | Generated | Address identifier used by address API routes and `POST /payments/razorpay/order` `addressId`. |
 | `label` | String | Yes | User-defined label such as `Home` or `Work`; trimmed. |
 | `fullAddress` | String | Yes | Detailed delivery address; trimmed. |
 | `landmark` | String | No | Landmark text; defaults to an empty string. |
@@ -348,7 +351,7 @@ An order is a durable checkout record for one customer and one store. It contain
 | `items` | Array of embedded order lines | Yes | Nonempty array of order-time product/price snapshots. |
 | `totalAmount` | Number | Yes | Calculated total in rupees, rounded to two decimal places (paise precision). |
 | `orderStatus` | String enum | Yes | Order fulfillment state; defaults to `placed`. |
-| `paymentStatus` | String enum | Yes | `pending`, `paid`, `failed`, `refund_pending`, `refunded`, or `refund_failed`; defaults to `pending`. |
+| `paymentStatus` | String enum | Yes | `pending`, `paid`, `failed`, `refund_pending`, `refunded`, or `refund_failed`; defaults to `pending` for legacy records. New orders are created only after verified payment and have `paymentStatus: "paid"`. |
 | `createdAt` | Date | Generated | Order creation time. |
 | `updatedAt` | Date | Generated | Last order save time. |
 
@@ -440,7 +443,7 @@ Packing requires a paid order, or an order whose refund has explicitly failed. R
   ],
   "totalAmount": 400,
   "orderStatus": "placed",
-  "paymentStatus": "pending",
+  "paymentStatus": "paid",
   "createdAt": "2026-01-10T09:15:00.000Z",
   "updatedAt": "2026-01-10T09:15:00.000Z"
 }
@@ -456,7 +459,7 @@ Packing requires a paid order, or an order whose refund has explicitly failed. R
 
 ## 7. Transaction collection — `transactions`
 
-Stores payment-provider transaction state and links it to an order. Payment details live here rather than being duplicated as transaction data on the Order.
+Stores payment-provider transaction state for a persisted order. New checkout attempts are stored separately in `checkoutattempts`; a Transaction is created only after payment is captured. Legacy persisted unpaid orders may still have created/failed transactions.
 
 ### Fields
 
@@ -485,12 +488,12 @@ This model does not enable Mongoose `createdAt`/`updatedAt` timestamps. Use `tim
 
 ### Status interaction
 
-- Creating/reusing a Razorpay order produces a transaction with `status: "created"`.
-- Captured payment updates transaction status to `paid` and the related order's `paymentStatus` to `paid`.
-- Failed payment updates transaction status to `failed` and order payment status to `failed`, unless the order has already been paid.
+- New checkout payment initialization creates a `CheckoutAttempt`, not a Transaction. A Transaction is written with status `paid` only after capture is verified and the paid order is created.
+- Legacy persisted orders may continue to use transactions with `created` or `failed` status; settlement updates their order payment state.
 - A store refund request atomically reserves the transaction as `pending` before contacting Razorpay; repeat requests reuse this reservation rather than issuing duplicate refunds.
-- `refund.processed` atomically marks the transaction processed, sets order payment status to `refunded`, cancels the order, and creates a customer notification.
-- `refund.failed` marks the transaction failed and order payment status `refund_failed`; an uncertain provider response stays pending until a signed webhook or operational reconciliation resolves it.
+- Refund initiation cancels the order and creates a customer notification in the same transaction that reserves the full refund; the order remains cancelled while refund processing is pending.
+- `refund.processed` atomically marks the transaction processed, sets order payment status to `refunded`, and updates the cancellation notification.
+- `refund.failed` marks the transaction failed and order payment status `refund_failed`; the order remains cancelled and the customer is notified to contact the store. An uncertain provider response stays pending until a signed webhook or operational reconciliation resolves it.
 - Client verification and webhook processing are intended to update transaction and order together in a MongoDB transaction.
 
 ### Example document
@@ -513,7 +516,7 @@ The transaction's stored `amount` is rupees. Razorpay APIs and the frontend Chec
 
 ## 8. IdempotencyKey collection — `idempotencykeys`
 
-An operational collection used to associate a client retry key with a checkout order. It is not part of the six core marketplace entities, but checkout uses it when a client sends an `Idempotency-Key` header.
+A legacy operational collection used by the retired prepayment order-creation flow. New checkout idempotency keys are stored in `CheckoutAttempt`; this collection remains only for historical records.
 
 ### Fields
 
@@ -529,8 +532,8 @@ An operational collection used to associate a client retry key with a checkout o
 ### Index and behavior
 
 - Unique compound index `{ key: 1, userId: 1 }`: the same key can be used by different users, but not twice by one user.
-- The record is created, linked to the order, and marked done as part of checkout's MongoDB transaction.
-- Completed idempotency keys are looked up before cart validation, allowing a successful checkout retry to return its original order after cart cleanup.
+- Historical records link retry keys to orders; new checkout attempts no longer write this collection.
+- The current checkout API uses `CheckoutAttempt` and its Razorpay order ID for payment retries; it does not create an order before payment.
 - The schema has a `failed` value, but the checkout flow rolls back the transaction on failure rather than persisting a failed marker.
 
 ### Example document
@@ -581,7 +584,7 @@ An operational collection intended to remember webhook processing and prevent du
 
 ## 10. Notification collection — `notifications`
 
-Stores in-app customer updates when a store changes an order's fulfillment status. Notifications are created in the same MongoDB transaction as the corresponding order update, so an order status cannot change without its notification being persisted.
+Stores in-app customer updates when payment places an order and when a store changes its fulfillment status. Order-placement and fulfillment notifications are persisted in the same transaction as the corresponding order change.
 
 ### Fields
 
@@ -590,7 +593,7 @@ Stores in-app customer updates when a store changes an order's fulfillment statu
 | `_id` | ObjectId | Generated | Notification identifier. |
 | `userId` | ObjectId → User | Yes | Customer who owns the notification. All reads and updates are scoped to this user. |
 | `orderId` | ObjectId → Order | Yes | Order whose fulfillment status changed. |
-| `orderStatus` | String enum | Yes | New status: `packing`, `out for delivery`, `delivered`, or `cancelled`. |
+| `orderStatus` | String enum | Yes | New status: `placed`, `packing`, `out for delivery`, `delivered`, or `cancelled`. |
 | `title` | String | Yes | Short notification heading. |
 | `message` | String | Yes | Customer-facing status explanation. |
 | `readAt` | Date or null | No | Null until read; then the time the customer marked it read. |
@@ -621,26 +624,18 @@ Stores in-app customer updates when a store changes an order's fulfillment statu
 3. Cart read recalculates the selection using the current product fields.
 4. If the referenced product disappears or becomes unavailable, the API marks that line unavailable in its response.
 
-### Checking out
+### Checking out and paying
 
-1. API resolves user, saved address, cart items, and products.
-2. It validates availability/selection and calculates current line prices.
-3. It writes an order with copied product name, selection, line price, total, and address.
-4. It removes the ordered store's cart items.
-5. It may store an idempotency record if a key was sent.
-6. Order and cart/idempotency writes are grouped in a MongoDB transaction.
-
-### Paying
-
-1. The transaction stores the Razorpay order ID and amount.
-2. Frontend opens Razorpay Checkout with amount in paise.
-3. The verify endpoint validates payment server-side.
-4. Transaction and order payment status are updated together.
-5. Razorpay webhook may also update payment state asynchronously.
+1. API resolves the customer, saved address, cart items, and products; it validates availability/selections and calculates current prices.
+2. It stores the address, selected items and total in a temporary `CheckoutAttempt`, then creates a Razorpay payment order. No Order is inserted and the Cart is not modified.
+3. The frontend opens Razorpay Checkout using the provider order ID and amount in paise.
+4. A failed or dismissed attempt is marked failed; it remains outside the `orders` collection and leaves cart lines intact.
+5. Only after the provider confirms a captured payment does verification/webhook processing atomically create a paid Order and Transaction, add the placed Notification, link the attempt to the order, and remove matching purchased cart lines.
+6. CheckoutAttempt records expire after 24 hours. Razorpay webhooks may finalize a captured payment if the browser callback is unavailable.
 
 ## 12. Atomicity and deployment requirements
 
-Checkout writes an Order, modifies a Cart, and may create/update an IdempotencyKey. Payment settlement updates a Transaction and its Order. Store order-status changes update the Order and create its customer Notification together. These operations rely on MongoDB transactions.
+Checkout payment initialization writes only a CheckoutAttempt; it does not write an Order or modify a Cart. Successful payment settlement creates an Order and Transaction, updates the CheckoutAttempt, removes purchased Cart lines, and creates the placed Notification in one transaction. Failed attempts do not create orders. Store order-status changes update the Order and create its customer Notification together. These operations rely on MongoDB transactions.
 
 MongoDB transactions require a replica set or sharded cluster. A single-node replica set is suitable for local transaction testing; a standalone MongoDB deployment is not. If transactions are unavailable, checkout/payment operations can fail even while read-only endpoints work.
 

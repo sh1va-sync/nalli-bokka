@@ -1,18 +1,18 @@
 import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
-import { ArrowLeft, Banknote, Check, CreditCard, MapPin, Plus, ShieldCheck, Smartphone, X } from 'lucide-react'
-import { useAddAddressMutation, useCreateOrderMutation, useCreatePaymentMutation, useGetCartQuery, useGetProfileQuery, useVerifyPaymentMutation } from '../../api/api.js'
-import { formatPrice, getErrorMessage, loadRazorpaySdk } from '../utils.js'
+import { ArrowLeft, Banknote, CreditCard, MapPin, Plus, ShieldCheck, Smartphone, X } from 'lucide-react'
+import { useAddAddressMutation, useCreateCheckoutPaymentMutation, useGetCartQuery, useGetProfileQuery, useMarkCheckoutPaymentFailedMutation, useVerifyPaymentMutation } from '../../api/api.js'
+import { createUuid, formatPrice, getErrorMessage, loadRazorpaySdk } from '../utils.js'
 
-export default function CheckoutPage({ onLogin, onOpenCart }) {
+export default function CheckoutPage({ onLogin, onOpenCart, onToast }) {
   const navigate = useNavigate()
   const token = useSelector((state) => state.auth.token)
   const selectedStore = useSelector((state) => state.selectedStore)
   const { data: profileResponse, isLoading: profileLoading, error: profileError } = useGetProfileQuery(undefined, { skip: !token })
   const { data: cartResponse, isLoading: cartLoading, error: cartError } = useGetCartQuery(undefined, { skip: !token })
-  const [createOrder, orderState] = useCreateOrderMutation()
-  const [createPayment, paymentState] = useCreatePaymentMutation()
+  const [createCheckoutPayment, checkoutPaymentState] = useCreateCheckoutPaymentMutation()
+  const [markPaymentFailed] = useMarkCheckoutPaymentFailedMutation()
   const [verifyPayment] = useVerifyPaymentMutation()
   const [addAddress, addressState] = useAddAddressMutation()
   const [addressId, setAddressId] = useState('')
@@ -21,8 +21,8 @@ export default function CheckoutPage({ onLogin, onOpenCart }) {
   const [addressError, setAddressError] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('upi')
   const [error, setError] = useState('')
-  const [placedOrder, setPlacedOrder] = useState(null)
-  const idempotencyKey = useRef(crypto.randomUUID())
+  const [paymentBusy, setPaymentBusy] = useState(false)
+  const paymentFailureNotified = useRef(false)
   const addresses = profileResponse?.data?.addresses || []
   const firstAddressId = addresses[0]?._id
   const selectedAddressId = addressId || firstAddressId || ''
@@ -50,55 +50,91 @@ export default function CheckoutPage({ onLogin, onOpenCart }) {
     }
   }
 
-  async function payForOrder(order) {
-    setError('')
+  async function handleFailedPayment(razorpayOrderId, title, message) {
+    if (paymentFailureNotified.current) return
+    paymentFailureNotified.current = true
+    setPaymentBusy(false)
+    setError(`${message} No order was placed.`)
+    onToast({ type: 'error', title, message: `${message} No order was placed.` })
     try {
-      const paymentResponse = await createPayment(order._id).unwrap()
-      const payment = paymentResponse.data
+      await markPaymentFailed(razorpayOrderId).unwrap()
+    } catch (requestError) {
+      const statusMessage = `The payment failed and no order was placed, but its checkout status could not be updated: ${getErrorMessage(requestError)}`
+      setError(statusMessage)
+      onToast({ type: 'error', title: 'Payment status update failed', message: statusMessage })
+    }
+  }
+
+  async function payForCheckout(payment) {
+    setError('')
+    paymentFailureNotified.current = false
+    try {
       const loaded = await loadRazorpaySdk()
-      if (!loaded || !window.Razorpay) throw new Error('Razorpay Checkout could not be loaded. Please check your connection and try again.')
+      if (!loaded || !window.Razorpay) {
+        await handleFailedPayment(payment.razorpayOrderId, 'Unable to open payment', 'Razorpay Checkout could not be loaded. Please check your connection and try again.')
+        return
+      }
       const checkout = new window.Razorpay({
         key: payment.keyId,
         amount: payment.amount,
         currency: payment.currency,
         name: 'NalliBokka',
-        description: `Order ${order._id}`,
+        description: 'NalliBokka order',
         order_id: payment.razorpayOrderId,
         prefill: { name: profileResponse?.data?.name, email: profileResponse?.data?.email, contact: profileResponse?.data?.phone },
         theme: { color: '#861923' },
         handler: async (response) => {
+          paymentFailureNotified.current = true
           try {
-            await verifyPayment({
+            const result = await verifyPayment({
               razorpayOrderId: response.razorpay_order_id,
               paymentId: response.razorpay_payment_id,
               signature: response.razorpay_signature,
             }).unwrap()
-            navigate(`/orders?order=${order._id}`)
+            paymentFailureNotified.current = true
+            setPaymentBusy(false)
+            onToast({ type: 'success', title: 'Order placed', message: 'Payment was successful. Your order is confirmed.' })
+            navigate(`/orders?order=${result.data.orderId}`)
           } catch (verifyError) {
-            setError(`Payment verification failed: ${getErrorMessage(verifyError)} Your order is saved; check its status in My orders before retrying.`)
+            paymentFailureNotified.current = true
+            setPaymentBusy(false)
+            const message = `Payment verification failed: ${getErrorMessage(verifyError)} Your payment may still be processing. Check your payment status before retrying.`
+            setError(message)
+            onToast({ type: 'error', title: 'Payment needs attention', message: getErrorMessage(verifyError) })
           }
         },
-        modal: { ondismiss: () => { if (placedOrder) navigate(`/orders?order=${order._id}`) } },
+        modal: {
+          ondismiss: () => {
+            handleFailedPayment(payment.razorpayOrderId, 'Payment not completed', 'The payment window closed before payment was confirmed.')
+          },
+        },
+      })
+      checkout.on('payment.failed', (response) => {
+        const message = response.error?.description || 'The payment could not be completed. Please try again.'
+        handleFailedPayment(payment.razorpayOrderId, 'Payment failed', message)
       })
       checkout.open()
     } catch (requestError) {
-      setError(getErrorMessage(requestError))
+      const message = getErrorMessage(requestError)
+      await handleFailedPayment(payment.razorpayOrderId, 'Unable to start payment', message)
     }
   }
 
   async function submitOrder() {
     setError('')
+    setPaymentBusy(true)
     try {
-      const response = await createOrder({
+      const response = await createCheckoutPayment({
         addressId: selectedAddressId,
         storeId: selectedStore?._id,
-        idempotencyKey: idempotencyKey.current,
+        idempotencyKey: createUuid(),
       }).unwrap()
-      const order = response.data
-      setPlacedOrder(order)
-      await payForOrder(order)
+      await payForCheckout(response.data)
     } catch (requestError) {
-      setError(getErrorMessage(requestError))
+      const message = getErrorMessage(requestError)
+      setError(message)
+      onToast({ type: 'error', title: 'Unable to start checkout', message })
+      setPaymentBusy(false)
     }
   }
 
@@ -141,8 +177,8 @@ export default function CheckoutPage({ onLogin, onOpenCart }) {
         <div className="mt-4 flex justify-between text-sm"><span className="text-slate-500">Total</span><span className="font-extrabold text-[#2f5038]">{cart?.total == null ? '—' : formatPrice(cart.total)}</span></div>
         {hasUnavailableItems && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900">Remove or resolve unavailable items from your basket before checkout.</p>}
         {error && <p role="alert" className="mt-3 rounded-xl bg-rose-50 p-3 text-xs leading-5 text-rose-800">{error}</p>}
-        {placedOrder && !error && <p className="mt-3 flex items-center gap-2 rounded-xl bg-[#edf4e8] p-3 text-xs text-[#3b7049]"><Check size={15} /> Order created. Complete payment in the secure checkout window.</p>}
-        <button onClick={() => placedOrder ? payForOrder(placedOrder) : submitOrder()} disabled={loading || orderState.isLoading || paymentState.isLoading || !selectedAddressId || items.length === 0 || hasUnavailableItems || Boolean(cartError)} className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#861923] text-sm font-bold text-white transition hover:bg-[#70131c] disabled:cursor-not-allowed disabled:opacity-45">{orderState.isLoading ? 'Creating your order…' : paymentState.isLoading ? 'Connecting to Razorpay…' : placedOrder ? 'Retry UPI payment' : 'Place order & pay with UPI'}</button>
+        <p className="mt-3 text-center text-[10px] leading-4 text-[#8b756c]">Your order is only created after payment is confirmed.</p>
+        <button onClick={submitOrder} disabled={loading || paymentBusy || checkoutPaymentState.isLoading || !selectedAddressId || items.length === 0 || hasUnavailableItems || Boolean(cartError)} className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#861923] text-sm font-bold text-white transition hover:bg-[#70131c] disabled:cursor-not-allowed disabled:opacity-45">{paymentBusy || checkoutPaymentState.isLoading ? 'Opening secure payment…' : 'Complete payment to place order'}</button>
         <p className="mt-3 text-center text-[10px] leading-4 text-slate-400">Order total is confirmed by the store at checkout. Card details are never stored here.</p>
       </aside>
     </div>

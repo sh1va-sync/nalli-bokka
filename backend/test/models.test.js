@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import mongoose from 'mongoose';
 import Cart from '../src/models/Cart.js';
+import CheckoutAttempt from '../src/models/CheckoutAttempt.js';
 import IdempotencyKey from '../src/models/IdempotencyKey.js';
 import Order from '../src/models/Order.js';
 import Notification from '../src/models/Notification.js';
@@ -14,11 +15,11 @@ import { priceSelection } from '../src/utils/pricing.js';
 
 const objectId = () => new mongoose.Types.ObjectId();
 
-test('all nine Mongoose models use their intended collections', () => {
+test('all ten Mongoose models use their intended collections', () => {
   assert.deepEqual(
-    [Store, User, Product, Cart, Order, Transaction, IdempotencyKey, WebhookEvent, Notification]
+    [Store, User, Product, Cart, Order, Transaction, CheckoutAttempt, IdempotencyKey, WebhookEvent, Notification]
       .map(model => model.collection.collectionName),
-    ['stores', 'users', 'products', 'carts', 'orders', 'transactions', 'idempotencykeys', 'webhookevents', 'notifications']
+    ['stores', 'users', 'products', 'carts', 'orders', 'transactions', 'checkoutattempts', 'idempotencykeys', 'webhookevents', 'notifications']
   );
 });
 
@@ -37,9 +38,9 @@ test('order notifications are user-scoped, unread by default, and unique per ord
   const notification = new Notification({
     userId: objectId(),
     orderId: objectId(),
-    orderStatus: 'packing',
-    title: 'Order status updated',
-    message: 'Your order is being prepared.'
+    orderStatus: 'placed',
+    title: 'Order placed',
+    message: 'Payment was successful and your order is confirmed.'
   });
   await notification.validate();
   assert.equal(notification.readAt, null);

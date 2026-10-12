@@ -643,73 +643,7 @@ All endpoints in this section require a customer token. Customers can only read,
 
 ### `POST /orders`
 
-**Purpose:** Checks out cart items for one store. The server validates the saved address and current product availability, recalculates prices, creates the order with product/address snapshots, and removes only that store's items from the cart.
-
-**Request headers:**
-
-```http
-Authorization: Bearer <customer-jwt>
-Content-Type: application/json
-Idempotency-Key: <unique-key-for-this-checkout>
-```
-
-The `Idempotency-Key` is optional. Send one to make retries safe, and reuse that same key for retries of that logical checkout. The key is scoped by customer; a replay of a completed checkout returns the original order even after its cart items have been removed.
-
-**Request body:**
-
-```json
-{
-  "addressId": "<savedAddressId>",
-  "storeId": "<storeId>"
-}
-```
-
-`addressId` is required. `storeId` is optional only when the cart contains products from one store. If there are products from multiple stores, choose one store per checkout; other stores' items remain in the cart.
-
-**Success — first creation, `201 Created`:**
-
-```json
-{
-  "data": {
-    "_id": "<orderId>",
-    "userId": "<userId>",
-    "storeId": "<storeId>",
-    "deliveryAddress": {
-      "label": "Home",
-      "fullAddress": "12 Example Road, Hyderabad",
-      "landmark": "Near the park",
-      "pincode": "500001"
-    },
-    "items": [
-      {
-        "productId": "<productId>",
-        "productName": "Mutton",
-        "selectionType": "weight",
-        "quantity": 0.5,
-        "price": 400
-      }
-    ],
-    "totalAmount": 400,
-    "orderStatus": "placed",
-    "paymentStatus": "pending",
-    "createdAt": "<ISO-8601>",
-    "updatedAt": "<ISO-8601>"
-  }
-}
-```
-
-Each order line's `price` is the full line total, not unit price. `totalAmount` and line `price` are in rupees, rounded to paise precision. Order name, price, quantity, and address are snapshots; later product/address edits do not change this order.
-
-The first request returns `201 Created`; a replay of a completed key returns `200 OK` with the original order, even after checkout has emptied the cart.
-
-**Important errors:**
-
-- `400`: Invalid body, empty/zero-value checkout, or selected store has no cart items.
-- `401`: Unauthorized.
-- `404`: User or saved address not found.
-- `409`: Empty cart, missing/out-of-stock/invalid cart product, or multi-store cart without `storeId`.
-- `409`: The supplied key is currently in progress.
-- Transaction failure if MongoDB is not configured as a replica set or another transaction-capable deployment.
+This endpoint is not available. For new purchases, an order is created only after the payment provider confirms a captured payment through `POST /payments/razorpay/verify`. Use the checkout payment endpoint documented in the Payments section to start checkout. A failed or dismissed payment does not create an order and leaves cart items unchanged.
 
 ### `GET /orders`
 
@@ -767,16 +701,59 @@ Also returns `404` for an unknown/non-owned order and `401` for unauthorized acc
 
 ## Payments
 
-Payment endpoints should be called only after order creation. Browser code must never receive `RAZORPAY_KEY_SECRET` or `RAZORPAY_WEBHOOK_SECRET`. Razorpay payment amounts use paise, unlike order/product prices which use rupees.
+Payment endpoints integrate Razorpay. Never put `RAZORPAY_KEY_SECRET` or `RAZORPAY_WEBHOOK_SECRET` in browser code. Razorpay payment amounts use paise, unlike order/product prices which use rupees.
+
+### `POST /payments/razorpay/order`
+
+**Access:** Customer
+**Purpose:** Validates the saved address, selected store, cart availability and current prices, then creates a short-lived `CheckoutAttempt` and Razorpay payment order. It does not create an Order or modify the cart.
+
+**Request body:**
+
+```json
+{
+  "addressId": "<savedAddressId>",
+  "storeId": "<storeId>",
+  "idempotencyKey": "<uuid>"
+}
+```
+
+`storeId` may be omitted only if the cart contains products from one store. The key must be a UUID and is scoped to the customer. Reuse it only for retries of the same request; use a new key to begin a new payment attempt.
+
+**Success - `201 Created` (or `200 OK` for an active idempotent retry):**
+
+```json
+{
+  "data": {
+    "razorpayOrderId": "order_...",
+    "keyId": "<public-razorpay-key-id>",
+    "amount": 40000,
+    "currency": "INR"
+  }
+}
+```
+
+`amount` is paise. Use these values to open Razorpay Checkout. No order exists yet and the cart remains unchanged.
+
+**Important errors:** `400` invalid body, empty cart, or non-positive total; `401` unauthorized; `404` user or saved address missing; `409` unavailable/invalid products, selected store mismatch, mixed-store cart without `storeId`, or inactive idempotency key; `503` Razorpay is not configured. MongoDB must support transactions for final order creation.
+
+### `POST /payments/razorpay/:razorpayOrderId/failed`
+
+**Access:** Customer
+**Purpose:** Marks the authenticated customer's checkout attempt failed after the payment window is dismissed or Razorpay reports a failed payment. It never creates an order and does not clear the cart. No request body is required.
+
+**Success - `200 OK`:** `{ "data": { "status": "failed", "orderCreated": false } }`.
+
+**Important errors:** `401` unauthorized; `404` attempt not found or not owned by this customer; `409` payment has already been confirmed.
 
 ### `POST /orders/:orderId/payment`
 
 **Access:** Customer  
-**Purpose:** Creates a Razorpay payment order for the specified customer-owned order, or reuses an existing transaction still in `created` status.
+**Purpose:** Legacy payment retry for an already-persisted unpaid order. New checkouts must use `POST /payments/razorpay/order` instead.
 
 **Request:** No body. Path `orderId` identifies the order; bearer token identifies the customer.
 
-**Success — `201 Created`:**
+**Success - `201 Created`:**
 
 ```json
 {
@@ -790,14 +767,14 @@ Payment endpoints should be called only after order creation. Browser code must 
 }
 ```
 
-`amount` is paise (example: ₹400.00 is `40000`). Use the returned values to initialize Razorpay Checkout. The server derives the amount from the persisted order; the frontend must not substitute its own amount.
+`amount` is paise. The server derives it from the existing order. This endpoint remains for older unpaid orders only.
 
-**Important errors:** `400` amount is not positive; `401` unauthorized; `404` order missing/not owned; `409` order is cancelled, paid, or in a refund state; `503` Razorpay is not configured. MongoDB unique constraints can also reject a concurrent duplicate created transaction with `409`.
+**Important errors:** `400` amount is not positive; `401` unauthorized; `404` order missing/not owned; `409` order is cancelled, paid, or in a refund state; `503` Razorpay is not configured.
 
 ### `POST /payments/razorpay/verify`
 
 **Access:** Customer  
-**Purpose:** Verifies the Razorpay Checkout callback server-side. Checks the signature, fetches the payment from Razorpay, confirms payment/order/amount/currency/captured status, and updates the transaction and order payment status.
+**Purpose:** Verifies the Razorpay Checkout callback server-side. Checks the signature, fetches the payment, and confirms the order, amount, currency, and captured status. For a new checkout it atomically creates the paid order, paid transaction, and placed notification, then removes only the purchased matching cart lines. For a legacy persisted order it updates that order and its transaction. Failed payments never produce a new order.
 
 **Request body:**
 
@@ -1038,7 +1015,7 @@ Allowed requested states: `packing`, `out for delivery`, `delivered`, `cancelled
 - `out for delivery` → `delivered`
 - `delivered` and `cancelled` are terminal
 
-Moving to `packing` requires a captured payment. Cancelling a paid order through this status endpoint is not supported; use the full-refund endpoint. Fulfillment is paused while a refund is pending. An active (`created`) payment transaction prevents cancellation.
+Moving to `packing` requires a captured payment. Cancelling a paid order through this status endpoint is not supported; use the full-refund endpoint, which immediately cancels the order. An active (`created`) payment transaction prevents cancellation.
 
 **Success — `200 OK`:** `{ "data": <updated order> }`.
 
@@ -1046,15 +1023,15 @@ Moving to `packing` requires a captured payment. Cancelling a paid order through
 
 ### `POST /store/orders/:orderId/refund`
 
-**Purpose:** Requests a full Razorpay refund and cancels an eligible order after Razorpay confirms processing.
+**Purpose:** Immediately cancels an eligible order and requests a full Razorpay refund. The order stays cancelled while Razorpay processes the refund.
 
 **Access:** Authenticated store admin. The order must belong to the store in the token, be paid, and be in `placed` or `packing`. No request body is accepted. Partial refunds are not supported.
 
-**Success — `202 Accepted`:** Refund request is pending provider confirmation. Response data contains `orderId`, `refundStatus: "pending"`, and `paymentStatus: "refund_pending"`. Repeating the request returns the existing state and never submits a second Razorpay refund.
+**Success — `202 Accepted`:** The order is cancelled and the refund request is pending provider confirmation. Response data contains `orderId`, `refundStatus: "pending"`, and `paymentStatus: "refund_pending"`. The customer is notified of the cancellation and pending refund. Repeating the request returns the existing state and never submits a second Razorpay refund.
 
-**Success — `200 OK`:** Razorpay has already returned a terminal `processed` or `failed` outcome. A processed refund sets `paymentStatus` to `refunded`, cancels the order, and creates a customer notification. A failed refund sets `paymentStatus` to `refund_failed`; the order remains paid and can continue fulfillment.
+**Success — `200 OK`:** Razorpay has already returned a terminal `processed` or `failed` outcome. A processed refund sets `paymentStatus` to `refunded`. A failed refund sets `paymentStatus` to `refund_failed`; the order remains cancelled, and the customer is notified to contact the store.
 
-**Important errors:** `401` unauthorized; `404` order missing or not owned by this store; `409` order is not eligible or payment/refund state is inconsistent; `502` provider response is uncertain or invalid. For an uncertain provider result, the local refund remains pending; do not retry manually, and wait for the signed webhook or reconcile with Razorpay.
+**Important errors:** `401` unauthorized; `404` order missing or not owned by this store; `409` order is not eligible or payment/refund state is inconsistent; `502` provider response is uncertain or invalid. A `502` can occur after the order has already been cancelled; the local refund remains pending. Do not retry manually; wait for the signed webhook or reconcile with Razorpay.
 
 ### `GET /store/transactions`
 
@@ -1135,8 +1112,8 @@ API errors normally use this shape:
 3. Save the returned JWT and load customer data with `GET /users/me`.
 4. Add/select a delivery address and add selections using `POST /cart/items`.
 5. Review `GET /cart`; resolve unavailable items before checkout.
-6. Submit `POST /orders` with the saved `addressId`, selected `storeId` when needed, and a unique `Idempotency-Key`.
-7. Create the payment order with `POST /orders/:orderId/payment`.
-8. Open Razorpay Checkout using the returned `keyId`, `razorpayOrderId`, `amount` (paise), and `currency`.
-9. Submit the Razorpay callback to `POST /payments/razorpay/verify`.
-10. Fetch `GET /orders/:orderId` to display the backend's current order and payment statuses.
+6. Start payment with `POST /payments/razorpay/order` using the saved `addressId`, selected `storeId` when needed, and a UUID `idempotencyKey`. This creates a checkout attempt, not an order.
+7. Open Razorpay Checkout using the returned `keyId`, `razorpayOrderId`, `amount` (paise), and `currency`.
+8. On a failed or dismissed payment, call `POST /payments/razorpay/:razorpayOrderId/failed`; no order is created and cart items remain.
+9. On payment success, submit the Razorpay callback to `POST /payments/razorpay/verify`. The backend creates the paid order only after provider verification.
+10. Fetch the returned order ID from `GET /orders/:orderId` to display the confirmed order.

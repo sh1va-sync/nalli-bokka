@@ -24,6 +24,35 @@ const storeSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true
+  },
+  storePhone: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  storeNumber: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  googleMapsLink: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  googleMapLink: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  mapLink: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  isOpen: {
+    type: Boolean,
+    default: true
   }
 }, {
   timestamps: true,

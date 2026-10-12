@@ -79,21 +79,21 @@ select:focus-visible {
 @keyframes dashboard-enter {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(14px) scale(0.985);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
 .dashboard-enter {
-  animation: dashboard-enter 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation: dashboard-enter 480ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
 .dashboard-stagger > * {
-  animation: dashboard-enter 380ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation: dashboard-enter 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
 .dashboard-stagger > *:nth-child(2) {
@@ -112,8 +112,29 @@ select:focus-visible {
   animation-delay: 220ms;
 }
 
+@keyframes order-toast-enter {
+  from {
+    opacity: 0;
+    transform: translateX(28px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.order-toast {
+  animation: order-toast-enter 360ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   .dashboard-enter,
+  .order-toast,
   .dashboard-stagger > * {
     animation: none;
   }

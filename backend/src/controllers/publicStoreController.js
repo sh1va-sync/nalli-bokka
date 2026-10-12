@@ -9,7 +9,7 @@ export async function listStores(req, res) {
     : {};
   const [data, total] = await Promise.all([
     Store.find(filter)
-      .select('storeName location')
+      .select('storeName location storePhone storeNumber googleMapsLink googleMapLink mapLink isOpen')
       .sort({ storeName: 1 })
       .skip((page - 1) * limit)
       .limit(limit),
@@ -19,7 +19,7 @@ export async function listStores(req, res) {
 }
 
 export async function getStore(req, res) {
-  const store = await Store.findById(req.validated.params.id).select('storeName location');
+  const store = await Store.findById(req.validated.params.id).select('storeName location storePhone storeNumber googleMapsLink googleMapLink mapLink isOpen');
   if (!store) {
     throw new AppError(404, 'Store not found');
   }
