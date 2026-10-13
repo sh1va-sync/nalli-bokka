@@ -28,11 +28,13 @@ const storeSchema = new mongoose.Schema({
   storePhone: {
     type: String,
     trim: true,
+    maxlength: 30,
     default: ''
   },
   storeNumber: {
     type: String,
     trim: true,
+    maxlength: 30,
     default: ''
   },
   googleMapsLink: {

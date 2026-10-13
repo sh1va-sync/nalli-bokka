@@ -17,7 +17,7 @@ export const api = createApi({
       return headers
     },
   }),
-  tagTypes: ['Stores', 'Products', 'Cart', 'Profile', 'Orders', 'Notifications', 'StoreMe', 'StoreDashboard', 'StoreProducts', 'StoreOrders', 'StoreTransactions'],
+  tagTypes: ['Stores', 'Products', 'Cart', 'Profile', 'Orders', 'Notifications', 'StoreMe', 'StoreDashboard', 'StoreProducts', 'StoreOrders', 'StoreTransactions', 'StoreAudit'],
   endpoints: (builder) => ({
     getStores: builder.query({
       query: (params = {}) => ({ url: '/stores', params }),
@@ -30,10 +30,7 @@ export const api = createApi({
         ...(result?.data || []).map(({ _id }) => ({ type: 'Products', id: _id })),
       ],
     }),
-    requestOtp: builder.mutation({
-      query: (body) => ({ url: '/auth/users/otp', method: 'POST', body }),
-    }),
-    verifyOtp: builder.mutation({
+    verifyFirebasePhoneToken: builder.mutation({
       query: (body) => ({ url: '/auth/users/verify', method: 'POST', body }),
     }),
     registerUser: builder.mutation({
@@ -147,25 +144,29 @@ export const api = createApi({
       query: (params = {}) => ({ url: '/store/dashboard', params }),
       providesTags: ['StoreDashboard'],
     }),
+    getStoreAuditEvents: builder.query({
+      query: (params = {}) => ({ url: '/store/audit-events', params }),
+      providesTags: ['StoreAudit'],
+    }),
     getStoreProducts: builder.query({
       query: (params = {}) => ({ url: '/store/products', params }),
       providesTags: ['StoreProducts'],
     }),
     createStoreProduct: builder.mutation({
       query: (body) => ({ url: '/store/products', method: 'POST', body }),
-      invalidatesTags: ['StoreProducts', 'StoreDashboard'],
+      invalidatesTags: ['StoreProducts', 'StoreDashboard', 'StoreAudit'],
     }),
     updateStoreProduct: builder.mutation({
       query: ({ productId, ...body }) => ({ url: `/store/products/${productId}`, method: 'PATCH', body }),
-      invalidatesTags: ['StoreProducts', 'StoreDashboard'],
+      invalidatesTags: ['StoreProducts', 'StoreDashboard', 'StoreAudit'],
     }),
     setStoreProductStock: builder.mutation({
       query: ({ productId, inStock }) => ({ url: `/store/products/${productId}/stock`, method: 'PATCH', body: { inStock } }),
-      invalidatesTags: ['StoreProducts', 'StoreDashboard'],
+      invalidatesTags: ['StoreProducts', 'StoreDashboard', 'StoreAudit'],
     }),
     deleteStoreProduct: builder.mutation({
       query: (productId) => ({ url: `/store/products/${productId}`, method: 'DELETE' }),
-      invalidatesTags: ['StoreProducts', 'StoreDashboard'],
+      invalidatesTags: ['StoreProducts', 'StoreDashboard', 'StoreAudit'],
     }),
     getStoreOrders: builder.query({
       query: (params = {}) => ({ url: '/store/orders', params }),
@@ -173,11 +174,11 @@ export const api = createApi({
     }),
     updateStoreOrderStatus: builder.mutation({
       query: ({ orderId, orderStatus }) => ({ url: `/store/orders/${orderId}/status`, method: 'PATCH', body: { orderStatus } }),
-      invalidatesTags: ['StoreOrders', 'StoreDashboard', 'StoreTransactions'],
+      invalidatesTags: ['StoreOrders', 'StoreDashboard', 'StoreTransactions', 'StoreAudit'],
     }),
     refundStoreOrder: builder.mutation({
       query: (orderId) => ({ url: `/store/orders/${orderId}/refund`, method: 'POST' }),
-      invalidatesTags: ['StoreOrders', 'StoreDashboard', 'StoreTransactions'],
+      invalidatesTags: ['StoreOrders', 'StoreDashboard', 'StoreTransactions', 'StoreAudit'],
     }),
     getStoreTransactions: builder.query({
       query: (params = {}) => ({ url: '/store/transactions', params }),
@@ -189,7 +190,7 @@ export const api = createApi({
         method: 'PATCH',
         body: { isOpen },
       }),
-      invalidatesTags: ['StoreMe', 'StoreDashboard'],
+      invalidatesTags: ['StoreMe', 'StoreDashboard', 'StoreAudit'],
     }),
     exportStoreReport: builder.mutation({
       query: (params) => ({
@@ -204,8 +205,7 @@ export const api = createApi({
 export const {
   useGetStoresQuery,
   useGetProductsQuery,
-  useRequestOtpMutation,
-  useVerifyOtpMutation,
+  useVerifyFirebasePhoneTokenMutation,
   useRegisterUserMutation,
   useGetMeQuery,
   useGetProfileQuery,
@@ -230,6 +230,7 @@ export const {
   useStoreLoginMutation,
   useGetStoreMeQuery,
   useGetStoreDashboardQuery,
+  useGetStoreAuditEventsQuery,
   useGetStoreProductsQuery,
   useCreateStoreProductMutation,
   useUpdateStoreProductMutation,

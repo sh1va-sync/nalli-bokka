@@ -3,6 +3,9 @@ import { after, before, test } from 'node:test';
 import { createHmac } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import app from '../src/app.js';
+import { verifyUserOtp } from '../src/controllers/authController.js';
+import firebaseAuth from '../src/services/firebaseAuth.js';
+import User from '../src/models/User.js';
 import { schemas } from '../src/validation/schemas.js';
 
 process.env.JWT_SECRET = 'test-secret-that-is-long-enough-for-api-tests';
@@ -87,13 +90,34 @@ test('customer notification endpoints require a customer token', async () => {
   assert.equal(response.status, 401);
 });
 
-test('malformed auth input is rejected before provider or database calls', async () => {
-  const otp = await fetch(`${baseUrl}/auth/users/otp`, {
+test('Firebase phone sign-in token is required before auth verification', async () => {
+  const missingToken = await fetch(`${baseUrl}/auth/users/verify`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ phone: 'not-a-phone' })
+    body: JSON.stringify({})
   });
-  assert.equal(otp.status, 400);
+  assert.equal(missingToken.status, 400);
+
+  const legacyOtpBody = await fetch(`${baseUrl}/auth/users/verify`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ phone: '+15551234567', code: '123456' })
+  });
+  assert.equal(legacyOtpBody.status, 400);
+
+  const malformedToken = await fetch(`${baseUrl}/auth/users/verify`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ firebaseIdToken: '' })
+  });
+  assert.equal(malformedToken.status, 400);
+
+  const retiredOtpEndpoint = await fetch(`${baseUrl}/auth/users/otp`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ phone: '+15551234567' })
+  });
+  assert.equal(retiredOtpEndpoint.status, 404);
 
   const login = await fetch(`${baseUrl}/auth/stores/login`, {
     method: 'POST',
@@ -101,6 +125,56 @@ test('malformed auth input is rejected before provider or database calls', async
     body: JSON.stringify({ username: '', password: '' })
   });
   assert.equal(login.status, 400);
+});
+
+test('Firebase phone token claims determine the customer login identity', async () => {
+  const originalVerifyIdToken = firebaseAuth.verifyIdToken;
+  const originalFindOne = User.findOne;
+  firebaseAuth.verifyIdToken = async token => {
+    assert.equal(token, 'valid-firebase-id-token');
+    return {
+      phone_number: '+15551234567',
+      firebase: { sign_in_provider: 'phone' }
+    };
+  };
+  User.findOne = async filter => {
+    assert.deepEqual(filter, { phone: '+15551234567' });
+    return { _id: '507f1f77bcf86cd799439011', phone: '+15551234567' };
+  };
+
+  try {
+    const response = await fetch(`${baseUrl}/auth/users/verify`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ firebaseIdToken: 'valid-firebase-id-token' })
+    });
+    const result = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(result.user.phone, '+15551234567');
+    assert.equal(jwt.verify(result.token, process.env.JWT_SECRET).role, 'user');
+  } finally {
+    firebaseAuth.verifyIdToken = originalVerifyIdToken;
+    User.findOne = originalFindOne;
+  }
+});
+
+test('invalid Firebase ID tokens return unauthorized', async () => {
+  const originalVerifyIdToken = firebaseAuth.verifyIdToken;
+  firebaseAuth.verifyIdToken = async () => {
+    throw Object.assign(new Error('Invalid Firebase token'), { code: 'auth/invalid-id-token' });
+  };
+
+  try {
+    const response = await fetch(`${baseUrl}/auth/users/verify`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ firebaseIdToken: 'invalid-firebase-id-token' })
+    });
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).error, 'Firebase phone verification is invalid or expired');
+  } finally {
+    firebaseAuth.verifyIdToken = originalVerifyIdToken;
+  }
 });
 
 test('dashboard period boundaries must be supplied together in chronological order', () => {

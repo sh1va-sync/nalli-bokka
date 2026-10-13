@@ -4,6 +4,7 @@ import {
   deleteProduct,
   exportStoreReport,
   getDashboard,
+  listStoreAuditEvents,
   getStoreTransaction,
   listStoreProducts,
   listStoreTransactions,
@@ -26,6 +27,7 @@ router.use(authenticate('store'));
 
 router.patch('/status', validate(schemas.storeStatusUpdate), updateStoreStatus);
 router.get('/dashboard', validate(schemas.dashboard), getDashboard);
+router.get('/audit-events', validate(schemas.storeAuditEventList), listStoreAuditEvents);
 router.get('/products', validate(schemas.storeProductList), listStoreProducts);
 router.post('/products', validate(schemas.productCreate), createProduct);
 router.patch('/products/:productId', validate(schemas.productUpdate), updateProduct);

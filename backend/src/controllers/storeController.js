@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import AuditEvent from '../models/AuditEvent.js';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
 import Store from '../models/Store.js';
@@ -8,6 +9,7 @@ import Transaction from '../models/Transaction.js';
 import AppError from '../utils/AppError.js';
 import escapeRegex from '../utils/escapeRegex.js';
 import { roundToPaise } from '../utils/pricing.js';
+import { recordStoreAudit } from '../services/audit.js';
 
 const PRODUCT_FIELDS = [
   'productType',
@@ -19,11 +21,41 @@ const PRODUCT_FIELDS = [
   'packs'
 ];
 
+export async function listStoreAuditEvents(req, res) {
+  const { page, limit } = req.validated.query;
+  const filter = { actorId: req.auth.id };
+  const [data, total] = await Promise.all([
+    AuditEvent.find(filter)
+      .select('action entityType entityId previousState nextState changedFields requestId createdAt')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit),
+    AuditEvent.countDocuments(filter)
+  ]);
+  res.json({ data, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+}
+
 export async function createProduct(req, res) {
-  const product = await Product.create({
-    ...req.validated.body,
-    storeId: req.auth.id
-  });
+  const session = await Product.db.startSession();
+  let product;
+  try {
+    await session.withTransaction(async () => {
+      [product] = await Product.create([{
+        ...req.validated.body,
+        storeId: req.auth.id
+      }], { session });
+      await recordStoreAudit({
+        session,
+        req,
+        action: 'product.created',
+        entityType: 'product',
+        entityId: product._id,
+        changedFields: Object.keys(req.validated.body)
+      });
+    });
+  } finally {
+    await session.endSession();
+  }
   res.status(201).json({ data: product });
 }
 
@@ -44,60 +76,128 @@ export async function listStoreProducts(req, res) {
 }
 
 export async function updateProduct(req, res) {
-  const product = await Product.findOne({
-    _id: req.validated.params.productId,
-    storeId: req.auth.id
-  });
-  if (!product) {
-    throw new AppError(404, 'Product not found');
-  }
-
-  for (const field of PRODUCT_FIELDS) {
-    if (req.validated.body[field] !== undefined) {
-      if (['pricePerKg', 'pieceWeightGrams'].includes(field) && req.validated.body[field] === null) {
-        product.set(field, undefined);
-      } else {
-        product.set(field, req.validated.body[field]);
+  const session = await Product.db.startSession();
+  let product;
+  try {
+    await session.withTransaction(async () => {
+      product = await Product.findOne({
+        _id: req.validated.params.productId,
+        storeId: req.auth.id
+      }).session(session);
+      if (!product) {
+        throw new AppError(404, 'Product not found');
       }
-    }
+
+      const changedFields = PRODUCT_FIELDS.filter(field => req.validated.body[field] !== undefined);
+      for (const field of changedFields) {
+        if (['pricePerKg', 'pieceWeightGrams'].includes(field) && req.validated.body[field] === null) {
+          product.set(field, undefined);
+        } else {
+          product.set(field, req.validated.body[field]);
+        }
+      }
+      await product.save({ session });
+      await recordStoreAudit({
+        session,
+        req,
+        action: 'product.updated',
+        entityType: 'product',
+        entityId: product._id,
+        changedFields
+      });
+    });
+  } finally {
+    await session.endSession();
   }
-  await product.save();
   res.json({ data: product });
 }
 
 export async function deleteProduct(req, res) {
-  const product = await Product.findOneAndDelete({
-    _id: req.validated.params.productId,
-    storeId: req.auth.id
-  });
-  if (!product) {
-    throw new AppError(404, 'Product not found');
+  const session = await Product.db.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const product = await Product.findOneAndDelete({
+        _id: req.validated.params.productId,
+        storeId: req.auth.id
+      }, { session });
+      if (!product) {
+        throw new AppError(404, 'Product not found');
+      }
+      await recordStoreAudit({
+        session,
+        req,
+        action: 'product.deleted',
+        entityType: 'product',
+        entityId: product._id,
+        changedFields: ['deleted']
+      });
+    });
+  } finally {
+    await session.endSession();
   }
   res.status(204).end();
 }
 
 export async function updateStock(req, res) {
-  const product = await Product.findOne({
-    _id: req.validated.params.productId,
-    storeId: req.auth.id
-  });
-  if (!product) {
-    throw new AppError(404, 'Product not found');
+  const session = await Product.db.startSession();
+  let product;
+  try {
+    await session.withTransaction(async () => {
+      product = await Product.findOne({
+        _id: req.validated.params.productId,
+        storeId: req.auth.id
+      }).session(session);
+      if (!product) {
+        throw new AppError(404, 'Product not found');
+      }
+      const previousState = String(product.inStock);
+      product.inStock = req.validated.body.inStock;
+      await product.save({ session });
+      await recordStoreAudit({
+        session,
+        req,
+        action: 'product.stock_updated',
+        entityType: 'product',
+        entityId: product._id,
+        previousState,
+        nextState: String(product.inStock),
+        changedFields: ['inStock']
+      });
+    });
+  } finally {
+    await session.endSession();
   }
-  product.inStock = req.validated.body.inStock;
-  await product.save();
   res.json({ data: product });
 }
 
 export async function updateStoreStatus(req, res) {
-  const store = await Store.findById(req.auth.id);
-  if (!store) {
-    throw new AppError(404, 'Store not found');
-  }
+  const session = await Store.db.startSession();
+  let store;
+  try {
+    await session.withTransaction(async () => {
+      store = await Store.findById(req.auth.id).session(session);
+      if (!store) {
+        throw new AppError(404, 'Store not found');
+      }
 
-  const { isOpen } = req.validated.body;
-  store.isOpen = Boolean(isOpen);
-  await store.save();
+      const { isOpen } = req.validated.body;
+      const previousState = String(store.isOpen);
+      store.isOpen = isOpen;
+      await store.save({ session });
+      await recordStoreAudit({
+        session,
+        req,
+        action: 'store.open_status_updated',
+        entityType: 'store',
+        entityId: store._id,
+        previousState,
+        nextState: String(store.isOpen),
+        changedFields: ['isOpen']
+      });
+    });
+  } finally {
+    await session.endSession();
+  }
 
   res.json({
     data: {

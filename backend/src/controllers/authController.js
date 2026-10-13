@@ -1,8 +1,18 @@
 import jwt from 'jsonwebtoken';
 import Store from '../models/Store.js';
 import User from '../models/User.js';
-import twilioVerify from '../services/twilioVerify.js';
+import firebaseAuth from '../services/firebaseAuth.js';
 import AppError from '../utils/AppError.js';
+
+const invalidFirebaseTokenCodes = new Set([
+  'auth/argument-error',
+  'auth/id-token-expired',
+  'auth/id-token-revoked',
+  'auth/invalid-id-token',
+  'auth/invalid-claims',
+  'auth/tenant-id-mismatch',
+  'auth/user-disabled'
+]);
 
 function createToken(subject, role) {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
@@ -28,16 +38,20 @@ function createRegistrationToken(phone) {
   });
 }
 
-export async function requestUserOtp(req, res) {
-  await twilioVerify.send(req.body.phone);
-  res.status(202).json({ message: 'Verification code sent' });
-}
-
 export async function verifyUserOtp(req, res) {
-  const { phone, code } = req.body;
-  const approved = await twilioVerify.check(phone, code);
-  if (!approved) {
-    throw new AppError(401, 'Invalid or expired verification code');
+  let decodedToken;
+  try {
+    decodedToken = await firebaseAuth.verifyIdToken(req.body.firebaseIdToken);
+  } catch (error) {
+    if (invalidFirebaseTokenCodes.has(error.code)) {
+      throw new AppError(401, 'Firebase phone verification is invalid or expired');
+    }
+    throw error;
+  }
+
+  const phone = decodedToken.phone_number;
+  if (!phone || decodedToken.firebase?.sign_in_provider !== 'phone') {
+    throw new AppError(401, 'A verified Firebase phone sign-in is required');
   }
 
   const user = await User.findOne({ phone });

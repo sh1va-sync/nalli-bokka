@@ -31,8 +31,9 @@ function errorHandler(err, req, res, _next) {
       method: req.method,
       path: req.originalUrl.split('?')[0],
       statusCode: status,
-      message: err.message,
-      stack: err.stack
+      ...(process.env.NODE_ENV === 'production'
+        ? { errorType: err.name }
+        : { message: err.message, stack: err.stack })
     }));
   }
   res.status(status).json({ error: message });

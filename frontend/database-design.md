@@ -15,20 +15,22 @@ The application has six core business collections:
 5. `orders`
 6. `transactions`
 
-There are also four supporting collections used for pending checkout attempts, legacy retry records, webhooks, and customer notifications:
+There are also five supporting collections used for pending checkout attempts, legacy retry records, webhooks, customer notifications, and store audit events:
 
 7. `checkoutattempts`
 8. `idempotencykeys` (legacy)
 9. `webhookevents`
 10. `notifications`
+11. `auditevents`
 
-Checkout attempts hold cart/address snapshots until payment is verified; the other supporting collections track legacy idempotency records, webhook handling, and customer-visible order-status updates.
+Checkout attempts hold cart/address snapshots until payment is verified; the other supporting collections track legacy idempotency records, webhook handling, customer-visible order-status updates, and store-operation history.
 
 ### Core relationship diagram
 
 ```text
 Store 1 ───── * Product
 Store 1 ───── * Order
+Store 1 ───── * AuditEvent
 
 User  1 ───── 0..1 Cart
 User  1 ───── * Order
@@ -70,6 +72,8 @@ Represents a store and its store-admin login identity. It does not contain produ
 | `username` | String | Yes | Login identifier; trimmed, lowercased, unique. |
 | `password` | String | Yes | Bcrypt hash, not plaintext. Password must be at least 8 characters before hashing. Selected out of normal queries and removed during JSON serialization. |
 | `location` | String | Yes | Store location text; trimmed. |
+| `storePhone` | String | No | Public store contact number, trimmed, maximum 30 characters. Used by customer order support call links. |
+| `storeNumber` | String | No | Legacy/public alternate contact number, trimmed, maximum 30 characters. |
 | `createdAt` | Date | Generated | Record creation time. |
 | `updatedAt` | Date | Generated | Last document save time. |
 
@@ -79,7 +83,7 @@ Represents a store and its store-admin login identity. It does not contain produ
 - Normal queries exclude `password`; JSON serialization explicitly removes it.
 - Login must select the password hash internally to compare it, but the login response returns only store ID, name, username, and location.
 - Store documents are created through the trusted `npm run create-store` script; public store registration is not available.
-- Public store endpoints select only `_id`, `storeName`, and `location`.
+- Public store endpoints select store name/location, configured public phone/map links, and open state; they never return the password.
 - Store-only APIs use the store ID from the signed-in store JWT; the frontend must not send a store ID to choose which store to manage.
 
 ### Indexes and uniqueness
@@ -608,7 +612,35 @@ Stores in-app customer updates when payment places an order and when a store cha
 - The customer API exposes paginated list, mark-one-read, and mark-all-read operations; it never accepts a client-supplied `userId`.
 - This feature is in-app only; it does not send SMS, WhatsApp, or email.
 
-## 11. Data flow by user action
+## 11. Audit event collection — `auditevents`
+
+Records store-admin actions that change order state, refunds, product data/stock, or store availability. Audit events are written in the same MongoDB transaction as the associated change.
+
+### Fields and retention
+
+| Field | Database type | Required | Description |
+| --- | --- | --- | --- |
+| `_id` | ObjectId | Generated | Audit event identifier. |
+| `actorId` | ObjectId → Store | Yes | Authenticated store that performed the action. |
+| `actorRole` | String enum | Yes | Currently `store`. |
+| `action` | String enum | Yes | Operation such as `order.status_updated`, `order.refund_requested`, or `product.stock_updated`. |
+| `entityType` | String enum | Yes | Affected entity type: `order`, `product`, or `store`. |
+| `entityId` | ObjectId | Yes | ID of the affected record. |
+| `previousState`, `nextState` | String | No | State values for status or availability transitions. |
+| `changedFields` | String array | No | Field names only; does not include customer PII or arbitrary request data. |
+| `requestId` | String | No | Correlates the mutation with the API request log. |
+| `createdAt` | Date | Generated | Event time. |
+
+The TTL index removes events after 365 days. MongoDB TTL deletion is asynchronous, so the period is approximate. Do not use this collection as an immutable legal or financial ledger; retain the authoritative order/transaction records under the applicable business and legal retention policy.
+
+### Indexes and behavior
+
+- `{ createdAt: 1 }` expires old audit events after one year.
+- `{ actorId: 1, createdAt: -1 }` supports store action history.
+- `{ entityType: 1, entityId: 1, createdAt: -1 }` supports per-order/product/store history.
+- The audit collection is backend-only and has no public listing endpoint.
+
+## 12. Data flow by user action
 
 ### Browsing a product
 
@@ -633,7 +665,7 @@ Stores in-app customer updates when payment places an order and when a store cha
 5. Only after the provider confirms a captured payment does verification/webhook processing atomically create a paid Order and Transaction, add the placed Notification, link the attempt to the order, and remove matching purchased cart lines.
 6. CheckoutAttempt records expire after 24 hours. Razorpay webhooks may finalize a captured payment if the browser callback is unavailable.
 
-## 12. Atomicity and deployment requirements
+## 13. Atomicity and deployment requirements
 
 Checkout payment initialization writes only a CheckoutAttempt; it does not write an Order or modify a Cart. Successful payment settlement creates an Order and Transaction, updates the CheckoutAttempt, removes purchased Cart lines, and creates the placed Notification in one transaction. Failed attempts do not create orders. Store order-status changes update the Order and create its customer Notification together. These operations rely on MongoDB transactions.
 
@@ -641,7 +673,7 @@ MongoDB transactions require a replica set or sharded cluster. A single-node rep
 
 The transaction boundary protects multi-document database changes, but calls to external services such as Razorpay happen outside MongoDB and are not part of a MongoDB transaction.
 
-## 13. What the frontend should treat as authoritative
+## 14. What the frontend should treat as authoritative
 
 | Concern | Authoritative source |
 | --- | --- |
@@ -664,7 +696,7 @@ Do not:
 - Expose a store password hash, JWT signing secret, Razorpay secret, or webhook secret.
 - Store order/cart arrays inside Store or User documents; those relationships are queried by reference.
 
-## 14. Related documentation
+## 15. Related documentation
 
 - [API endpoint reference](./api-endpoints.md) — endpoint purpose, required request data, responses, and errors.
 - [Server and full API documentation](./documentation.md) — project setup, architecture, endpoint overview, validation, and operational notes.

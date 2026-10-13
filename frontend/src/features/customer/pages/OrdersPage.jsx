@@ -32,6 +32,43 @@ function OrderProgress({ status }) {
   </div>
 }
 
+function RefundDetails({ refund, paymentStatus }) {
+  const refundStatus = refund?.status || {
+    refund_pending: 'pending',
+    refunded: 'processed',
+    refund_failed: 'failed',
+  }[paymentStatus]
+  if (!refundStatus) return null
+
+  const statusStyles = {
+    pending: 'bg-amber-50 text-amber-800',
+    processed: 'bg-emerald-50 text-emerald-800',
+    failed: 'bg-rose-50 text-rose-800',
+  }
+  const statusMessages = {
+    pending: 'The store has cancelled your order and requested a full refund. Razorpay is processing it; the status will update here when confirmed.',
+    processed: 'Razorpay has marked the refund as processed. Your bank or UPI provider may take around 5–7 business days to credit it.',
+    failed: 'The refund attempt could not be completed. Your order remains cancelled; please contact the store for help with the refund.',
+  }
+  const formatDate = (value) => value
+    ? new Date(value).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+    : null
+
+  return <section className="mt-4 rounded-2xl border border-[#eadfd7] bg-white p-5">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div><p className="text-[10px] font-bold uppercase tracking-wider text-[#8b988a]">Refund details</p><h2 className="mt-1 text-base font-extrabold text-[#2d4834]">Full order refund</h2></div>
+      <span className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${statusStyles[refundStatus] || statusStyles.pending}`}>{refundStatus}</span>
+    </div>
+    <p className="mt-3 text-sm leading-6 text-[#765f55]">{statusMessages[refundStatus] || statusMessages.pending}</p>
+    <dl className="mt-4 grid gap-3 border-t border-[#edf0e9] pt-4 text-xs sm:grid-cols-2">
+      {refund?.amount != null && <div><dt className="text-[#8b988a]">Refund amount</dt><dd className="mt-1 font-bold text-[#34553e]">{formatPrice(refund.amount)}</dd></div>}
+      {formatDate(refund?.requestedAt) && <div><dt className="text-[#8b988a]">Requested</dt><dd className="mt-1 font-semibold text-[#493631]">{formatDate(refund.requestedAt)}</dd></div>}
+      {formatDate(refund?.updatedAt) && <div><dt className="text-[#8b988a]">Last updated</dt><dd className="mt-1 font-semibold text-[#493631]">{formatDate(refund.updatedAt)}</dd></div>}
+      {refund?.reference && <div><dt className="text-[#8b988a]">Refund reference</dt><dd className="mt-1 break-all font-mono font-semibold text-[#493631]">{refund.reference}</dd></div>}
+    </dl>
+  </section>
+}
+
 export default function OrdersPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [status, setStatus] = useState('all')
@@ -45,6 +82,8 @@ export default function OrdersPage() {
   const [actionMessage, setActionMessage] = useState('')
   const order = detailResponse?.data
   const orders = listResponse?.data || []
+  const storePhone = order?.storeId?.storePhone || order?.storeId?.storeNumber || ''
+  const storePhoneLink = storePhone.replace(/[^\d+]/g, '')
   const cancelAllowed = order
     && ['placed', 'packing'].includes(order.orderStatus)
     && ['pending', 'failed'].includes(order.paymentStatus)
@@ -102,7 +141,14 @@ export default function OrdersPage() {
     {detailLoading ? <p className="mt-8 text-sm text-slate-500">Loading your order…</p> : detailError ? <p role="alert" className="mt-5 rounded-xl bg-rose-50 p-4 text-sm text-rose-800">{getErrorMessage(detailError)}</p> : order && <>
       <div className="mt-5 flex flex-wrap items-end justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.18em] text-[#87a080]">Order details</p><h1 className="mt-1 text-2xl font-black text-[#294632]">Order #{order._id.slice(-8).toUpperCase()}</h1><p className="mt-1 text-xs text-slate-500">{new Date(order.createdAt).toLocaleString('en-IN')}</p></div><StatusPill status={order.orderStatus} /></div>
       <OrderProgress status={order.orderStatus} />
-      <div className="mt-5 grid gap-4 sm:grid-cols-2"><div className="rounded-2xl border border-[#e7ecdf] bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-[#8b988a]">Payment</p><p className="mt-2 text-sm font-bold capitalize text-[#34553e]">{order.paymentStatus.replaceAll('_', ' ')}</p><p className="mt-1 text-xs text-slate-500">{order.paymentStatus === 'refund_pending' ? 'Your order was cancelled by the store. The full refund is pending Razorpay confirmation.' : order.paymentStatus === 'refund_failed' ? 'Your order remains cancelled, but the refund could not be completed. Contact your store for help.' : order.paymentStatus === 'refunded' ? 'Your order was cancelled and your full refund has been processed.' : 'Order status is updated by your store.'}</p></div><div className="rounded-2xl border border-[#e7ecdf] bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-[#8b988a]">Delivering to</p><p className="mt-2 text-sm font-bold text-[#34553e]">{order.deliveryAddress?.label}</p><p className="mt-1 text-xs leading-5 text-slate-500">{order.deliveryAddress?.fullAddress} · {order.deliveryAddress?.pincode}</p></div></div>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2"><div className="rounded-2xl border border-[#e7ecdf] bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-[#8b988a]">Payment</p><p className="mt-2 text-sm font-bold capitalize text-[#34553e]">{order.paymentStatus.replaceAll('_', ' ')}</p><p className="mt-1 text-xs text-slate-500">{['refund_pending', 'refunded', 'refund_failed'].includes(order.paymentStatus) ? 'See the refund details below for its status and reference.' : 'Order status is updated by your store.'}</p></div><div className="rounded-2xl border border-[#e7ecdf] bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-[#8b988a]">Delivering to</p><p className="mt-2 text-sm font-bold text-[#34553e]">{order.deliveryAddress?.label}</p><p className="mt-1 text-xs leading-5 text-slate-500">{order.deliveryAddress?.fullAddress} · {order.deliveryAddress?.pincode}</p></div></div>
+      <section className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#eadfd7] bg-white p-4">
+        <div><p className="text-[10px] font-bold uppercase tracking-wider text-[#8b988a]">Need help with this order?</p><p className="mt-1 text-sm font-semibold text-[#493631]">{order.storeId?.storeName || 'Your store'}</p><p className="mt-1 text-xs text-[#82736d]">Share order #{order._id.slice(-8).toUpperCase()} when you call.</p></div>
+        {storePhoneLink
+          ? <a href={`tel:${storePhoneLink}`} className="inline-flex h-10 items-center rounded-xl bg-[#861923] px-4 text-xs font-bold text-white transition hover:bg-[#70131c]">Call store · {storePhone}</a>
+          : <p className="text-xs text-[#82736d]">This store hasn’t added a contact number yet.</p>}
+      </section>
+      <RefundDetails refund={order.refund} paymentStatus={order.paymentStatus} />
       <section className="mt-4 rounded-2xl border border-[#e7ecdf] bg-white p-5"><h2 className="font-extrabold text-[#2d4834]">What’s in the bag</h2><div className="mt-4 divide-y divide-[#edf0e9]">{order.items?.map((item, index) => <div key={`${item.productId}-${index}`} className="flex justify-between gap-3 py-3 first:pt-0 last:pb-0"><div><p className="text-sm font-semibold text-[#3b5540]">{item.productName}</p><p className="mt-1 text-xs text-slate-500">{item.quantity} {item.selectionType === 'weight' ? 'kg' : item.selectionType === 'pieces' ? 'pieces' : `× ${item.packLabel}`}</p></div><span className="text-sm font-bold text-[#3e6e49]">{formatPrice(item.price)}</span></div>)}</div><div className="mt-4 flex justify-between border-t border-[#edf0e9] pt-4 text-sm"><span className="font-semibold text-slate-500">Total</span><span className="font-extrabold text-[#2d5038]">{formatPrice(order.totalAmount)}</span></div></section>
       {actionMessage && <p role="status" className={`mt-4 rounded-xl p-3 text-sm ${actionMessage.toLowerCase().includes('failed') ? 'bg-rose-50 text-rose-800' : 'bg-[#edf4e8] text-[#3b7049]'}`}>{actionMessage}</p>}
       {paymentAllowed && <button disabled={paymentState.isLoading} onClick={payForCurrentOrder} className="mt-4 rounded-xl bg-[#861923] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#70131c] disabled:opacity-50">{paymentState.isLoading ? 'Connecting to Razorpay…' : 'Pay for this order'}</button>}

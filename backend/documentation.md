@@ -21,7 +21,7 @@ Endpoints in this document are relative to the base URL unless marked otherwise.
 - Node.js 18 or newer
 - npm
 - MongoDB
-- Twilio Verify credentials for real OTP delivery
+- Firebase Phone Authentication and Firebase Admin service-account credentials for OTP
 - Razorpay credentials for online payment
 
 ```powershell
@@ -41,9 +41,9 @@ The server connects to MongoDB before it listens. `npm start` starts without wat
 | `JWT_SECRET` | Yes | Secret used to sign and verify JWTs. Must be at least 32 characters; startup fails otherwise. Use a unique, high-entropy secret. |
 | `JWT_EXPIRES_IN` | No | JWT lifetime accepted by `jsonwebtoken`, for example `7d`; defaults to `7d`. |
 | `CORS_ORIGIN` | No | Comma-separated allow-list of website origins. Defaults to `http://localhost:5173`. Requests without an `Origin` header are allowed. |
-| `TWILIO_ACCOUNT_SID` | For OTP | Twilio account SID. |
-| `TWILIO_AUTH_TOKEN` | For OTP | Twilio auth token. |
-| `TWILIO_VERIFY_SERVICE_SID` | For OTP | Twilio Verify service SID. |
+| `FIREBASE_PROJECT_ID` | For OTP | Firebase project ID used to verify ID tokens. |
+| `FIREBASE_CLIENT_EMAIL` | For OTP | Service-account email from Firebase service-account credentials. |
+| `FIREBASE_PRIVATE_KEY` | For OTP | Service-account private key; keep it secret and encode newlines as `\n` in `.env`. |
 | `RAZORPAY_KEY_ID` | For payments | Razorpay key ID; returned to the frontend when creating a payment order. |
 | `RAZORPAY_KEY_SECRET` | For payments | Razorpay secret used for API access and client-payment signature verification. Never expose it to the frontend. |
 | `RAZORPAY_WEBHOOK_SECRET` | For webhooks | Secret configured for the Razorpay webhook endpoint. Never expose it to the frontend. |
@@ -52,7 +52,7 @@ The server applies Helmet security headers, CORS, a 1 MB JSON body limit, a JSON
 
 ### Console logging
 
-Run `npm run dev` or `npm start` in the foreground to see live logs. Each completed request writes a structured JSON record to stdout with its timestamp, generated request ID, method, path (without query values), status, and duration. The same ID is returned in the `X-Request-Id` response header and included in centralized server-error logs. Successful database connection, server listening, and startup failures are also logged. Request bodies and authorization/cookie headers are never logged; capture the Node process stdout and stderr for production collection.
+Run `npm run dev` or `npm start` in the foreground to see live logs. Each completed request writes a structured JSON record to stdout with its timestamp, generated request ID, method, path (without query values), status, and duration. The same ID is returned in the `X-Request-Id` response header and included in centralized server-error logs. Successful database connection, server listening, and startup failures are also logged. Request bodies and authorization/cookie headers are never logged. In production, server-error logs omit raw error messages and stack traces; development retains these details for debugging. Capture the Node process stdout and stderr for production collection.
 
 ### MongoDB deployment requirement
 
@@ -62,14 +62,14 @@ Order checkout, payment settlement, and store order-status/notification updates 
 
 ### Customer authentication (OTP)
 
-1. Send `POST /auth/users/otp` with the customer's phone number in E.164 format.
-2. The server asks Twilio Verify to send an SMS and returns `202 Accepted`.
-3. Submit the phone and received code to `POST /auth/users/verify`.
+1. The browser sends the customer's E.164 phone number to Firebase Phone Authentication, protected by Firebase's reCAPTCHA verifier.
+2. The customer enters the received code; Firebase returns a signed ID token.
+3. Submit that token to `POST /auth/users/verify`; Firebase Admin verifies its signature and phone sign-in provider.
 4. Existing customers receive a JWT and profile. First-time customers receive a short-lived registration token.
 5. First-time customers submit that token, a required name, and optional email to `POST /auth/users/register`; the response contains their JWT and profile.
 6. Send the customer JWT as `Authorization: Bearer <token>` for customer routes.
 
-OTP request and verification share a rate limit of 5 requests per 10 minutes per client IP. Store login is limited to 10 attempts per 15 minutes per client IP. Rate-limit responses have an `error` string.
+Firebase applies phone-SMS quotas and abuse protection. API token verification and registration share a rate limit of 5 requests per 10 minutes per client IP. Store login is limited to 10 attempts per 15 minutes per client IP. Rate-limit responses have an `error` string.
 
 ### Store-admin authentication
 
@@ -123,33 +123,15 @@ Public readiness check for deployment probes. Returns `200` only when the MongoD
 { "status": "not_ready" }
 ```
 
-#### `POST /auth/users/otp`
-
-Public. Requests a Twilio Verify SMS.
-
-Request:
-
-```json
-{ "phone": "+15551234567" }
-```
-
-`phone` must be E.164 format: plus sign followed by 8–15 digits, with a nonzero first digit.
-
-Success (`202`):
-
-```json
-{ "message": "Verification code sent" }
-```
-
-Possible errors: `400` invalid phone; `429` rate limit exceeded; `503` Twilio is not configured. Twilio/provider failures are reported through the centralized error handler.
-
 #### `POST /auth/users/verify`
 
-Public. Verifies the code using Twilio Verify. The request contains only `phone` (E.164) and `code` (4–10 digits).
+Public. Verifies a Firebase ID token produced by Firebase Phone Authentication after the customer enters the SMS code. Firebase handles SMS delivery and reCAPTCHA in the browser; the API verifies the token with Firebase Admin.
+
+Request: `{ "firebaseIdToken": "<firebase-id-token>" }`. The token's verified `phone_number` claim supplies the account phone, and its sign-in provider must be `phone`.
 
 Existing customers receive `{ "isNewUser": false, "token": "<jwt>", "user": <user> }` with status `200`. First-time customers receive `{ "isNewUser": true, "verificationToken": "<short-lived-registration-jwt>" }` with status `200`; this token expires after 10 minutes and is not an authenticated customer token.
 
-Possible errors: `400` invalid request; `401` invalid/expired OTP; `429` rate limit exceeded; `503` Twilio or JWT configuration unavailable.
+Possible errors: `400` invalid request; `401` invalid/expired Firebase ID token or non-phone sign-in; `429` rate limit exceeded; `503` Firebase Admin or JWT configuration unavailable.
 
 #### `POST /auth/users/register`
 
@@ -376,8 +358,22 @@ Response: paginated envelope. `storeId` is populated with `storeName` and `locat
 Returns one order owned by the current user, with populated store details:
 
 ```json
-{ "data": { "...": "order", "storeId": { "_id": "...", "storeName": "...", "location": "..." } } }
+{
+  "data": {
+    "...": "order",
+    "storeId": { "_id": "...", "storeName": "...", "location": "..." },
+    "refund": {
+      "status": "processed",
+      "amount": 400,
+      "reference": "rfnd_example",
+      "requestedAt": "<ISO-8601>",
+      "updatedAt": "<ISO-8601>"
+    }
+  }
+}
 ```
+
+The `refund` field is `null` when no refund has been requested. Otherwise it includes the current provider status, amount in rupees, provider reference when available, request time, and last status update time.
 
 Returns `404` when the order is missing or belongs to another user.
 
@@ -614,7 +610,9 @@ Returns a transaction only if its associated order belongs to this store. Succes
 
 ## 5. Data models and relationships
 
-Mongoose models use MongoDB collections `stores`, `users`, `products`, `carts`, `orders`, `transactions`, and the supporting collections `idempotencykeys`, `webhookevents`, and `notifications`. Each model uses MongoDB `_id`; timestamps are present on Store, User, Product, Cart, Order, and Notification. Transaction uses `timestamp` for payment activity. All references below are ObjectIds.
+Mongoose models use MongoDB collections `stores`, `users`, `products`, `carts`, `orders`, `transactions`, and the supporting collections `idempotencykeys`, `webhookevents`, `notifications`, and `auditevents`. Each model uses MongoDB `_id`; timestamps are present on Store, User, Product, Cart, Order, Notification, and AuditEvent. Transaction uses `timestamp` for payment activity. All references below are ObjectIds.
+
+Store order-status changes, refund requests, product creation/updates/deletion, stock changes, and store open/close changes write a store-scoped audit event in the same transaction. Audit records contain IDs, action/state metadata, changed field names, and the request ID—not customer contact/address data or raw request bodies. A MongoDB TTL index expires records after one year; TTL removal is asynchronous. Audit records are not a substitute for financial ledgers or legal records.
 
 ### Store (`stores`)
 
@@ -798,7 +796,7 @@ src/
   middleware/            Authentication, validation, 404, error handling
   models/                Mongoose document schemas and indexes
   routes/                Endpoint declarations and role protection
-  services/              Twilio Verify and Razorpay client wrappers
+  services/              Firebase Admin token verification and Razorpay client wrappers
   utils/                 Application errors, pricing, regex escaping
   validation/schemas.js  Zod request schemas
 scripts/
@@ -812,7 +810,7 @@ The API router is mounted under `/api`. The raw Razorpay webhook route is mounte
 
 ## 9. Scope and known limitations
 
-- OTP delivery requires configured Twilio Verify credentials and may incur provider costs.
+- OTP delivery requires Firebase Phone Authentication, frontend Firebase web configuration, Firebase Admin service-account credentials on the API, and authorized frontend domains. Firebase quotas and billing depend on the project plan.
 - Online payment flows require configured Razorpay keys; webhook processing additionally requires its webhook secret.
 - Transactions require a replica set or equivalent transaction-capable MongoDB deployment.
 - The API has no customer password flow, store self-registration, password-reset flow, refresh tokens, partial refunds, shipping-rate calculation, or file-upload endpoint.

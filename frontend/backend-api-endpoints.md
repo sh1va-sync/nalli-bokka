@@ -25,7 +25,7 @@ Local development:
 http://localhost:3000/api
 ```
 
-Append each endpoint path below to the base URL. For example, the full local OTP URL is `http://localhost:3000/api/auth/users/otp`.
+Append each endpoint path below to the base URL. Firebase sends and verifies the OTP in the browser; the API accepts the resulting Firebase ID token.
 
 ### Headers
 
@@ -112,50 +112,20 @@ Pagination query parameters are `page` (default `1`, integer >= 1) and `limit` (
 { "status": "not_ready" }
 ```
 
-### `POST /auth/users/otp`
-
-**Access:** Public  
-**Purpose:** Requests a Twilio Verify SMS code for a customer phone number. This endpoint does not create a customer account or return a token.
-
-**Request body:**
-
-```json
-{ "phone": "+15551234567" }
-```
-
-`phone` is required and must use E.164 format (`+` followed by 8–15 digits, first digit nonzero).
-
-**Success — `202 Accepted`:**
-
-```json
-{ "message": "Verification code sent" }
-```
-
-**Important errors and behavior:**
-
-- `400`: Invalid phone or extra/unrecognized request fields.
-- `429`: More than 5 OTP request/verification attempts within the 10-minute rate-limit window for the client IP.
-- `503`: Twilio Verify is not configured.
-- The SMS delivery is handled by Twilio; the frontend should wait for the user to enter the received code.
-
 ### `POST /auth/users/verify`
 
 **Access:** Public  
-**Purpose:** Validates the SMS code. Existing customers receive a customer token; first-time customers receive a short-lived registration token and must finish account creation.
+**Purpose:** Verifies the Firebase ID token returned after Firebase Phone Authentication confirms the SMS code. Existing customers receive a customer token; first-time customers receive a short-lived registration token and must finish account creation.
 
 **Request body:**
 
 ```json
 {
-  "phone": "+15551234567",
-  "code": "123456"
+  "firebaseIdToken": "<firebase-id-token>"
 }
 ```
 
-| Field | Requirement |
-| --- | --- |
-| `phone` | Required; E.164 format and should be the number used to request the OTP. |
-| `code` | Required; 4–10 numeric digits. |
+The token must come from Firebase phone sign-in and contain a verified phone number. The API verifies its signature with Firebase Admin; it does not accept a phone number or OTP code as proof of identity.
 
 **Success for an existing customer — `200 OK`:**
 
@@ -207,10 +177,10 @@ For a first-time customer, the response is instead:
 **Important errors and behavior:**
 
 - `400`: Invalid body or extra/unrecognized request fields.
-- `401`: Invalid or expired code.
+- `401`: Invalid or expired registration token.
 - `409`: An account already exists for the verified phone, or email is already used by another account.
-- `429`: OTP endpoint rate limit exceeded.
-- `503`: Twilio or secure JWT configuration is unavailable.
+- `429`: Authentication endpoint rate limit exceeded.
+- `503`: Firebase Admin or secure JWT configuration is unavailable.
 
 ### `POST /auth/stores/login`
 
@@ -448,7 +418,9 @@ Use the returned `_id` for future address operations and order checkout.
     {
       "_id": "<storeId>",
       "storeName": "Nalli Bokka",
-      "location": "Hyderabad"
+      "location": "Hyderabad",
+      "storePhone": "+911234567890",
+      "storeNumber": ""
     }
   ],
   "pagination": { "page": 1, "limit": 20, "total": 1, "pages": 1 }
@@ -674,12 +646,23 @@ This endpoint is not available. For new purchases, an order is created only afte
     "items": [],
     "totalAmount": 400,
     "orderStatus": "placed",
-    "paymentStatus": "pending"
+    "paymentStatus": "pending",
+    "refund": null
   }
 }
 ```
 
-Other order fields such as the delivery-address snapshot and timestamps are included in the returned document.
+Other order fields such as the delivery-address snapshot and timestamps are included in the returned document. The populated store includes its public contact fields for order-related support. When the order has a refund, `refund` contains its `status` (`pending`, `processed`, or `failed`), `amount`, provider `reference` when available, `requestedAt`, and `updatedAt`. For example:
+
+```json
+{
+  "status": "processed",
+  "amount": 400,
+  "reference": "rfnd_example",
+  "requestedAt": "<ISO-8601>",
+  "updatedAt": "<ISO-8601>"
+}
+```
 
 **Important errors:** `400` invalid ObjectId; `401` unauthorized; `404` order does not exist or is not owned by this user.
 
@@ -735,7 +718,7 @@ Payment endpoints integrate Razorpay. Never put `RAZORPAY_KEY_SECRET` or `RAZORP
 
 `amount` is paise. Use these values to open Razorpay Checkout. No order exists yet and the cart remains unchanged.
 
-**Important errors:** `400` invalid body, empty cart, or non-positive total; `401` unauthorized; `404` user or saved address missing; `409` unavailable/invalid products, selected store mismatch, mixed-store cart without `storeId`, or inactive idempotency key; `503` Razorpay is not configured. MongoDB must support transactions for final order creation.
+**Important errors:** `400` invalid body, empty cart, or non-positive total; `401` unauthorized; `404` user or saved address missing; `409` unavailable/invalid products, selected store mismatch, mixed-store cart without `storeId`, inactive idempotency key, or a store that is closed; `503` Razorpay is not configured. MongoDB must support transactions for final order creation.
 
 ### `POST /payments/razorpay/:razorpayOrderId/failed`
 
@@ -838,6 +821,16 @@ Webhook delivery is deduplicated by Razorpay's event ID, so distinct event types
 ## Store dashboard and operations
 
 All routes in this section require a store JWT. Data access is always scoped to the store ID in that token; clients cannot operate on another store's inventory or orders.
+
+### `GET /store/audit-events`
+
+**Purpose:** Lists recent operational changes made by the authenticated store account.
+
+**Query parameters:** Optional `page` (default `1`) and `limit` (default `20`, maximum `100`).
+
+**Success — `200 OK`:** Paginated audit events with action, affected entity ID/type, state transition or changed field names, request ID, and timestamp. The endpoint never returns customer addresses, phone numbers, or arbitrary request payloads.
+
+Events are retained for one year. This endpoint is scoped to the authenticated store.
 
 ### `GET /store/dashboard`
 
@@ -982,9 +975,9 @@ Example:
 
 ### `GET /store/orders`
 
-**Purpose:** Lists orders belonging to this store, newest first.
+**Purpose:** Lists orders belonging to this store. Store staff can search by order ID (including the short ID displayed in the dashboard), customer name, or phone number; search terms are treated as literal text.
 
-**Query parameters:** Standard pagination; optional `orderStatus` enum: `placed`, `packing`, `out for delivery`, `delivered`, `cancelled`; optional `from` and `to` ISO-8601 timestamps, supplied together, to restrict `createdAt` to `[from, to)`.
+**Query parameters:** Standard pagination; optional `orderStatus` enum: `placed`, `packing`, `out for delivery`, `delivered`, `cancelled`; optional `search` string (1-100 characters); optional `sort`: `newest` (default), `oldest`, `amount_desc`, or `amount_asc`; optional `from` and `to` ISO-8601 timestamps, supplied together, to restrict `createdAt` to `[from, to)`.
 
 **Success — `200 OK`:** Paginated orders. `userId` is populated with the customer `name` and `phone`; `storeId` is populated with public store fields.
 
@@ -1096,19 +1089,19 @@ API errors normally use this shape:
 | Status | Typical meaning |
 | --- | --- |
 | `400 Bad Request` | Invalid request body/query/path parameter, unsupported selection, or malformed JSON. |
-| `401 Unauthorized` | Missing/invalid/expired token, invalid OTP, or invalid store credentials. |
+| `401 Unauthorized` | Missing/invalid/expired token, invalid Firebase phone token, or invalid store credentials. |
 | `403 Forbidden` | Token is valid but belongs to the wrong role. |
 | `404 Not Found` | Resource is missing or is outside the authenticated account's scope. |
 | `409 Conflict` | State transition, inventory, payment, idempotency, or uniqueness conflict. |
 | `413 Payload Too Large` | Request body exceeds 1 MB. |
 | `429 Too Many Requests` | Authentication rate limit exceeded. |
-| `503 Service Unavailable` | Required Twilio, Razorpay, or JWT configuration is missing. |
+| `503 Service Unavailable` | Required Firebase Admin, Razorpay, or JWT configuration is missing. |
 | `500 Internal Server Error` | Unexpected server-side failure; response does not expose internal details. |
 
 ## Suggested customer flow
 
 1. Browse `GET /stores` and `GET /products`.
-2. Request an OTP with `POST /auth/users/otp`; verify using `POST /auth/users/verify`.
+2. Complete Firebase Phone Authentication in the browser, then submit the resulting ID token to `POST /auth/users/verify`.
 3. Save the returned JWT and load customer data with `GET /users/me`.
 4. Add/select a delivery address and add selections using `POST /cart/items`.
 5. Review `GET /cart`; resolve unavailable items before checkout.

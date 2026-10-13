@@ -1,17 +1,17 @@
 # Nalli Bokka API
 
-Express 5 REST API using MongoDB/Mongoose, Twilio Verify for customer phone authentication, JWT bearer tokens, and Razorpay for payments.
+Express 5 REST API using MongoDB/Mongoose, Firebase Authentication for customer phone verification, JWT bearer tokens, and Razorpay for payments.
 
 ## Setup
 
-Requirements: Node.js 18+, npm, MongoDB, a Twilio Verify service, and Razorpay credentials for live payment flows.
+Requirements: Node.js 18+, npm, MongoDB, a Firebase project with Phone sign-in enabled, and Razorpay credentials for live payment flows.
 
 ```powershell
 npm install
 Copy-Item .env.example .env
 ```
 
-Set `MONGODB_URI`, `JWT_SECRET` (generate a unique random value of at least 32 characters), and `CORS_ORIGIN` in `.env`. `CORS_ORIGIN` accepts a comma-separated list of website origins. Add the Twilio Verify credentials to enable phone OTP, and the Razorpay credentials and webhook secret to enable payments. The server starts only after MongoDB connects and the JWT secret is configured.
+Set `MONGODB_URI`, `JWT_SECRET` (generate a unique random value of at least 32 characters), and `CORS_ORIGIN` in `.env`. `CORS_ORIGIN` accepts a comma-separated list of website origins. In Firebase Console, enable Phone Authentication and create a service-account key; set `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY` from that key to verify customer sign-in tokens. Store the private key only on the backend and never commit it. Add the Razorpay credentials and webhook secret to enable payments. The server starts only after MongoDB connects and the JWT secret is configured.
 
 ```powershell
 npm run dev
@@ -19,7 +19,17 @@ npm run dev
 
 The default base URL is `http://localhost:3000/api`. `npm start` runs without watch mode.
 
-Run the automated checks with `npm test`. The purchase integration test starts a temporary MongoDB replica set with `mongodb-memory-server` (the MongoDB binary may be downloaded on its first run) and stubs Razorpay provider calls. It does not use application database data or call live Twilio/Razorpay services.
+### Payment and refund reconciliation
+
+The signed Razorpay webhook remains the primary payment/refund update mechanism. To recover eligible pending records if a webhook is delayed or lost, run this one-shot reconciliation job:
+
+```powershell
+npm run reconcile-payments
+```
+
+It checks pending checkout attempts, created payment transactions, and pending refunds older than `RECONCILE_MIN_AGE_MINUTES` (default 10) against Razorpay. It never initiates a new payment or refund. Configure the command in your deployment scheduler to run periodically (for example, every 10–15 minutes), and alert on a non-zero exit code or `payment.reconciliation.failed` / `refund.reconciliation.failed` logs. The job requires the same database and Razorpay environment configuration as the API.
+
+Run the automated checks with `npm test`. The purchase integration test starts a temporary MongoDB replica set with `mongodb-memory-server` (the MongoDB binary may be downloaded on its first run) and stubs Razorpay provider calls. Tests do not use application database data or call live Firebase/Razorpay services.
 
 ## Provision store/admin accounts
 
@@ -29,16 +39,18 @@ Store registration is deliberately not public. Create store accounts from a trus
 npm run create-store
 ```
 
+The script accepts an optional store phone number. Existing store records need `storePhone` populated in the database before customers can use the order-detail click-to-call action.
+
 ## Authentication
 
-- Customer OTP: request a code, then verify it. Existing customers sign in immediately; first-time customers complete registration with the short-lived verification token and a required name.
+- Customer OTP: Firebase sends/verifies SMS codes in the browser; the API verifies the Firebase ID token. Existing customers sign in immediately; first-time customers complete registration with the short-lived verification token and a required name.
 - Store login: use the provisioned store `username` and password.
 - Authenticated endpoints take `Authorization: Bearer <token>`. Tokens are role-scoped (`user` or `store`) and expire after `JWT_EXPIRES_IN` (default `7d`).
-- OTP request/verification and store login are rate-limited.
+- Firebase enforces phone-SMS quotas; API ID-token verification/registration and store login are rate-limited.
 
 ## Console logging
 
-The API writes structured JSON log entries directly to the process console. Each HTTP response is accompanied by a completion log with timestamp, request ID, method, path, status code, and duration; the response carries the same ID in `X-Request-Id`. Startup, database connection, request failures, and server startup failures are also logged. Request and error logs intentionally exclude request bodies, authorization/cookie headers, and query-string values so OTPs, payment data, and credentials are not copied to console output. For centralized production log collection, capture stdout and stderr from the Node process.
+The API writes structured JSON log entries directly to the process console. Each HTTP response is accompanied by a completion log with timestamp, request ID, method, path, status code, and duration; the response carries the same ID in `X-Request-Id`. Startup, database connection, request failures, and server startup failures are also logged. Request and error logs intentionally exclude request bodies, authorization/cookie headers, and query-string values. Production error logs include the error type but omit raw messages and stack traces; development logs include details for debugging. For centralized production log collection, capture stdout and stderr from the Node process.
 
 ## Endpoints
 
@@ -50,8 +62,7 @@ All endpoints are under `/api`. Protected endpoints require a bearer token of th
 | --- | --- | --- | --- |
 | GET | `/health` | Public | Liveness check; verifies the HTTP process is responding |
 | GET | `/health/ready` | Public | Readiness check; returns 503 when MongoDB is disconnected |
-| POST | `/auth/users/otp` | Public | Send SMS verification code; body `{ "phone": "+15551234567" }` (E.164) |
-| POST | `/auth/users/verify` | Public | Verify OTP; body `{ "phone": "+15551234567", "code": "123456" }`; returns a registration token for new users |
+| POST | `/auth/users/verify` | Public | Verify Firebase phone sign-in; body `{ "firebaseIdToken": "<firebase-id-token>" }`; returns a registration token for new users |
 | POST | `/auth/users/register` | Public + registration token | Create a new customer account with `name` and optional `email` |
 | POST | `/auth/stores/login` | Public | Store login; body `{ "username": "shop", "password": "..." }` |
 | GET | `/auth/me` | User or store | Get current authenticated account |

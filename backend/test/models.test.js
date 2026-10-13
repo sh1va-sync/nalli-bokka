@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import mongoose from 'mongoose';
+import AuditEvent from '../src/models/AuditEvent.js';
 import Cart from '../src/models/Cart.js';
 import CheckoutAttempt from '../src/models/CheckoutAttempt.js';
 import IdempotencyKey from '../src/models/IdempotencyKey.js';
@@ -15,12 +16,31 @@ import { priceSelection } from '../src/utils/pricing.js';
 
 const objectId = () => new mongoose.Types.ObjectId();
 
-test('all ten Mongoose models use their intended collections', () => {
+test('all eleven Mongoose models use their intended collections', () => {
   assert.deepEqual(
-    [Store, User, Product, Cart, Order, Transaction, CheckoutAttempt, IdempotencyKey, WebhookEvent, Notification]
+    [Store, User, Product, Cart, Order, Transaction, CheckoutAttempt, IdempotencyKey, WebhookEvent, Notification, AuditEvent]
       .map(model => model.collection.collectionName),
-    ['stores', 'users', 'products', 'carts', 'orders', 'transactions', 'checkoutattempts', 'idempotencykeys', 'webhookevents', 'notifications']
+    ['stores', 'users', 'products', 'carts', 'orders', 'transactions', 'checkoutattempts', 'idempotencykeys', 'webhookevents', 'notifications', 'auditevents']
   );
+});
+
+test('store audit events keep only action metadata and expire after one year', async () => {
+  const event = new AuditEvent({
+    actorId: objectId(),
+    actorRole: 'store',
+    action: 'product.stock_updated',
+    entityType: 'product',
+    entityId: objectId(),
+    previousState: 'true',
+    nextState: 'false',
+    changedFields: ['inStock'],
+    requestId: 'request-id'
+  });
+  await event.validate();
+  assert.equal(AuditEvent.schema.path('phone'), undefined);
+  assert.ok(AuditEvent.schema.indexes().some(([fields, options]) => (
+    fields.createdAt === 1 && options.expireAfterSeconds === 60 * 60 * 24 * 365
+  )));
 });
 
 test('store password is excluded from normal queries and JSON serialization', () => {
@@ -32,6 +52,23 @@ test('store password is excluded from normal queries and JSON serialization', ()
   });
   assert.equal(Store.schema.path('password').options.select, false);
   assert.equal(JSON.stringify(store).includes('password'), false);
+});
+
+test('store contact numbers are optional and length bounded', async () => {
+  await new Store({
+    storeName: 'Nalli Bokka',
+    username: 'nalli',
+    password: 'long-enough-password',
+    location: 'Hyderabad',
+    storePhone: '+911234567890'
+  }).validate();
+  await assert.rejects(new Store({
+    storeName: 'Nalli Bokka',
+    username: 'nalli',
+    password: 'long-enough-password',
+    location: 'Hyderabad',
+    storePhone: '1'.repeat(31)
+  }).validate(), /storePhone/);
 });
 
 test('order notifications are user-scoped, unread by default, and unique per order status', async () => {

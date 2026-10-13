@@ -53,13 +53,14 @@ try {
   const storeName = (await prompts.question('Store name: ')).trim();
   const username = (await prompts.question('Store username: ')).trim().toLowerCase();
   const location = (await prompts.question('Store location: ')).trim();
+  const storePhone = (await prompts.question('Store phone (optional): ')).trim();
   prompts.close();
   const password = await askHidden('Store password (hidden): ');
-  if (!storeName || !username || !location || password.length < 8) {
-    throw new Error('Store name, username, and location are required; password must be at least 8 characters');
+  if (!storeName || !username || !location || password.length < 8 || (storePhone && !/^\+?[\d() .-]{6,29}$/.test(storePhone))) {
+    throw new Error('Store name, username, and location are required; password must be at least 8 characters; phone must be a valid phone number');
   }
 
-  const store = await Store.create({ storeName, username, location, password });
+  const store = await Store.create({ storeName, username, location, storePhone, password });
   console.log(`Store account "${store.username}" created.`);
 } catch (error) {
   console.error(error.message);

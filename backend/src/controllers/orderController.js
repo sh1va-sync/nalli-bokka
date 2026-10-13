@@ -1,7 +1,10 @@
+import mongoose from 'mongoose';
 import Notification from '../models/Notification.js';
 import Order from '../models/Order.js';
 import Transaction from '../models/Transaction.js';
+import User from '../models/User.js';
 import AppError from '../utils/AppError.js';
+import { recordStoreAudit } from '../services/audit.js';
 
 const ORDER_TRANSITIONS = {
   placed: new Set(['packing', 'cancelled']),
@@ -11,11 +14,15 @@ const ORDER_TRANSITIONS = {
   cancelled: new Set()
 };
 
-async function paginateOrders(filter, page, limit) {
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function paginateOrders(filter, page, limit, sort = { createdAt: -1, _id: -1 }) {
   const [data, total] = await Promise.all([
     Order.find(filter)
       .populate('storeId', 'storeName location')
-      .sort({ createdAt: -1 })
+      .sort(sort)
       .skip((page - 1) * limit)
       .limit(limit),
     Order.countDocuments(filter)
@@ -39,11 +46,28 @@ export async function getUserOrder(req, res) {
   const order = await Order.findOne({
     _id: req.validated.params.orderId,
     userId: req.auth.id
-  }).populate('storeId', 'storeName location');
+  }).populate('storeId', 'storeName location storePhone storeNumber');
   if (!order) {
     throw new AppError(404, 'Order not found');
   }
-  res.json({ data: order });
+  const transaction = await Transaction.findOne({
+    orderId: order._id,
+    refundStatus: { $in: ['pending', 'processed', 'failed'] }
+  })
+    .sort({ timestamp: -1 })
+    .select('amount refundStatus refundId refundRequestedAt timestamp');
+  res.json({
+    data: {
+      ...order.toObject(),
+      refund: transaction ? {
+        status: transaction.refundStatus,
+        amount: transaction.amount,
+        reference: transaction.refundId || null,
+        requestedAt: transaction.refundRequestedAt || null,
+        updatedAt: transaction.timestamp
+      } : null
+    }
+  });
 }
 
 export async function cancelUserOrder(req, res) {
@@ -69,7 +93,7 @@ export async function cancelUserOrder(req, res) {
 }
 
 export async function listStoreOrders(req, res) {
-  const { page, limit, orderStatus, from, to } = req.validated.query;
+  const { page, limit, orderStatus, from, to, search, sort } = req.validated.query;
   const filter = { storeId: req.auth.id };
   if (orderStatus) {
     filter.orderStatus = orderStatus;
@@ -77,7 +101,34 @@ export async function listStoreOrders(req, res) {
   if (from) {
     filter.createdAt = { $gte: new Date(from), $lt: new Date(to) };
   }
-  const result = await paginateOrders(filter, page, limit);
+  const orderSort = {
+    newest: { createdAt: -1, _id: -1 },
+    oldest: { createdAt: 1, _id: 1 },
+    amount_desc: { totalAmount: -1, createdAt: -1, _id: -1 },
+    amount_asc: { totalAmount: 1, createdAt: -1, _id: -1 }
+  }[sort];
+
+  if (search) {
+    const normalizedSearch = search.replace(/^#/, '').trim() || search;
+    const customerOrderIds = await Order.distinct('userId', filter);
+    const matchingUsers = await User.find({
+      _id: { $in: customerOrderIds },
+      $or: [
+        { name: { $regex: escapeRegex(normalizedSearch), $options: 'i' } },
+        { phone: { $regex: escapeRegex(normalizedSearch), $options: 'i' } }
+      ]
+    }).select('_id');
+    const searchAlternatives = [
+      { userId: { $in: matchingUsers.map(user => user._id) } },
+      { $expr: { $regexMatch: { input: { $toString: '$_id' }, regex: escapeRegex(normalizedSearch), options: 'i' } } }
+    ];
+    if (/^[a-f\d]{24}$/i.test(normalizedSearch)) {
+      searchAlternatives.push({ _id: new mongoose.Types.ObjectId(normalizedSearch) });
+    }
+    filter.$or = searchAlternatives;
+  }
+
+  const result = await paginateOrders(filter, page, limit, orderSort);
   result.data = await Order.populate(result.data, { path: 'userId', select: 'name phone' });
   res.json(result);
 }
@@ -122,6 +173,7 @@ export async function updateStoreOrderStatus(req, res) {
         throw new AppError(409, 'Payment must be confirmed before packing an order');
       }
 
+      const currentStatus = order.orderStatus;
       order.orderStatus = nextStatus;
       await order.save({ session });
       const statusMessages = {
@@ -137,6 +189,16 @@ export async function updateStoreOrderStatus(req, res) {
         title: 'Order status updated',
         message: statusMessages[nextStatus]
       }], { session });
+      await recordStoreAudit({
+        session,
+        req,
+        action: 'order.status_updated',
+        entityType: 'order',
+        entityId: order._id,
+        previousState: currentStatus,
+        nextState: nextStatus,
+        changedFields: ['orderStatus']
+      });
       updatedOrder = order;
     });
   } finally {

@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 const objectId = z.string().regex(/^[a-f\d]{24}$/i, 'Must be a valid ID');
-const phoneNumber = z.string().regex(/^\+[1-9]\d{7,14}$/, 'Use international E.164 format, such as +15551234567');
 const imageUrl = z.string().url().max(2048).refine(value => {
   try {
     return ['http:', 'https:'].includes(new URL(value).protocol);
@@ -37,13 +36,9 @@ const selection = z.object({
 ), 'A pack label is required only for pack selections');
 
 const schemas = {
-  requestOtp: {
-    body: z.object({ phone: phoneNumber }).strict()
-  },
   verifyOtp: {
     body: z.object({
-      phone: phoneNumber,
-      code: z.string().regex(/^\d{4,10}$/)
+      firebaseIdToken: z.string().min(1).max(8192)
     }).strict()
   },
   completeUserRegistration: {
@@ -144,7 +139,9 @@ const schemas = {
   orderList: {
     query: dateRangeQuery({
       ...pagination,
-      orderStatus: z.enum(['placed', 'packing', 'out for delivery', 'delivered', 'cancelled']).optional()
+      orderStatus: z.enum(['placed', 'packing', 'out for delivery', 'delivered', 'cancelled']).optional(),
+      search: z.string().trim().min(1).max(100).optional(),
+      sort: z.enum(['newest', 'oldest', 'amount_desc', 'amount_asc']).default('newest')
     })
   },
   orderParams: { params: z.object({ orderId: objectId }) },
@@ -198,6 +195,9 @@ const schemas = {
     query: dateRangeQuery({
       type: z.enum(['orders', 'transactions'])
     }).refine(query => Boolean(query.from), 'Both from and to are required')
+  },
+  storeAuditEventList: {
+    query: z.object(pagination).strict()
   },
   transactionParams: {
     params: z.object({ transactionId: objectId })

@@ -1,9 +1,10 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { ShoppingBasket } from 'lucide-react'
 import { removeGuestItem } from './features/cart/cartSlice.js'
-import { api, useAddCartItemMutation, useGetCartQuery, useGetMeQuery, useGetStoresQuery } from './features/api/api.js'
+import { setSelectedStore } from './features/store/storeSlice.js'
+import { api, useAddCartItemMutation, useGetCartQuery, useGetMeQuery, useGetStoresQuery, useGetUserNotificationsQuery } from './features/api/api.js'
 import { clearSessionNotice, setSessionNotice, signedOut } from './features/auth/authSlice.js'
 import Header from './features/customer/components/Header.jsx'
 import StorePicker from './features/customer/components/StorePicker.jsx'
@@ -34,16 +35,37 @@ function App() {
   const [cartOpen, setCartOpen] = useState(false)
   const [loginReason, setLoginReason] = useState('')
   const [loginReturnTo, setLoginReturnTo] = useState('')
-  const [toast, setToast] = useState(null)
+  const [toasts, setToasts] = useState([])
+  const notificationBaseline = useRef({ token: null, initialized: false, fingerprints: new Set() })
   const [addCartItem] = useAddCartItemMutation()
   const { data: meResponse, error: meError } = useGetMeQuery(undefined, { skip: !token || isStoreRoute })
-  const { error: storesError } = useGetStoresQuery({ limit: 100 }, { skip: isStoreRoute })
+  const { data: storesResponse, error: storesError } = useGetStoresQuery(
+    { limit: 100 },
+    { skip: isStoreRoute, pollingInterval: isStoreRoute ? 0 : 15000 }
+  )
   const { data: cartResponse, error: cartError } = useGetCartQuery(undefined, { skip: !token || isStoreRoute })
+  const { data: notificationResponse } = useGetUserNotificationsQuery(
+    { page: 1, limit: 100 },
+    { skip: !token || isStoreRoute, pollingInterval: token && !isStoreRoute ? 30000 : 0 }
+  )
 
   const cartItems = token
     ? [...(cartResponse?.data?.items || []), ...guestItems.map((item) => ({ ...item, needsSync: true }))]
     : guestItems
   const cartCount = cartItems.length
+  const selectedStoreIsClosed = selectedStore?.isOpen === false
+
+  useEffect(() => {
+    const latestStore = storesResponse?.data?.find(({ _id }) => _id === selectedStore?._id)
+    if (!latestStore) return
+    if (
+      latestStore.isOpen !== selectedStore.isOpen
+      || latestStore.storePhone !== selectedStore.storePhone
+      || latestStore.storeNumber !== selectedStore.storeNumber
+    ) {
+      dispatch(setSelectedStore({ ...selectedStore, ...latestStore }))
+    }
+  }, [dispatch, selectedStore, storesResponse])
 
   useEffect(() => {
     if (isStoreRoute) return
@@ -63,10 +85,42 @@ function App() {
   }
 
   const showToast = useCallback((notice) => {
-    setToast({ ...notice, id: createUuid() })
+    const id = createUuid()
+    setToasts((current) => [...current, { ...notice, id }])
+    return id
   }, [])
 
-  const dismissToast = useCallback(() => setToast(null), [])
+  const dismissToast = useCallback((toastId) => {
+    setToasts((current) => current.filter(({ id }) => id !== toastId))
+  }, [])
+
+  useEffect(() => {
+    if (!token || isStoreRoute) {
+      notificationBaseline.current = { token: null, initialized: false, fingerprints: new Set() }
+      return
+    }
+    if (!notificationResponse?.data) return
+    if (notificationBaseline.current.token !== token) {
+      notificationBaseline.current = { token, initialized: false, fingerprints: new Set() }
+    }
+
+    const fingerprints = notificationBaseline.current.fingerprints
+    const currentFingerprints = new Set()
+    for (const notification of notificationResponse.data) {
+      const fingerprint = `${notification._id}:${notification.title}:${notification.message}`
+      currentFingerprints.add(fingerprint)
+      if (notificationBaseline.current.initialized && !fingerprints.has(fingerprint)) {
+        showToast({
+          type: 'notification',
+          title: notification.title,
+          message: notification.message,
+          to: `/orders?order=${notification.orderId}`,
+          actionLabel: 'View order'
+        })
+      }
+    }
+    notificationBaseline.current = { token, initialized: true, fingerprints: currentFingerprints }
+  }, [isStoreRoute, notificationResponse, showToast, token])
 
   async function handleSignedIn() {
     for (const item of guestItems) {
@@ -88,7 +142,7 @@ function App() {
   }
 
   if (isStoreRoute) return <div className="min-h-screen bg-[#fbf7f1] text-[#302724]">
-    <Suspense fallback={<div className="grid min-h-screen place-items-center text-sm text-[#82736d]">Loading store dashboard…</div>}>
+    <Suspense fallback={<div className="grid min-h-screen place-items-center text-sm text-[#82736d]"><span className="mr-2 inline-block h-4 w-4 rounded-full border-2 border-[#eadfd7] border-t-[#861923] motion-safe:animate-spin" />Loading store workspace…</div>}>
       <Routes>
         <Route path="/store/login" element={<StoreLoginPage />} />
         <Route path="/store" element={<StoreDashboardPage />} />
@@ -101,21 +155,27 @@ function App() {
     <div className="min-h-screen bg-[#fbf7f1] text-[#302724]">
       <Header
         cartCount={cartCount}
-        onOpenCart={() => setCartOpen(true)}
+        onOpenCart={() => { if (!selectedStoreIsClosed) setCartOpen(true) }}
         onChooseStore={() => setStoreOpen(true)}
         onLogin={() => openLogin()}
         onCartError={cartError ? getErrorMessage(cartError) : ''}
       />
       <main className="pb-24 md:pb-12">
         <Suspense fallback={<div className="mx-auto max-w-7xl px-5 py-20 text-center text-slate-500">Loading your page…</div>}>
-          <Routes>
+          {selectedStoreIsClosed ? <section className="mx-auto grid min-h-[65vh] max-w-xl content-center justify-items-center px-5 py-16 text-center">
+            <span className="grid h-16 w-16 place-items-center rounded-2xl bg-[#fbefec] text-[#861923]"><ShoppingBasket size={28} /></span>
+            <p className="mt-5 text-[10px] font-bold uppercase tracking-[.18em] text-[#ad7669]">Store temporarily closed</p>
+            <h1 className="mt-2 font-display text-3xl font-medium text-[#392824]">{selectedStore?.storeName} isn’t taking orders right now</h1>
+            <p className="mt-3 max-w-md text-sm leading-6 text-[#82736d]">You can choose another open store, or come back when this store reopens. Your basket will be cleared if you switch stores.</p>
+            <button type="button" onClick={() => setStoreOpen(true)} className="mt-6 rounded-xl bg-[#861923] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#70131c]">Choose an open store</button>
+          </section> : <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/checkout" element={<CheckoutPage onLogin={openLogin} onOpenCart={() => setCartOpen(true)} onToast={showToast} />} />
             <Route path="/profile" element={token ? <ProfilePage /> : <Navigate to="/" replace />} />
             <Route path="/orders" element={token ? <OrdersPage /> : <Navigate to="/" replace />} />
             <Route path="/notifications" element={token ? <NotificationsPage /> : <Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          </Routes>}
         </Suspense>
       </main>
       <footer className="border-t border-[#eadfd7] bg-[#fbf7f1] px-5 py-7 text-center text-xs text-[#927f74]">
@@ -123,7 +183,7 @@ function App() {
       </footer>
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-[#eadfd7] bg-[#fbf7f1]/95 py-2 text-xs font-medium text-[#82736d] backdrop-blur md:hidden">
         <Link className="flex flex-col items-center gap-1 py-1 text-[#861923]" to="/">⌂<span>Shop</span></Link>
-        <button className="flex flex-col items-center gap-1 py-1" onClick={() => setCartOpen(true)}><ShoppingBasket size={18} /><span>Basket</span></button>
+        <button disabled={selectedStoreIsClosed} className="flex flex-col items-center gap-1 py-1 disabled:opacity-40" onClick={() => setCartOpen(true)}><ShoppingBasket size={18} /><span>Basket</span></button>
         {token ? <Link className="flex flex-col items-center gap-1 py-1" to="/profile">◉<span>Account</span></Link> : <button className="flex flex-col items-center gap-1 py-1" onClick={() => openLogin()}>◉<span>Account</span></button>}
       </nav>
       {token && meError && ![401, 403].includes(meError.status) && <p role="status" className="fixed inset-x-3 bottom-20 z-40 mx-auto max-w-lg rounded-xl bg-amber-50 px-4 py-3 text-xs text-amber-900 shadow sm:bottom-4">We couldn’t verify your saved session. Some account features may be unavailable.</p>}
@@ -132,13 +192,13 @@ function App() {
           Couldn’t load stores: {getErrorMessage(storesError)}
         </div>
       )}
-      <div className="pointer-events-none fixed right-3 top-3 z-[80] w-[min(24rem,calc(100vw-1.5rem))] sm:right-5 sm:top-5">
-        <Toast key={toast?.id} toast={toast} onDismiss={dismissToast} />
+      <div className="pointer-events-none fixed right-3 top-3 z-[80] max-h-[calc(100vh-1.5rem)] w-[min(24rem,calc(100vw-1.5rem))] space-y-3 overflow-y-auto sm:right-5 sm:top-5">
+        {toasts.map((toast) => <Toast key={toast.id} toast={toast} onDismiss={dismissToast} />)}
       </div>
-      <StorePicker open={storeOpen} onClose={() => setStoreOpen(false)} />
+      <StorePicker open={storeOpen || selectedStoreIsClosed} onClose={() => setStoreOpen(false)} />
       <LoginDialog open={loginOpen || Boolean(sessionNotice)} reason={sessionNotice || loginReason} onClose={() => { setLoginOpen(false); dispatch(clearSessionNotice()); if (!token) setLoginReturnTo('') }} onSignedIn={handleSignedIn} />
       <CartDrawer
-        open={cartOpen}
+        open={cartOpen && !selectedStoreIsClosed}
         onClose={() => setCartOpen(false)}
         items={cartItems}
         isGuest={!token}

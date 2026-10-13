@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import app from '../src/app.js';
+import AuditEvent from '../src/models/AuditEvent.js';
 import Cart from '../src/models/Cart.js';
 import CheckoutAttempt from '../src/models/CheckoutAttempt.js';
 import IdempotencyKey from '../src/models/IdempotencyKey.js';
@@ -40,7 +41,7 @@ before(async () => {
   });
   await mongoose.connect(replicaSet.getUri(), { dbName: 'purchase_integration' });
   await Promise.all([
-    Cart, CheckoutAttempt, IdempotencyKey, Notification, Order, Product, Store,
+    AuditEvent, Cart, CheckoutAttempt, IdempotencyKey, Notification, Order, Product, Store,
     Transaction, User, WebhookEvent
   ].map(model => model.init()));
 
@@ -280,6 +281,11 @@ test('customer purchase, payment, and store status notification flow works end t
   });
   assert.equal(statusResponse.status, 200);
   assert.equal((await Order.findById(order._id)).orderStatus, 'packing');
+  const orderStatusAudit = await AuditEvent.findOne({ entityId: order._id, action: 'order.status_updated' });
+  assert.equal(orderStatusAudit.previousState, 'placed');
+  assert.equal(orderStatusAudit.nextState, 'packing');
+  assert.equal(orderStatusAudit.actorId.toString(), store._id.toString());
+  assert.ok(orderStatusAudit.requestId);
 
   const notificationsResponse = await fetch(`${baseUrl}/users/me/notifications`, {
     headers: { authorization: `Bearer ${customerToken}` }
@@ -324,6 +330,152 @@ test('customer purchase, payment, and store status notification flow works end t
   assert.equal(markAllReadResponse.status, 200);
   assert.equal((await markAllReadResponse.json()).data.updatedCount, 2);
   assert.equal(await Notification.countDocuments({ userId: user._id, readAt: null }), 0);
+
+  const stockResponse = await fetch(`${baseUrl}/store/products/${product._id}/stock`, {
+    method: 'PATCH',
+    headers: {
+      authorization: 'Bearer ' + storeToken,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({ inStock: false })
+  });
+  assert.equal(stockResponse.status, 200);
+  const stockAudit = await AuditEvent.findOne({ entityId: product._id, action: 'product.stock_updated' });
+  assert.equal(stockAudit.previousState, 'true');
+  assert.equal(stockAudit.nextState, 'false');
+
+  await Product.updateOne({ _id: product._id }, { $set: { inStock: true } });
+  await Cart.updateOne(
+    { userId: user._id },
+    { $set: { items: [{ productId: product._id, selectionType: 'weight', selectedQuantity: 0.5 }] } }
+  );
+  const beforeClosePaymentResponse = await fetch(`${baseUrl}/payments/razorpay/order`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${customerToken}`,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      addressId: String(user.addresses[0]._id),
+      storeId: String(store._id),
+      idempotencyKey: '77777777-7777-4777-8777-777777777777'
+    })
+  });
+  assert.equal(beforeClosePaymentResponse.status, 201);
+  const beforeClosePayment = (await beforeClosePaymentResponse.json()).data;
+  const storeCloseResponse = await fetch(`${baseUrl}/store/status`, {
+    method: 'PATCH',
+    headers: {
+      authorization: 'Bearer ' + storeToken,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({ isOpen: false })
+  });
+  assert.equal(storeCloseResponse.status, 200);
+  const storeStatusAudit = await AuditEvent.findOne({ entityId: store._id, action: 'store.open_status_updated' });
+  assert.equal(storeStatusAudit.previousState, 'true');
+  assert.equal(storeStatusAudit.nextState, 'false');
+  const attemptsBeforeClosedCheckout = await CheckoutAttempt.countDocuments({ userId: user._id });
+  const providerOrdersBeforeClosedCheckout = razorpayOrderSequence;
+  const closedCheckoutResponse = await fetch(`${baseUrl}/payments/razorpay/order`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${customerToken}`,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      addressId: String(user.addresses[0]._id),
+      storeId: String(store._id),
+      idempotencyKey: '66666666-6666-4666-8666-666666666666'
+    })
+  });
+  assert.equal(closedCheckoutResponse.status, 409);
+  assert.match((await closedCheckoutResponse.json()).error, /store is closed/i);
+  const resumedClosedCheckoutResponse = await fetch(`${baseUrl}/payments/razorpay/order`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${customerToken}`,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      addressId: String(user.addresses[0]._id),
+      storeId: String(store._id),
+      idempotencyKey: '77777777-7777-4777-8777-777777777777'
+    })
+  });
+  assert.equal(resumedClosedCheckoutResponse.status, 409);
+  assert.match((await resumedClosedCheckoutResponse.json()).error, /store is closed/i);
+  assert.equal(await CheckoutAttempt.countDocuments({ userId: user._id }), attemptsBeforeClosedCheckout);
+  assert.equal(razorpayOrderSequence, providerOrdersBeforeClosedCheckout);
+  assert.equal(await Order.countDocuments({ userId: user._id }), 1);
+  capturedRazorpayOrderId = beforeClosePayment.razorpayOrderId;
+  const capturedPaymentId = 'razorpay_payment_during_store_closure';
+  const capturedPaymentSignature = createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+    .update(`${beforeClosePayment.razorpayOrderId}|${capturedPaymentId}`)
+    .digest('hex');
+  const capturedPaymentResponse = await fetch(`${baseUrl}/payments/razorpay/verify`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${customerToken}`,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      razorpayOrderId: beforeClosePayment.razorpayOrderId,
+      paymentId: capturedPaymentId,
+      signature: capturedPaymentSignature
+    })
+  });
+  assert.equal(capturedPaymentResponse.status, 200);
+  const capturedDuringClosure = (await capturedPaymentResponse.json()).data;
+  assert.ok(await Order.findById(capturedDuringClosure.orderId));
+  assert.equal(await Order.countDocuments({ userId: user._id }), 2);
+  const storeReopenResponse = await fetch(`${baseUrl}/store/status`, {
+    method: 'PATCH',
+    headers: {
+      authorization: 'Bearer ' + storeToken,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({ isOpen: true })
+  });
+  assert.equal(storeReopenResponse.status, 200);
+
+  await Order.updateOne({ _id: order._id }, { $set: { createdAt: new Date(Date.now() - 60_000) } });
+  await Order.create({
+    userId: user._id,
+    storeId: store._id,
+    deliveryAddress: order.deliveryAddress,
+    items: [{ ...order.items[0].toObject(), price: 600 }],
+    totalAmount: 600,
+    orderStatus: 'placed',
+    paymentStatus: 'paid'
+  });
+  const storeOrderHeaders = { authorization: `Bearer ${storeToken}` };
+  const searchByOrderId = await fetch(`${baseUrl}/store/orders?${new URLSearchParams({ search: order._id.toString().slice(-8) })}`, {
+    headers: storeOrderHeaders
+  });
+  assert.equal(searchByOrderId.status, 200);
+  assert.deepEqual((await searchByOrderId.json()).data.map(item => item._id), [order._id.toString()]);
+  const searchByName = await fetch(`${baseUrl}/store/orders?${new URLSearchParams({ search: 'test customer', limit: '100' })}`, {
+    headers: storeOrderHeaders
+  });
+  assert.equal(searchByName.status, 200);
+  assert.equal((await searchByName.json()).pagination.total, 3);
+  const searchByPhone = await fetch(`${baseUrl}/store/orders?${new URLSearchParams({ search: '5551234567', limit: '100' })}`, {
+    headers: storeOrderHeaders
+  });
+  assert.equal(searchByPhone.status, 200);
+  assert.equal((await searchByPhone.json()).pagination.total, 3);
+  const sortByHighestTotal = await fetch(`${baseUrl}/store/orders?sort=amount_desc`, { headers: storeOrderHeaders });
+  assert.equal(sortByHighestTotal.status, 200);
+  assert.equal((await sortByHighestTotal.json()).data[0].totalAmount, 600);
+  const sortOldestFirst = await fetch(`${baseUrl}/store/orders?sort=oldest`, { headers: storeOrderHeaders });
+  assert.equal(sortOldestFirst.status, 200);
+  assert.equal((await sortOldestFirst.json()).data[0]._id, order._id.toString());
+  const regexCharactersAreLiteral = await fetch(`${baseUrl}/store/orders?search=${encodeURIComponent('.*')}`, {
+    headers: storeOrderHeaders
+  });
+  assert.equal(regexCharactersAreLiteral.status, 200);
+  assert.equal((await regexCharactersAreLiteral.json()).pagination.total, 0);
 });
 
 test('store refunds are scoped, full, single-request, and settled by deduplicated webhooks', async () => {
@@ -331,7 +483,8 @@ test('store refunds are scoped, full, single-request, and settled by deduplicate
     storeName: 'Refund Store',
     username: 'refund-store',
     password: 'test-password-long-enough',
-    location: 'Hyderabad'
+    location: 'Hyderabad',
+    storePhone: '+911234567890'
   });
   const otherStore = await Store.create({
     storeName: 'Other Refund Store',
@@ -451,6 +604,30 @@ test('store refunds are scoped, full, single-request, and settled by deduplicate
   assert.equal(cancelledWhileRefundPending.orderStatus, 'cancelled');
   const cancellationNotification = await Notification.findOne({ orderId: order._id });
   assert.equal(cancellationNotification.message, 'The store cancelled your order and requested a full refund. Refund processing is pending.');
+  const refundAudit = await AuditEvent.findOne({ entityId: order._id, action: 'order.refund_requested' });
+  assert.equal(refundAudit.previousState, 'paid');
+  assert.equal(refundAudit.nextState, 'refund_pending/cancelled');
+  const auditResponse = await fetch(`${baseUrl}/store/audit-events?page=1&limit=100`, {
+    headers: { authorization: 'Bearer ' + storeToken }
+  });
+  assert.equal(auditResponse.status, 200);
+  const storeAuditEvents = (await auditResponse.json()).data;
+  assert.ok(storeAuditEvents.some(event => event._id === String(refundAudit._id)));
+  const otherStoreAuditResponse = await fetch(`${baseUrl}/store/audit-events`, {
+    headers: { authorization: 'Bearer ' + otherStoreToken }
+  });
+  assert.equal(otherStoreAuditResponse.status, 200);
+  assert.equal((await otherStoreAuditResponse.json()).pagination.total, 0);
+  const pendingOrderResponse = await fetch(`${baseUrl}/orders/${order._id}`, {
+    headers: { authorization: 'Bearer ' + customerToken }
+  });
+  assert.equal(pendingOrderResponse.status, 200);
+  const pendingOrderData = (await pendingOrderResponse.json()).data;
+  assert.equal(pendingOrderData.refund.status, 'pending');
+  assert.equal(pendingOrderData.refund.amount, 400);
+  assert.equal(pendingOrderData.refund.reference, `refund_${transaction.paymentId}`);
+  assert.ok(pendingOrderData.refund.requestedAt);
+  assert.equal(pendingOrderData.storeId.storePhone, '+911234567890');
 
   const repeatedRefundResponse = await fetch(`${baseUrl}/store/orders/${order._id}/refund`, {
     method: 'POST',
@@ -489,6 +666,14 @@ test('store refunds are scoped, full, single-request, and settled by deduplicate
   assert.equal((await Transaction.findById(transaction._id)).refundStatus, 'processed');
   assert.equal(await Notification.countDocuments({ orderId: order._id }), 1);
   assert.equal((await Notification.findOne({ orderId: order._id })).message, 'Your order was cancelled and your full refund has been processed.');
+  const processedOrderResponse = await fetch(`${baseUrl}/orders/${order._id}`, {
+    headers: { authorization: 'Bearer ' + customerToken }
+  });
+  assert.equal(processedOrderResponse.status, 200);
+  const processedOrderData = (await processedOrderResponse.json()).data;
+  assert.equal(processedOrderData.refund.status, 'processed');
+  assert.equal(processedOrderData.refund.reference, `refund_${transaction.paymentId}`);
+  assert.ok(processedOrderData.refund.updatedAt);
 
   const duplicateWebhook = await sendRefundWebhook(
     'refund.processed',

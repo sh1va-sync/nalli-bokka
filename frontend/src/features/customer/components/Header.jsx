@@ -7,8 +7,8 @@ export default function Header({ cartCount, onOpenCart, onChooseStore, onLogin, 
   const selectedStore = useSelector((state) => state.selectedStore)
   const user = useSelector((state) => state.auth.user)
   const { data: notificationResponse } = useGetUserNotificationsQuery(
-    { page: 1, limit: 1 },
-    { skip: !user, pollingInterval: user ? 60000 : 0 }
+    { page: 1, limit: 100 },
+    { skip: !user, pollingInterval: user ? 30000 : 0 }
   )
   const unreadCount = notificationResponse?.unreadCount || 0
 
@@ -26,6 +26,7 @@ export default function Header({ cartCount, onOpenCart, onChooseStore, onLogin, 
         <button onClick={onChooseStore} className="flex min-w-0 flex-col text-left">
           <span className="text-[9px] font-semibold uppercase tracking-[.16em] text-[#929385]">Delivering to</span>
           <span className="mt-0.5 flex items-center gap-1 truncate text-xs font-semibold text-[#46332e] sm:text-sm">{selectedStore?.location || 'Choose your store'} <ChevronDown size={13} className="shrink-0 text-[#94776d]" /></span>
+          {selectedStore && <span className={`mt-1 w-fit rounded-full px-2 py-0.5 text-[9px] font-bold ${selectedStore.isOpen === false ? 'bg-[#f7eae8] text-[#8b4f49]' : 'bg-[#edf5ee] text-[#4a7758]'}`}>{selectedStore.isOpen === false ? 'Currently closed' : 'Open for orders'}</span>}
         </button>
         <nav className="ml-auto hidden items-center gap-7 text-[13px] font-medium md:flex">
           {user && <NavLink to="/orders" className={({ isActive }) => isActive ? 'text-[#861923]' : 'text-[#82736d] transition hover:text-[#46332e]'}>Orders</NavLink>}
@@ -36,7 +37,7 @@ export default function Header({ cartCount, onOpenCart, onChooseStore, onLogin, 
           )}
         </nav>
         {user && <Link to="/notifications" aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ''}`} className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[#e7d7ce] text-[#76534a] transition hover:bg-[#f8eeea] md:ml-6"><Bell size={18} />{unreadCount > 0 && <span className="absolute -right-1 -top-1 grid min-h-4 min-w-4 place-items-center rounded-full bg-[#861923] px-1 text-[9px] font-bold text-white">{unreadCount > 99 ? '99+' : unreadCount}</span>}</Link>}
-        <button onClick={onOpenCart} aria-label="Open basket" className="ml-auto flex h-10 shrink-0 items-center gap-2 rounded-full border border-[#e7d7ce] bg-transparent px-3.5 text-xs font-semibold text-[#493631] transition hover:border-[#c98c7f] hover:bg-[#f8eeea] md:ml-0">
+        <button disabled={selectedStore?.isOpen === false} onClick={onOpenCart} aria-label="Open basket" className="ml-auto flex h-10 shrink-0 items-center gap-2 rounded-full border border-[#e7d7ce] bg-transparent px-3.5 text-xs font-semibold text-[#493631] transition hover:border-[#c98c7f] hover:bg-[#f8eeea] disabled:cursor-not-allowed disabled:opacity-40 md:ml-0">
           <ShoppingBasket size={17} strokeWidth={1.7} />
           <span className="hidden sm:inline">Basket</span>
           <span className="grid min-w-5 place-items-center rounded-full bg-[#f2e0dc] px-1 text-[10px] font-semibold text-[#861923]">{cartCount}</span>

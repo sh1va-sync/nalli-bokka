@@ -1,26 +1,65 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useDispatch } from 'react-redux'
 import { ArrowLeft, CheckCircle2, Phone, ShieldCheck, X } from 'lucide-react'
+import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth'
 import { signedIn } from '../../auth/authSlice.js'
-import { useRegisterUserMutation, useRequestOtpMutation, useVerifyOtpMutation } from '../../api/api.js'
+import { getFirebaseAuth } from '../../auth/firebase.js'
+import { useRegisterUserMutation, useVerifyFirebasePhoneTokenMutation } from '../../api/api.js'
 import { getErrorMessage } from '../utils.js'
+
+function getPhoneAuthErrorMessage(error) {
+  const messages = {
+    'auth/unauthorized-domain': 'Firebase is blocking this website origin. Add the exact hostname you opened on your phone to Firebase Console → Authentication → Settings → Authorized domains.',
+    'auth/invalid-app-credential': 'Firebase could not validate this site with reCAPTCHA. Add the site hostname to Firebase Authorized domains. A LAN IP over HTTP may not work; try localhost on the same device or use an authorized HTTPS hostname.',
+    'auth/missing-app-credential': 'Firebase did not receive a reCAPTCHA verification. Reload the page and try again from an authorized hostname.',
+    'auth/captcha-check-failed': 'Firebase reCAPTCHA validation failed. Confirm this hostname is authorized and retry from a supported browser.',
+    'auth/operation-not-allowed': 'Phone sign-in is disabled for this Firebase project. Enable Phone under Firebase Console → Authentication → Sign-in method.',
+    'auth/billing-not-enabled': 'Firebase requires billing to send phone-authentication SMS for this project. Check the project billing plan and SMS region policy.',
+    'auth/api-key-not-valid': 'The Firebase web API key is invalid. Check that the frontend Firebase config comes from the same project as the backend service account.',
+    'auth/too-many-requests': 'Firebase temporarily blocked verification requests. Wait before trying again or check the Firebase SMS quota.'
+  }
+  return messages[error?.code] || getErrorMessage(error)
+}
 
 export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
   const dispatch = useDispatch()
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
   const [step, setStep] = useState('phone')
+  const [sendingCode, setSendingCode] = useState(false)
+  const confirmationResult = useRef(null)
+  const firebaseIdToken = useRef('')
+  const recaptchaVerifier = useRef(null)
   const [registrationToken, setRegistrationToken] = useState('')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState('')
-  const [requestOtp, requestState] = useRequestOtpMutation()
-  const [verifyOtp, verifyState] = useVerifyOtpMutation()
+  const [verifyFirebasePhoneToken, verifyState] = useVerifyFirebasePhoneTokenMutation()
   const [registerUser, registerState] = useRegisterUserMutation()
+  useEffect(() => () => recaptchaVerifier.current?.clear(), [])
   if (!open) return null
 
   const normalizedPhone = phone.startsWith('+') ? phone.replace(/[^\d+]/g, '') : `+91${phone.replace(/\D/g, '')}`
-  const busy = requestState.isLoading || verifyState.isLoading || registerState.isLoading
+  const busy = sendingCode || verifyState.isLoading || registerState.isLoading
+
+  function clearPhoneVerification() {
+    recaptchaVerifier.current?.clear()
+    recaptchaVerifier.current = null
+    confirmationResult.current = null
+    firebaseIdToken.current = ''
+  }
+
+  function changePhone() {
+    clearPhoneVerification()
+    setCode('')
+    setRegistrationToken('')
+    setStep('phone')
+  }
+
+  function closeDialog() {
+    changePhone()
+    onClose()
+  }
 
   async function finishSignIn(result) {
     dispatch(signedIn({ token: result.token, user: result.user }))
@@ -28,18 +67,29 @@ export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
     if (syncError) {
       setMessage(syncError)
     } else {
-      onClose()
+      closeDialog()
     }
   }
 
-  async function submitPhone(event) {
-    event.preventDefault()
+  async function requestVerificationCode(event) {
+    event?.preventDefault()
     setMessage('')
+    setSendingCode(true)
     try {
-      await requestOtp({ phone: normalizedPhone }).unwrap()
+      clearPhoneVerification()
+      const auth = getFirebaseAuth()
+      const verifier = new RecaptchaVerifier(auth, 'firebase-recaptcha-container', {
+        size: 'invisible'
+      })
+      recaptchaVerifier.current = verifier
+      confirmationResult.current = await signInWithPhoneNumber(auth, normalizedPhone, verifier)
+      setCode('')
       setStep('code')
     } catch (error) {
-      setMessage(getErrorMessage(error))
+      clearPhoneVerification()
+      setMessage(getPhoneAuthErrorMessage(error))
+    } finally {
+      setSendingCode(false)
     }
   }
 
@@ -47,10 +97,14 @@ export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
     event.preventDefault()
     setMessage('')
     try {
-      const result = await verifyOtp({
-        phone: normalizedPhone,
-        code,
-      }).unwrap()
+      if (!firebaseIdToken.current) {
+        if (!confirmationResult.current) {
+          throw new Error('Request a new verification code before continuing.')
+        }
+        const credential = await confirmationResult.current.confirm(code)
+        firebaseIdToken.current = await credential.user.getIdToken()
+      }
+      const result = await verifyFirebasePhoneToken({ firebaseIdToken: firebaseIdToken.current }).unwrap()
       if (result.isNewUser) {
         setRegistrationToken(result.verificationToken)
         setStep('registration')
@@ -80,13 +134,13 @@ export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
   return (
     <div className="fixed inset-0 z-[60] grid items-end bg-[#24251f]/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="login-title">
       <section className="relative mx-auto w-full max-w-md rounded-t-[24px] bg-[#fbf7f1] p-6 shadow-2xl sm:rounded-[24px] sm:p-8">
-        <button className="absolute right-5 top-5 rounded-full p-2 text-[#797b70] hover:bg-[#eeede6]" onClick={onClose} aria-label="Close sign in"><X size={19} /></button>
+        <button className="absolute right-5 top-5 rounded-full p-2 text-[#797b70] hover:bg-[#eeede6]" onClick={closeDialog} aria-label="Close sign in"><X size={19} /></button>
         <span className="mb-5 grid h-11 w-11 place-items-center rounded-full bg-[#f3e2dc] text-[#861923]">{step === 'phone' ? <Phone size={19} /> : <ShieldCheck size={20} />}</span>
         <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#9a8176]">NalliBokka account</p>
         <h2 id="login-title" className="mt-1 font-display text-2xl font-medium text-[#392824]">{step === 'phone' ? 'Good food starts here' : step === 'code' ? 'Check your messages' : 'Create your account'}</h2>
         <p className="mt-2 text-sm leading-6 text-slate-500">{step === 'phone' ? reason || 'Sign in with your phone number. We’ll send you a one-time code.' : step === 'code' ? `Enter the verification code sent to ${normalizedPhone}.` : 'Your phone number is verified. Add your name to finish creating your account.'}</p>
         {step === 'phone' ? (
-          <form className="mt-6 space-y-4" onSubmit={submitPhone}>
+          <form className="mt-6 space-y-4" onSubmit={requestVerificationCode}>
             <label className="block text-xs font-bold text-[#76534a]">PHONE NUMBER
               <div className="mt-2 flex h-12 items-center gap-2 rounded-xl border border-[#eadfd7] bg-white px-3 focus-within:border-[#c98c7f]"><span className="text-sm font-semibold text-[#9b5148]">+91</span><input autoFocus required inputMode="tel" maxLength={10} pattern="[0-9]{10}" value={phone.replace(/^\+91/, '')} onChange={(event) => setPhone(event.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="98765 43210" className="w-full bg-transparent text-sm outline-none" /></div>
             </label>
@@ -94,13 +148,13 @@ export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
           </form>
         ) : step === 'code' ? (
           <form className="mt-6 space-y-3" onSubmit={submitCode}>
-            <button type="button" onClick={() => { setStep('phone'); setCode(''); setRegistrationToken('') }} className="mb-1 flex items-center gap-1 text-xs font-semibold text-[#9b5148]"><ArrowLeft size={14} /> Change phone number</button>
+            <button type="button" onClick={changePhone} className="mb-1 flex items-center gap-1 text-xs font-semibold text-[#9b5148]"><ArrowLeft size={14} /> Change phone number</button>
             <input autoFocus required inputMode="numeric" minLength={4} maxLength={10} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="Enter OTP" className="h-12 w-full rounded-xl border border-[#eadfd7] bg-white px-4 text-center text-lg tracking-[.35em] outline-none focus:border-[#c98c7f]" />
             <button disabled={busy || code.length < 4} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#861923] text-sm font-medium text-white transition hover:bg-[#70131c] disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'Verifying…' : <><CheckCircle2 size={17} /> Verify & continue</>}</button>
           </form>
         ) : (
           <form className="mt-6 space-y-3" onSubmit={submitRegistration}>
-            <button type="button" onClick={() => { setStep('phone'); setCode(''); setRegistrationToken('') }} className="mb-1 flex items-center gap-1 text-xs font-semibold text-[#9b5148]"><ArrowLeft size={14} /> Change phone number</button>
+            <button type="button" onClick={changePhone} className="mb-1 flex items-center gap-1 text-xs font-semibold text-[#9b5148]"><ArrowLeft size={14} /> Change phone number</button>
             <label className="block text-xs font-bold text-[#76534a]">NAME
               <input required maxLength={100} autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} className="mt-2 h-12 w-full rounded-xl border border-[#eadfd7] bg-white px-4 text-sm font-normal outline-none focus:border-[#c98c7f]" placeholder="Your name" />
             </label>
@@ -111,8 +165,9 @@ export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
           </form>
         )}
         {message && <p role="alert" className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-800">{message}</p>}
-        {step === 'code' && !message && <button disabled={busy} onClick={submitPhone} className="mt-4 w-full text-center text-xs font-semibold text-[#9b5148] disabled:opacity-50">Didn’t get the code? Resend</button>}
+        {step === 'code' && <button type="button" disabled={busy} onClick={requestVerificationCode} className="mt-4 w-full text-center text-xs font-semibold text-[#9b5148] disabled:opacity-50">Didn’t get the code? Resend</button>}
         <p className="mt-5 text-center text-[11px] leading-5 text-slate-400">By continuing, you agree to receive a one-time verification SMS.</p>
+        <div id="firebase-recaptcha-container" />
       </section>
     </div>
   )

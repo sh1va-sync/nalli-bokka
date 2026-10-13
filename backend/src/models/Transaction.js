@@ -60,6 +60,9 @@ const transactionSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  refundRequestedAt: {
+    type: Date
+  },
   timestamp: {
     type: Date,
     default: Date.now

@@ -4,9 +4,11 @@ import CheckoutAttempt from '../models/CheckoutAttempt.js';
 import Notification from '../models/Notification.js';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
+import Store from '../models/Store.js';
 import Transaction from '../models/Transaction.js';
 import User from '../models/User.js';
 import WebhookEvent from '../models/WebhookEvent.js';
+import { recordStoreAudit } from '../services/audit.js';
 import getRazorpayClient from '../services/razorpay.js';
 import AppError from '../utils/AppError.js';
 import { priceSelection, roundToPaise } from '../utils/pricing.js';
@@ -26,7 +28,7 @@ async function setRefundNotification(order, title, message, session) {
   );
 }
 
-async function applyRefundResult(transactionId, requestId, refund, refundStatus, activeSession = null) {
+export async function applyRefundResult(transactionId, requestId, refund, refundStatus, activeSession = null) {
   const session = activeSession || await Transaction.db.startSession();
   let applied = false;
   try {
@@ -171,6 +173,7 @@ export async function refundStoreOrder(req, res) {
         $set: {
           refundStatus: 'pending',
           refundRequestId: requestId,
+          refundRequestedAt: new Date(),
           timestamp: new Date()
         }
       }, { session });
@@ -183,6 +186,16 @@ export async function refundStoreOrder(req, res) {
       order.paymentStatus = 'refund_pending';
       order.orderStatus = 'cancelled';
       await order.save({ session });
+      await recordStoreAudit({
+        session,
+        req,
+        action: 'order.refund_requested',
+        entityType: 'order',
+        entityId: order._id,
+        previousState: 'paid',
+        nextState: 'refund_pending/cancelled',
+        changedFields: ['paymentStatus', 'orderStatus']
+      });
       await setRefundNotification(
         order,
         'Order cancelled',
@@ -234,7 +247,7 @@ export async function refundStoreOrder(req, res) {
   return res.status(response.refundStatus === 'pending' ? 202 : 200).json({ data: response });
 }
 
-async function settleTransaction(transaction, status, paymentId, session = null) {
+export async function settleTransaction(transaction, status, paymentId, session = null) {
   // Load order in the same session when available
   const order = await Order.findById(transaction.orderId).session(session);
   if (!order) {
@@ -292,6 +305,10 @@ export async function createCheckoutPayment(req, res) {
     if (existingAttempt.status !== 'pending') {
       throw new AppError(409, 'This checkout attempt is no longer active. Start checkout again to retry payment.');
     }
+    const store = await Store.findById(existingAttempt.storeId).select('isOpen');
+    if (!store || !store.isOpen) {
+      throw new AppError(409, 'This store is closed and cannot accept new checkout payments. Choose an open store to continue.');
+    }
     return res.status(200).json({ data: razorpayPaymentData(existingAttempt) });
   }
 
@@ -327,6 +344,10 @@ export async function createCheckoutPayment(req, res) {
   }
   if (!requestedStoreId && storeIds.size > 1) {
     throw new AppError(409, 'Your cart contains products from multiple stores; specify storeId to check out one store at a time');
+  }
+  const store = await Store.findById(selectedStoreId).select('isOpen');
+  if (!store || !store.isOpen) {
+    throw new AppError(409, 'This store is closed and cannot accept new checkout payments. Choose an open store to continue.');
   }
 
   const items = cart.items
@@ -408,7 +429,7 @@ export async function markCheckoutPaymentFailed(req, res) {
   res.json({ data: { status: attempt.status, orderCreated: false } });
 }
 
-async function completeCheckoutAttempt(attemptId, paymentId, session) {
+export async function completeCheckoutAttempt(attemptId, paymentId, session) {
   let attempt = await CheckoutAttempt.findById(attemptId).session(session);
   if (!attempt) {
     throw new AppError(404, 'Checkout payment attempt not found');
