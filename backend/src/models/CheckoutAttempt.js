@@ -32,6 +32,13 @@ const checkoutItemSchema = new mongoose.Schema({
   }
 }, { _id: false });
 
+const deliveryAddressSchema = new mongoose.Schema({
+  label: { type: String, required: true, trim: true },
+  fullAddress: { type: String, required: true, trim: true },
+  landmark: { type: String, trim: true, default: '' },
+  pincode: { type: String, required: true, trim: true, match: /^\d{6}$/ }
+}, { _id: false });
+
 const checkoutAttemptSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -45,10 +52,22 @@ const checkoutAttemptSchema = new mongoose.Schema({
     required: true
   },
   deliveryAddress: {
-    label: { type: String, required: true, trim: true },
-    fullAddress: { type: String, required: true, trim: true },
-    landmark: { type: String, trim: true, default: '' },
-    pincode: { type: String, required: true, trim: true, match: /^\d{6}$/ }
+    type: deliveryAddressSchema,
+    required() {
+      return this.orderType === 'delivery';
+    }
+  },
+  orderType: {
+    type: String,
+    enum: ['delivery', 'pickup'],
+    required: true,
+    default: 'delivery'
+  },
+  pickupAt: {
+    type: Date,
+    required() {
+      return this.orderType === 'pickup';
+    }
   },
   items: {
     type: [checkoutItemSchema],

@@ -23,6 +23,12 @@ export const api = createApi({
       query: (params = {}) => ({ url: '/stores', params }),
       providesTags: ['Stores'],
     }),
+    getPickupSlots: builder.query({
+      query: ({ storeId, date }) => ({
+        url: `/stores/${storeId}/pickup-slots`,
+        params: { date },
+      }),
+    }),
     getProducts: builder.query({
       query: (params = {}) => ({ url: '/products', params }),
       providesTags: (result) => [
@@ -216,6 +222,10 @@ export const api = createApi({
       }),
       invalidatesTags: ['StoreMe', 'StoreDashboard', 'StoreAudit'],
     }),
+    updateStoreHours: builder.mutation({
+      query: (body) => ({ url: '/store/hours', method: 'PATCH', body }),
+      invalidatesTags: ['StoreMe', 'Stores', 'StoreAudit'],
+    }),
     exportStoreReport: builder.mutation({
       query: (params) => ({
         url: '/store/reports/export',
@@ -228,6 +238,7 @@ export const api = createApi({
 
 export const {
   useGetStoresQuery,
+  useGetPickupSlotsQuery,
   useGetProductsQuery,
   useGetProductCategoriesQuery,
   useVerifyFirebasePhoneTokenMutation,
@@ -270,5 +281,6 @@ export const {
   useRefundStoreOrderMutation,
   useGetStoreTransactionsQuery,
   useToggleStoreStatusMutation,
+  useUpdateStoreHoursMutation,
   useExportStoreReportMutation,
 } = api

@@ -14,6 +14,7 @@ import Transaction from '../src/models/Transaction.js';
 import User from '../src/models/User.js';
 import WebhookEvent from '../src/models/WebhookEvent.js';
 import { priceSelection } from '../src/utils/pricing.js';
+import { getIndiaDateString, getPickupSlots, isValidPickupTime } from '../src/utils/pickupSlots.js';
 
 const objectId = () => new mongoose.Types.ObjectId();
 
@@ -250,6 +251,7 @@ test('cart does not store a total and order total is derived from snapshot line 
       selectedPackLabel: '1 L'
     }]
   });
+
   assert.ok(cart.items[0]._id);
   assert.equal(cart.items.id(String(cart.items[0]._id)), cart.items[0]);
 
@@ -281,4 +283,36 @@ test('cart does not store a total and order total is derived from snapshot line 
   });
   await order.validate();
   assert.equal(order.totalAmount, 500);
+});
+
+test('pickup slots are 30-minute future windows within store hours in India time', () => {
+  const now = new Date('2026-10-15T10:00:00.000Z');
+  const date = getIndiaDateString(now);
+  const slots = getPickupSlots({
+    date,
+    openingTime: '16:00',
+    closingTime: '18:00',
+    now
+  });
+  assert.equal(slots.length, 4);
+  assert.equal(slots[0].startAt.toISOString(), '2026-10-15T10:30:00.000Z');
+  assert.equal(slots.at(-1).endAt.toISOString(), '2026-10-15T12:30:00.000Z');
+  assert.equal(isValidPickupTime({
+    pickupAt: slots[0].startAt,
+    openingTime: '16:00',
+    closingTime: '18:00',
+    now
+  }), true);
+  assert.equal(isValidPickupTime({
+    pickupAt: '2026-10-15T10:15:00.000Z',
+    openingTime: '16:00',
+    closingTime: '18:00',
+    now
+  }), false);
+  assert.deepEqual(getPickupSlots({
+    date: '2026-02-30',
+    openingTime: '09:00',
+    closingTime: '10:00',
+    now
+  }), []);
 });

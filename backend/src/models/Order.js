@@ -117,9 +117,23 @@ const orderSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  orderType: {
+    type: String,
+    enum: ['delivery', 'pickup'],
+    required: true,
+    default: 'delivery'
+  },
+  pickupAt: {
+    type: Date,
+    required() {
+      return this.orderType === 'pickup';
+    }
+  },
   deliveryAddress: {
     type: deliveryAddressSchema,
-    required: true
+    required() {
+      return this.orderType === 'delivery';
+    }
   },
   items: {
     type: [orderItemSchema],
@@ -144,7 +158,7 @@ const orderSchema = new mongoose.Schema({
   },
   orderStatus: {
     type: String,
-    enum: ['placed', 'packing', 'out for delivery', 'delivered', 'cancelled'],
+    enum: ['placed', 'packing', 'out for delivery', 'ready for pickup', 'delivered', 'picked up', 'cancelled'],
     default: 'placed'
   },
   paymentStatus: {

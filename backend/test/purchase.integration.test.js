@@ -18,12 +18,14 @@ import Transaction from '../src/models/Transaction.js';
 import User from '../src/models/User.js';
 import WebhookEvent from '../src/models/WebhookEvent.js';
 import getRazorpayClient from '../src/services/razorpay.js';
+import { getIndiaDateString } from '../src/utils/pickupSlots.js';
 
 const originalEnvironment = {
   JWT_SECRET: process.env.JWT_SECRET,
   RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
   RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
-  RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET
+  RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
+  RENDER_EXTERNAL_URL: process.env.RENDER_EXTERNAL_URL
 };
 let replicaSet;
 let server;
@@ -550,6 +552,204 @@ test('customer purchase, payment, and store status notification flow works end t
   });
   assert.equal(regexCharactersAreLiteral.status, 200);
   assert.equal((await regexCharactersAreLiteral.json()).pagination.total, 0);
+});
+
+test('store hours generate pickup slots and pickup orders use pickup-specific status transitions', async () => {
+  const store = await Store.create({
+    storeName: 'Pickup Hours Store',
+    username: 'pickup-hours-store',
+    password: 'test-password-long-enough',
+    location: 'Hyderabad'
+  });
+  const user = await User.create({
+    name: 'Pickup Customer',
+    phone: '+15551234588'
+  });
+  const storeToken = jwt.sign({ role: 'store' }, process.env.JWT_SECRET, {
+    subject: String(store._id), expiresIn: '5m', issuer: 'nalli-bokka-api'
+  });
+  const userToken = jwt.sign({ role: 'user' }, process.env.JWT_SECRET, {
+    subject: String(user._id), expiresIn: '5m', issuer: 'nalli-bokka-api'
+  });
+  const storeHeaders = {
+    authorization: `Bearer ${storeToken}`,
+    'content-type': 'application/json'
+  };
+
+  const invalidHoursResponse = await fetch(`${baseUrl}/store/hours`, {
+    method: 'PATCH',
+    headers: storeHeaders,
+    body: JSON.stringify({ openingTime: '09:15', closingTime: '18:00' })
+  });
+  assert.equal(invalidHoursResponse.status, 400);
+
+  const hoursResponse = await fetch(`${baseUrl}/store/hours`, {
+    method: 'PATCH',
+    headers: storeHeaders,
+    body: JSON.stringify({ openingTime: '09:00', closingTime: '10:00' })
+  });
+  const hoursPayload = await hoursResponse.json();
+  assert.equal(hoursResponse.status, 200, JSON.stringify(hoursPayload));
+  assert.equal(hoursPayload.data.openingTime, '09:00');
+
+  const pickupDate = getIndiaDateString(new Date(Date.now() + 36 * 60 * 60 * 1000));
+  const slotsResponse = await fetch(`${baseUrl}/stores/${store._id}/pickup-slots?date=${pickupDate}`);
+  assert.equal(slotsResponse.status, 200);
+  const slots = (await slotsResponse.json()).data.slots;
+  assert.equal(slots.length, 2);
+  assert.equal(slots[0].endAt, slots[1].startAt);
+
+  const order = await Order.create({
+    userId: user._id,
+    storeId: store._id,
+    orderType: 'pickup',
+    pickupAt: new Date(slots[0].startAt),
+    items: [{
+      productId: new mongoose.Types.ObjectId(),
+      productName: 'Pickup item',
+      selectionType: 'pieces',
+      quantity: 1,
+      price: 150
+    }],
+    paymentStatus: 'paid'
+  });
+
+  const updateStatus = (orderStatus) => fetch(`${baseUrl}/store/orders/${order._id}/status`, {
+    method: 'PATCH',
+    headers: storeHeaders,
+    body: JSON.stringify({ orderStatus })
+  });
+  assert.equal((await updateStatus('packing')).status, 200);
+  assert.equal((await updateStatus('ready for pickup')).status, 200);
+  assert.equal((await updateStatus('picked up')).status, 200);
+  assert.equal((await Order.findById(order._id)).orderStatus, 'picked up');
+
+  const pickupOrdersResponse = await fetch(`${baseUrl}/store/orders?orderType=pickup`, {
+    headers: { authorization: `Bearer ${storeToken}` }
+  });
+  assert.equal(pickupOrdersResponse.status, 200);
+  assert.ok((await pickupOrdersResponse.json()).data.some(({ _id }) => _id === String(order._id)));
+  const customerPickupResponse = await fetch(`${baseUrl}/orders?orderType=pickup`, {
+    headers: { authorization: `Bearer ${userToken}` }
+  });
+  assert.equal(customerPickupResponse.status, 200);
+  assert.equal((await customerPickupResponse.json()).pagination.total, 1);
+});
+
+test('mobile Razorpay callback verifies payment and redirects to the created order', async () => {
+  process.env.RENDER_EXTERNAL_URL = new URL(baseUrl).origin;
+  const store = await Store.create({
+    storeName: 'Mobile Checkout Store',
+    username: 'mobile-checkout-store',
+    password: 'test-password-long-enough',
+    location: 'Hyderabad'
+  });
+  const user = await User.create({
+    name: 'Mobile Checkout Customer',
+    phone: '+15551234570',
+    addresses: [{
+      label: 'Home',
+      fullAddress: '15 Mobile Road, Hyderabad',
+      pincode: '500001'
+    }]
+  });
+  const product = await Product.create({
+    storeId: store._id,
+    productType: 'vegetable',
+    productName: 'Mobile Checkout Tomatoes',
+    imageUrl: 'https://example.test/tomatoes.jpg',
+    inStock: true,
+    pricePerKg: 800
+  });
+  await Cart.create({
+    userId: user._id,
+    items: [{ productId: product._id, selectionType: 'weight', selectedQuantity: 0.5 }]
+  });
+  const token = jwt.sign({ role: 'user' }, process.env.JWT_SECRET, {
+    subject: String(user._id), expiresIn: '5m', issuer: 'nalli-bokka-api'
+  });
+  const origin = 'http://localhost:5173';
+  const pickupDate = getIndiaDateString(new Date(Date.now() + 36 * 60 * 60 * 1000));
+  const pickupSlotsResponse = await fetch(`${baseUrl}/stores/${store._id}/pickup-slots?date=${pickupDate}`);
+  assert.equal(pickupSlotsResponse.status, 200);
+  const pickupAt = (await pickupSlotsResponse.json()).data.slots[0].startAt;
+  const paymentResponse = await fetch(`${baseUrl}/payments/razorpay/order`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      origin,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      orderType: 'pickup',
+      pickupAt,
+      storeId: String(store._id),
+      idempotencyKey: '55555555-5555-4555-8555-555555555555'
+    })
+  });
+  assert.equal(paymentResponse.status, 201);
+  const payment = (await paymentResponse.json()).data;
+  const attempt = await CheckoutAttempt.findOne({ razorpayOrderId: payment.razorpayOrderId });
+  assert.equal(attempt.orderType, 'pickup');
+  assert.equal(attempt.pickupAt.toISOString(), pickupAt);
+  assert.equal(new URL(payment.callbackUrl).origin, new URL(baseUrl).origin);
+  assert.equal(new URL(payment.callbackUrl).pathname, '/api/payments/razorpay/callback');
+
+  const paymentId = 'razorpay_payment_mobile_callback';
+  const signature = createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+    .update(`${payment.razorpayOrderId}|${paymentId}`)
+    .digest('hex');
+  capturedRazorpayOrderId = payment.razorpayOrderId;
+  const razorpay = getRazorpayClient();
+  const originalFetch = razorpay.payments.fetch;
+  const originalCapture = razorpay.payments.capture;
+  let captureCalled = false;
+  razorpay.payments.fetch = async () => ({
+    order_id: capturedRazorpayOrderId,
+    amount: 40000,
+    currency: 'INR',
+    status: 'authorized'
+  });
+  razorpay.payments.capture = async (capturedPaymentId, amount, currency) => {
+    captureCalled = true;
+    assert.equal(capturedPaymentId, paymentId);
+    assert.equal(amount, 40000);
+    assert.equal(currency, 'INR');
+    return {
+      order_id: capturedRazorpayOrderId,
+      amount,
+      currency,
+      status: 'captured'
+    };
+  };
+  let callbackResponse;
+  try {
+    callbackResponse = await fetch(payment.callbackUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        razorpay_order_id: payment.razorpayOrderId,
+        razorpay_payment_id: paymentId,
+        razorpay_signature: signature
+      }),
+      redirect: 'manual'
+    });
+  } finally {
+    razorpay.payments.fetch = originalFetch;
+    razorpay.payments.capture = originalCapture;
+  }
+  assert.equal(captureCalled, true);
+  assert.equal(callbackResponse.status, 303);
+  const redirectUrl = new URL(callbackResponse.headers.get('location'));
+  assert.equal(redirectUrl.origin, origin);
+  assert.equal(redirectUrl.pathname, '/orders');
+  const order = await Order.findById(redirectUrl.searchParams.get('order'));
+  assert.ok(order);
+  assert.equal(order.paymentStatus, 'paid');
+  assert.equal(order.orderType, 'pickup');
+  assert.equal(order.pickupAt.toISOString(), pickupAt);
+  assert.equal(order.deliveryAddress, undefined);
+  assert.equal((await Cart.findOne({ userId: user._id })).items.length, 0);
 });
 
 test('store refunds are scoped, full, single-request, and settled by deduplicated webhooks', async () => {

@@ -47,17 +47,17 @@ function getSelectionOptions(product) {
 }
 
 function SelectionOption({ option, count, setCount }) {
-  return <article className="rounded-[12px] border border-[#efede8] bg-white p-3">
+  return <article className="quantity-option rounded-[12px] border border-[var(--border-default)] bg-white p-3">
     <div className="flex items-center justify-between gap-3">
-      <p className="text-sm font-medium text-[#34362f]">{option.label}</p>
-      <p className="text-sm font-semibold text-[#34362f]">{formatPrice(option.price)}</p>
+      <p className="text-sm font-medium text-[var(--text-primary)]">{option.label}</p>
+      <p className="text-sm font-semibold text-[var(--text-primary)]">{formatPrice(option.price)}</p>
     </div>
     {count === 0
-      ? <button onClick={() => setCount(1)} className="mt-2.5 h-10 w-full rounded-[8px] bg-[#861923] text-[13px] font-semibold text-white transition hover:bg-[#70131c]">Add</button>
-      : <div className="mt-2.5 flex h-11 items-center justify-around rounded-full border border-[#e9e8e4] bg-[#fafaf9] shadow-sm">
-        <button onClick={() => setCount(Math.max(0, count - 1))} aria-label={`Remove one ${option.label}`} className="grid h-9 w-12 place-items-center rounded-full text-[#34362f] hover:bg-[#f0efec]">{count === 1 ? <Trash2 size={17} /> : <Minus size={17} />}</button>
-        <span className="min-w-8 text-center text-sm font-semibold text-[#34362f]">{count}</span>
-        <button onClick={() => setCount(count + 1)} aria-label={`Add one ${option.label}`} className="grid h-9 w-12 place-items-center rounded-full text-[#34362f] hover:bg-[#f0efec]"><Plus size={17} /></button>
+      ?       <button onClick={() => setCount(1)} className="mt-2.5 h-10 w-full rounded-[8px] bg-[var(--brand-primary)] text-[13px] font-semibold transition hover:bg-[var(--brand-primary-hover)]">Add</button>
+      : <div className="mt-2.5 flex h-11 items-center justify-around rounded-full border border-[var(--border-default)] bg-[var(--bg-app)] shadow-sm">
+        <button onClick={() => setCount(Math.max(0, count - 1))} aria-label={`Remove one ${option.label}`} className="grid h-9 w-12 place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--surface-subtle)]">{count === 1 ? <Trash2 size={17} /> : <Minus size={17} />}</button>
+        <span className="min-w-8 text-center text-sm font-semibold text-[var(--text-primary)]">{count}</span>
+        <button onClick={() => setCount(count + 1)} aria-label={`Add one ${option.label}`} className="grid h-9 w-12 place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--surface-subtle)]"><Plus size={17} /></button>
       </div>}
   </article>
 }
@@ -138,38 +138,38 @@ export default function ProductCard({ product }) {
 
   return (
     <>
-      <article className="group overflow-hidden rounded-[16px] border border-[#e8e5dd] bg-white p-1.5 shadow-[0_2px_8px_-6px_rgba(48,49,39,.28)] transition hover:border-[#d8d4c8] hover:shadow-[0_10px_28px_-19px_rgba(48,49,39,.36)] sm:rounded-[18px] sm:p-2">
+      <article className="product-card group overflow-hidden rounded-[16px] border border-[var(--border-default)] bg-white p-1.5 shadow-[0_2px_8px_-6px_rgba(48,49,39,.28)] transition hover:border-[var(--brand-secondary)] hover:shadow-[0_10px_28px_-19px_rgba(48,49,39,.36)] sm:rounded-[18px] sm:p-2">
         <div className="relative aspect-[1.08/1] overflow-hidden rounded-t-[12px] bg-[#f0efe8] sm:rounded-t-[14px]">
           {product.imageUrl && !imageFailed
             ? <img src={product.imageUrl} alt={product.productName} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" onError={() => setImageFailed(true)} />
             : <div className="grid h-full place-items-center text-6xl" aria-hidden="true">{categoryEmoji[product.productType] || '🛍️'}</div>}
-          {!product.inStock && <span className="absolute inset-x-2 bottom-2 rounded-md bg-white/90 px-2 py-1 text-center text-[10px] font-semibold text-[#7d463c]">Currently unavailable</span>}
+          {!product.inStock && <span className="absolute inset-x-2 bottom-2 rounded-md bg-white/90 px-2 py-1 text-center text-[10px] font-semibold text-[var(--text-secondary)]">Currently unavailable</span>}
         </div>
         <div className="px-2 pb-2 pt-2.5 sm:px-2.5 sm:pb-2.5">
-          <h3 className="line-clamp-2 min-h-10 text-[13px] font-semibold leading-5 text-[#30312c] sm:text-sm">{product.productName}</h3>
-          <p className="mt-0.5 text-[10px] capitalize text-[#858478]">{product.productType}</p>
-          <p className="mt-0.5 text-sm font-semibold tracking-[-.02em] text-[#34362f]">{getPriceRange(product)}</p>
-          <p className="mt-0.5 min-h-4 text-[10px] text-[#929186]">{product.packs?.length ? 'Prices vary by pack' : 'Prices vary by quantity'}</p>
-          {store?.storeName && <p className="mt-1 truncate text-[10px] text-[#939387]">{store.storeName}</p>}
+          <h3 className="line-clamp-2 min-h-10 text-[13px] font-semibold leading-5 text-[var(--text-primary)] sm:text-sm">{product.productName}</h3>
+          <span className="mt-1 inline-flex rounded-full bg-[var(--brand-primary-soft)] px-2 py-0.5 text-[9px] font-semibold capitalize text-[var(--brand-primary)]">{product.productType}</span>
+          <p className="mt-0.5 text-sm font-semibold tracking-[-.02em] text-[var(--text-primary)]">{getPriceRange(product)}</p>
+          <p className="mt-0.5 min-h-4 text-[10px] text-[var(--text-secondary)]">{product.packs?.length ? 'Prices vary by pack' : 'Prices vary by quantity'}</p>
+          {store?.storeName && <p className="mt-1 truncate text-[10px] text-[var(--text-secondary)]">{store.storeName}</p>}
           <button
             onClick={() => { setCounts({}); setError(''); setOptionsOpen(true) }}
             disabled={isLoading || product.inStock === false}
-            className="mt-3 flex h-10 w-full items-center justify-center rounded-[9px] bg-[#861923] text-sm font-semibold text-white transition hover:bg-[#70131c] disabled:cursor-not-allowed disabled:opacity-45 sm:h-11"
+            className="button-strong mt-3 flex h-10 w-full items-center justify-center rounded-[9px] bg-[var(--brand-primary)] text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 sm:h-11"
           >
             Choose
           </button>
         </div>
       </article>
 
-      {optionsOpen && <div className="fixed inset-0 z-50 grid items-end bg-[#24251f]/40 backdrop-blur-[3px] sm:items-center sm:p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOptionsOpen(false) }}>
-        <section role="dialog" aria-modal="true" aria-labelledby={`product-options-${product._id}`} className="mx-auto flex max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-t-[22px] bg-white shadow-2xl sm:rounded-[22px]">
-          <div className="flex items-start justify-between border-b border-[#eeeae4] px-5 py-4">
+      {optionsOpen && <div className="fixed inset-0 z-50 grid items-end bg-[var(--text-primary)]/40 backdrop-blur-[3px] sm:items-center sm:p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOptionsOpen(false) }}>
+        <section role="dialog" aria-modal="true" aria-labelledby={`product-options-${product._id}`} className="product-quantity-dialog mx-auto flex max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-t-[22px] bg-white shadow-2xl sm:rounded-[22px]">
+          <div className="flex items-start justify-between border-b border-[var(--surface-subtle)] px-5 py-4">
             <div className="min-w-0">
-              <h2 id={`product-options-${product._id}`} className="truncate text-[17px] font-semibold tracking-[-.025em] text-[#292b26]">{product.productName}</h2>
-              <p className="mt-1 text-sm font-medium text-[#494b43]">{getPriceRange(product)}</p>
-              <p className="mt-2 text-[10px] font-semibold uppercase tracking-[.14em] text-[#898a80]">Choose quantity</p>
+              <h2 id={`product-options-${product._id}`} className="truncate text-[17px] font-semibold tracking-[-.025em] text-[var(--text-primary)]">{product.productName}</h2>
+              <p className="mt-1 text-sm font-medium text-[var(--text-secondary)]">{getPriceRange(product)}</p>
+              <p className="mt-2 text-[10px] font-semibold uppercase tracking-[.14em] text-[var(--text-secondary)]">Choose quantity</p>
             </div>
-            <button onClick={() => setOptionsOpen(false)} aria-label="Close quantity selection" className="ml-3 rounded-full p-1.5 text-[#77786e] hover:bg-[#f2f1ed]"><X size={18} /></button>
+            <button onClick={() => setOptionsOpen(false)} aria-label="Close quantity selection" className="ml-3 rounded-full p-1.5 text-[var(--text-secondary)] hover:bg-[#f2f1ed]"><X size={18} /></button>
           </div>
           <div className="flex-1 space-y-2 overflow-y-auto bg-[#faf9f7] px-4 py-3">
             {options.map((option) => <SelectionOption
@@ -178,11 +178,11 @@ export default function ProductCard({ product }) {
               count={counts[optionKey(option)] || 0}
               setCount={(count) => setOptionCount(option, count)}
             />)}
-            {error && <p role="alert" className="rounded-lg bg-[#fbf1ee] p-3 text-xs text-[#8c4034]">{error}</p>}
+            {error && <p role="alert" className="rounded-lg bg-[var(--status-danger-soft)] p-3 text-xs text-[var(--status-danger)]">{error}</p>}
           </div>
-          <div className="border-t border-[#eeeae4] bg-white px-4 pb-4 pt-3">
-            <p className="mb-3 text-center text-sm text-[#77766f]">{itemCount} {itemCount === 1 ? 'item' : 'items'} · {formatPrice(subtotal)}</p>
-            <button disabled={isLoading} onClick={addSelection} className="h-11 w-full rounded-[9px] bg-[#861923] text-sm font-semibold text-white transition hover:bg-[#70131c] disabled:opacity-60">{isLoading ? 'Adding…' : 'Done'}</button>
+          <div className="border-t border-[var(--surface-subtle)] bg-white px-4 pb-4 pt-3">
+            <p className="mb-3 text-center text-sm text-[var(--text-secondary)]">{itemCount} {itemCount === 1 ? 'item' : 'items'} · {formatPrice(subtotal)}</p>
+            <button disabled={isLoading} onClick={addSelection} className="h-11 w-full rounded-[9px] bg-[var(--brand-primary)] text-sm font-semibold transition disabled:opacity-60">{isLoading ? 'Adding…' : 'Done'}</button>
           </div>
         </section>
       </div>}

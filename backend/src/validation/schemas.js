@@ -151,7 +151,8 @@ const schemas = {
   orderList: {
     query: dateRangeQuery({
       ...pagination,
-      orderStatus: z.enum(['placed', 'packing', 'out for delivery', 'delivered', 'cancelled']).optional(),
+      orderStatus: z.enum(['placed', 'packing', 'out for delivery', 'ready for pickup', 'delivered', 'picked up', 'cancelled']).optional(),
+      orderType: z.enum(['delivery', 'pickup']).optional(),
       search: z.string().trim().min(1).max(100).optional(),
       sort: z.enum(['newest', 'oldest', 'amount_desc', 'amount_asc']).default('newest')
     })
@@ -160,7 +161,7 @@ const schemas = {
   orderStatusUpdate: {
     params: z.object({ orderId: objectId }),
     body: z.object({
-      orderStatus: z.enum(['packing', 'out for delivery', 'delivered', 'cancelled'])
+      orderStatus: z.enum(['packing', 'out for delivery', 'ready for pickup', 'delivered', 'picked up', 'cancelled'])
     }).strict()
   },
   storeOrderRefund: {
@@ -175,10 +176,17 @@ const schemas = {
   },
   checkoutPaymentCreate: {
     body: z.object({
-      addressId: objectId,
+      addressId: objectId.optional(),
       storeId: objectId.optional(),
+      orderType: z.enum(['delivery', 'pickup']).default('delivery'),
+      pickupAt: z.string().datetime({ offset: true }).optional(),
       idempotencyKey: z.string().uuid()
-    }).strict()
+    }).strict().refine(({ orderType, addressId, pickupAt }) => (
+      orderType === 'delivery' ? Boolean(addressId) && !pickupAt : Boolean(pickupAt)
+    ), {
+      message: 'Delivery requires an address; pickup requires a selected pickup slot',
+      path: ['orderType']
+    })
   },
   paymentVerify: {
     body: z.object({
@@ -190,6 +198,21 @@ const schemas = {
   storeStatusUpdate: {
     body: z.object({
       isOpen: z.boolean()
+    }).strict()
+  },
+  storeHoursUpdate: {
+    body: z.object({
+      openingTime: z.string().regex(/^(?:[01]\d|2[0-3]):[03]0$/, 'Opening time must use 30-minute increments'),
+      closingTime: z.string().regex(/^(?:[01]\d|2[0-3]):[03]0$/, 'Closing time must use 30-minute increments')
+    }).strict().refine(({ openingTime, closingTime }) => openingTime < closingTime, {
+      message: 'Closing time must be later than opening time',
+      path: ['closingTime']
+    })
+  },
+  storePickupSlots: {
+    params: z.object({ id: objectId }),
+    query: z.object({
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
     }).strict()
   },
   dashboard: {

@@ -9,9 +9,11 @@ import { createInvoicePdf } from '../services/invoicePdf.js';
 
 const ORDER_TRANSITIONS = {
   placed: new Set(['packing', 'cancelled']),
-  packing: new Set(['out for delivery', 'cancelled']),
+  packing: new Set(['out for delivery', 'ready for pickup', 'cancelled']),
   'out for delivery': new Set(['delivered']),
+  'ready for pickup': new Set(['picked up']),
   delivered: new Set(),
+  'picked up': new Set(),
   cancelled: new Set()
 };
 
@@ -32,10 +34,13 @@ async function paginateOrders(filter, page, limit, sort = { createdAt: -1, _id: 
 }
 
 export async function listUserOrders(req, res) {
-  const { page, limit, orderStatus, from, to } = req.validated.query;
+  const { page, limit, orderStatus, orderType, from, to } = req.validated.query;
   const filter = { userId: req.auth.id };
   if (orderStatus) {
     filter.orderStatus = orderStatus;
+  }
+  if (orderType) {
+    filter.orderType = orderType === 'delivery' ? { $ne: 'pickup' } : orderType;
   }
   if (from) {
     filter.createdAt = { $gte: new Date(from), $lt: new Date(to) };
@@ -157,10 +162,13 @@ export async function cancelUserOrder(req, res) {
 }
 
 export async function listStoreOrders(req, res) {
-  const { page, limit, orderStatus, from, to, search, sort } = req.validated.query;
+  const { page, limit, orderStatus, orderType, from, to, search, sort } = req.validated.query;
   const filter = { storeId: req.auth.id };
   if (orderStatus) {
     filter.orderStatus = orderStatus;
+  }
+  if (orderType) {
+    filter.orderType = orderType === 'delivery' ? { $ne: 'pickup' } : orderType;
   }
   if (from) {
     filter.createdAt = { $gte: new Date(from), $lt: new Date(to) };
@@ -221,7 +229,15 @@ export async function updateStoreOrderStatus(req, res) {
       if (!order) {
         throw new AppError(404, 'Order not found');
       }
-      if (!ORDER_TRANSITIONS[order.orderStatus].has(nextStatus)) {
+      const allowedNextStatus = order.orderType === 'pickup' && order.orderStatus === 'packing'
+        ? 'ready for pickup'
+        : order.orderType === 'delivery' && order.orderStatus === 'packing'
+          ? 'out for delivery'
+          : order.orderStatus;
+      const transitions = order.orderStatus === 'packing'
+        ? new Set([allowedNextStatus, 'cancelled'])
+        : ORDER_TRANSITIONS[order.orderStatus];
+      if (!transitions?.has(nextStatus)) {
         throw new AppError(409, `Cannot change order status from ${order.orderStatus} to ${nextStatus}`);
       }
       if (order.paymentStatus === 'refund_pending') {
@@ -243,7 +259,9 @@ export async function updateStoreOrderStatus(req, res) {
       const statusMessages = {
         packing: 'Your order has been accepted and is being prepared.',
         'out for delivery': 'Your order is out for delivery.',
+        'ready for pickup': 'Your order is ready for pickup at the store.',
         delivered: 'Your order has been delivered.',
+        'picked up': 'Your order has been picked up.',
         cancelled: 'Your order was cancelled by the store.'
       };
       await Notification.create([{

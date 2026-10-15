@@ -85,7 +85,7 @@ Pagination query parameters are `page` (default `1`, integer >= 1) and `limit` (
 
 ### `GET /health`
 
-**Access:** Public  
+**Access:** Public
 **Purpose:** Confirms that the HTTP process is responding. This is a liveness endpoint and does not test MongoDB connectivity.
 
 **Request:** No body or query parameters.
@@ -431,6 +431,19 @@ Search is case-insensitive. Only public store fields are selected.
 
 **Important errors:** `400` invalid pagination/query.
 
+### `GET /stores/:id/pickup-slots`
+
+**Access:** Public
+**Purpose:** Lists future 30-minute pickup slots for an open store on a requested India-local date.
+
+**Query parameters:** `date` in `YYYY-MM-DD` format; defaults to the current date in `Asia/Kolkata`.
+
+**Success — `200 OK`:** `{ "data": { "date": "2026-10-16", "timeZone": "Asia/Kolkata", "slots": [{ "startAt": "<ISO-8601>", "endAt": "<ISO-8601>" }] } }`.
+
+Slots are returned in ISO-8601 UTC timestamps and generated from the store's daily opening and closing times. Checkout revalidates the selected slot against the current store hours.
+
+**Important errors:** `400` invalid store ID/date; `404` store not found; `409` store is paused or closed.
+
 ### `GET /stores/:id`
 
 **Access:** Public  
@@ -625,7 +638,7 @@ This endpoint is not available. For new purchases, an order is created only afte
 
 **Purpose:** Lists the authenticated customer's orders, newest first.
 
-**Query parameters:** Standard pagination; optional `orderStatus` (`placed`, `packing`, `out for delivery`, `delivered`, or `cancelled`); optional `from` and `to` ISO-8601 timestamps, supplied together, to restrict `createdAt` to `[from, to)`.
+**Query parameters:** Standard pagination; optional `orderStatus` (`placed`, `packing`, `out for delivery`, `ready for pickup`, `delivered`, `picked up`, or `cancelled`); optional `orderType` (`delivery` or `pickup`); optional `from` and `to` ISO-8601 timestamps, supplied together, to restrict `createdAt` to `[from, to)`.
 
 **Success — `200 OK`:** Paginated response. Each order's `storeId` is populated with public store fields (`_id`, `storeName`, `location`).
 
@@ -701,19 +714,20 @@ Payment endpoints integrate Razorpay. Never put `RAZORPAY_KEY_SECRET` or `RAZORP
 ### `POST /payments/razorpay/order`
 
 **Access:** Customer
-**Purpose:** Validates the saved address, selected store, cart availability and current prices, then creates a short-lived `CheckoutAttempt` and Razorpay payment order. It does not create an Order or modify the cart.
+**Purpose:** Validates fulfillment details, selected store, cart availability and current prices, then creates a short-lived `CheckoutAttempt` and Razorpay payment order. It does not create an Order or modify the cart. Delivery requires a saved address; pickup requires a future slot currently offered by the selected store.
 
 **Request body:**
 
 ```json
 {
+  "orderType": "delivery",
   "addressId": "<savedAddressId>",
   "storeId": "<storeId>",
   "idempotencyKey": "<uuid>"
 }
 ```
 
-`storeId` may be omitted only if the cart contains products from one store. The key must be a UUID and is scoped to the customer. Reuse it only for retries of the same request; use a new key to begin a new payment attempt.
+For pickup, send `"orderType": "pickup"` and `"pickupAt": "<slot startAt ISO-8601>"` instead of `addressId`. `storeId` may be omitted only if the cart contains products from one store. The key must be a UUID and is scoped to the customer. Reuse it only for retries of the same request; use a new key to begin a new payment attempt.
 
 **Success - `201 Created` (or `200 OK` for an active idempotent retry):**
 
@@ -723,14 +737,15 @@ Payment endpoints integrate Razorpay. Never put `RAZORPAY_KEY_SECRET` or `RAZORP
     "razorpayOrderId": "order_...",
     "keyId": "<public-razorpay-key-id>",
     "amount": 40000,
-    "currency": "INR"
+    "currency": "INR",
+    "callbackUrl": "<server-generated optional Razorpay redirect callback URL>"
   }
 }
 ```
 
-`amount` is paise. Use these values to open Razorpay Checkout. No order exists yet and the cart remains unchanged.
+`amount` is paise. `callbackUrl` is returned when the request origin is in `CORS_ORIGIN` and a public API URL is configured; pass it to Razorpay Checkout as `callback_url` with `redirect: true` to support mobile browser redirects. Use the returned values to open Razorpay Checkout. No order exists yet and the cart remains unchanged.
 
-**Important errors:** `400` invalid body, empty cart, or non-positive total; `401` unauthorized; `404` user or saved address missing; `409` unavailable/invalid products, selected store mismatch, mixed-store cart without `storeId`, inactive idempotency key, or a store that is closed; `503` Razorpay is not configured. MongoDB must support transactions for final order creation.
+**Important errors:** `400` invalid body, empty cart, or non-positive total; `401` unauthorized; `404` user or saved address missing; `409` unavailable/invalid products, selected store mismatch, mixed-store cart without `storeId`, inactive idempotency key, closed store, or stale pickup slot; `503` Razorpay is not configured. MongoDB must support transactions for final order creation.
 
 ### `POST /payments/razorpay/:razorpayOrderId/failed`
 
@@ -769,7 +784,7 @@ Payment endpoints integrate Razorpay. Never put `RAZORPAY_KEY_SECRET` or `RAZORP
 ### `POST /payments/razorpay/verify`
 
 **Access:** Customer  
-**Purpose:** Verifies the Razorpay Checkout callback server-side. Checks the signature, fetches the payment, and confirms the order, amount, currency, and captured status. For a new checkout it atomically creates the paid order, paid transaction, and placed notification, then removes only the purchased matching cart lines. For a legacy persisted order it updates that order and its transaction. Failed payments never produce a new order.
+**Purpose:** Verifies the Razorpay Checkout response server-side. Checks the signature, fetches the payment, captures it if it is only authorized, and confirms the order, amount, currency, and captured status. For a new checkout it atomically creates the paid order, paid transaction, and placed notification, then removes only the purchased matching cart lines. For a legacy persisted order it updates that order and its transaction. Failed payments never produce a new order.
 
 **Request body:**
 
@@ -803,7 +818,15 @@ The frontend should then reload `GET /orders/:orderId` to display the persisted 
 - `404`: Payment transaction or customer-owned order not found.
 - `409`: Razorpay reports a payment that is not captured or whose order ID, amount, or currency does not match the expected transaction.
 - `503`: Online payment configuration is unavailable.
+- `502`: An authorized payment could not be captured.
 - MongoDB transaction errors if the deployment does not support transactions.
+
+### `POST /payments/razorpay/callback`
+
+**Access:** Razorpay Checkout redirect; no customer token.
+**Purpose:** Accepts Razorpay's URL-encoded payment response, verifies the signature and captured payment against the saved checkout attempt, creates the order transactionally, and redirects the browser to the allowed frontend origin's order details page. Redirect origins are restricted to `CORS_ORIGIN`.
+
+This endpoint is configured automatically from `RENDER_EXTERNAL_URL` on Render. Other hosts must set `PUBLIC_API_URL` to the public API origin. It is used as Razorpay Checkout's `callback_url`; it is not the Razorpay webhook endpoint.
 
 ### `POST /api/payments/razorpay/webhook`
 
@@ -1000,7 +1023,7 @@ Example:
 
 **Purpose:** Lists orders belonging to this store. Store staff can search by order ID (including the short ID displayed in the dashboard), customer name, or phone number; search terms are treated as literal text.
 
-**Query parameters:** Standard pagination; optional `orderStatus` enum: `placed`, `packing`, `out for delivery`, `delivered`, `cancelled`; optional `search` string (1-100 characters); optional `sort`: `newest` (default), `oldest`, `amount_desc`, or `amount_asc`; optional `from` and `to` ISO-8601 timestamps, supplied together, to restrict `createdAt` to `[from, to)`.
+**Query parameters:** Standard pagination; optional `orderStatus` enum: `placed`, `packing`, `out for delivery`, `ready for pickup`, `delivered`, `picked up`, `cancelled`; optional `orderType` (`delivery` or `pickup`); optional `search` string (1-100 characters); optional `sort`: `newest` (default), `oldest`, `amount_desc`, or `amount_asc`; optional `from` and `to` ISO-8601 timestamps, supplied together, to restrict `createdAt` to `[from, to)`.
 
 **Success — `200 OK`:** Paginated orders. `userId` is populated with the customer `name` and `phone`; `storeId` is populated with public store fields.
 
@@ -1032,18 +1055,30 @@ Example:
 { "orderStatus": "packing" }
 ```
 
-Allowed requested states: `packing`, `out for delivery`, `delivered`, `cancelled`. Actual transitions are restricted:
+Allowed requested states: `packing`, `out for delivery`, `ready for pickup`, `delivered`, `picked up`, `cancelled`. Actual transitions are restricted:
 
 - `placed` → `packing` or `cancelled`
-- `packing` → `out for delivery` or `cancelled`
+- delivery `packing` → `out for delivery` or `cancelled`
 - `out for delivery` → `delivered`
-- `delivered` and `cancelled` are terminal
+- pickup `packing` → `ready for pickup` or `cancelled`
+- `ready for pickup` → `picked up`
+- `delivered`, `picked up`, and `cancelled` are terminal
 
 Moving to `packing` requires a captured payment. Cancelling a paid order through this status endpoint is not supported; use the full-refund endpoint, which immediately cancels the order. An active (`created`) payment transaction prevents cancellation.
 
 **Success — `200 OK`:** `{ "data": <updated order> }`.
 
 **Important errors:** `400` invalid ID/body; `401` unauthorized; `403` customer token; `404` order missing or not owned by this store; `409` illegal transition or cancellation/payment restriction.
+
+### `PATCH /store/hours`
+
+**Purpose:** Saves the store's daily recurring opening and closing times used to generate pickup slots. Both times must be 30-minute increments (`HH:00` or `HH:30`), and closing must be later than opening. These hours are separate from the store's open/pause order-acceptance status.
+
+**Request body:** `{ "openingTime": "09:00", "closingTime": "21:00" }`.
+
+**Success — `200 OK`:** `{ "data": <updated store document> }`.
+
+**Important errors:** `400` invalid hours; `401` unauthorized; `403` customer token; `404` store not found.
 
 ### `POST /store/orders/:orderId/refund`
 

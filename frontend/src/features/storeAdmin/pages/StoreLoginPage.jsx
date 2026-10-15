@@ -30,22 +30,22 @@ export default function StoreLoginPage() {
     }
   }
 
-  return <main className="grid min-h-screen place-items-center bg-[#fbf7f1] px-4 py-10">
-    <section className="w-full max-w-md rounded-[24px] border border-[#eadfd7] bg-white p-6 shadow-[0_18px_55px_-38px_rgba(70,31,27,.38)] sm:p-8">
-      <Link to="/" className="text-xs font-medium text-[#9b5148] hover:text-[#861923]">← Customer storefront</Link>
-      <div className="mt-7 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f7ece7] text-[#861923]"><Store size={22} /></div>
-      <p className="mt-5 text-[10px] font-semibold uppercase tracking-[.18em] text-[#ad7669]">NalliBokka store</p>
-      <h1 className="mt-1 font-display text-3xl font-medium tracking-[-.035em] text-[#392824]">Welcome back</h1>
-      <p className="mt-2 text-sm leading-6 text-[#82736d]">Sign in to manage your store, orders and inventory.</p>
+  return <main className="grid min-h-screen place-items-center bg-[var(--bg-app)] px-4 py-10">
+    <section className="w-full max-w-md rounded-[24px] border border-[var(--border-default)] bg-white p-6 shadow-[0_18px_55px_-38px_rgba(70,31,27,.38)] sm:p-8">
+      <Link to="/" className="text-xs font-medium text-[var(--brand-primary)] hover:text-[var(--brand-primary)]">← Customer storefront</Link>
+      <div className="mt-7 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-subtle)] text-[var(--brand-primary)]"><Store size={22} /></div>
+      <p className="mt-5 text-[10px] font-semibold uppercase tracking-[.18em] text-[var(--brand-primary)]">NalliBokka store</p>
+      <h1 className="mt-1 font-display text-3xl font-medium tracking-[-.035em] text-[var(--text-primary)]">Welcome back</h1>
+      <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">Sign in to manage your store, orders and inventory.</p>
       <form onSubmit={submit} className="mt-6 space-y-4">
-        <label className="block text-xs font-semibold text-[#76534a]">USERNAME
-          <span className="mt-1.5 flex h-11 items-center gap-2 rounded-xl border border-[#eadfd7] px-3 focus-within:border-[#c98c7f]"><UserRound size={16} className="text-[#9b8178]" /><input required autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} className="w-full bg-transparent text-sm font-normal text-[#302724] outline-none" placeholder="Your store username" /></span>
+        <label className="block text-xs font-semibold text-[var(--text-secondary)]">USERNAME
+          <span className="mt-1.5 flex h-11 items-center gap-2 rounded-xl border border-[var(--border-default)] px-3 focus-within:border-[var(--brand-primary)]"><UserRound size={16} className="text-[var(--text-secondary)]" /><input required autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} className="w-full bg-transparent text-sm font-normal text-[var(--text-primary)] outline-none" placeholder="Your store username" /></span>
         </label>
-        <label className="block text-xs font-semibold text-[#76534a]">PASSWORD
-          <span className="mt-1.5 flex h-11 items-center gap-2 rounded-xl border border-[#eadfd7] px-3 focus-within:border-[#c98c7f]"><LockKeyhole size={16} className="text-[#9b8178]" /><input required type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full bg-transparent text-sm font-normal text-[#302724] outline-none" placeholder="Your password" /></span>
+        <label className="block text-xs font-semibold text-[var(--text-secondary)]">PASSWORD
+          <span className="mt-1.5 flex h-11 items-center gap-2 rounded-xl border border-[var(--border-default)] px-3 focus-within:border-[var(--brand-primary)]"><LockKeyhole size={16} className="text-[var(--text-secondary)]" /><input required type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full bg-transparent text-sm font-normal text-[var(--text-primary)] outline-none" placeholder="Your password" /></span>
         </label>
-        {error && <p role="alert" className="rounded-xl bg-[#fbefec] px-3 py-2 text-sm text-[#8c4034]">{error}</p>}
-        <button disabled={loginState.isLoading} className="h-12 w-full rounded-xl bg-[#861923] text-sm font-semibold text-white transition hover:bg-[#70131c] disabled:opacity-55">{loginState.isLoading ? 'Signing in…' : 'Sign in to dashboard'}</button>
+        {error && <p role="alert" className="rounded-xl bg-[var(--status-danger-soft)] px-3 py-2 text-sm text-[var(--status-danger)]">{error}</p>}
+        <button disabled={loginState.isLoading} className="h-12 w-full rounded-xl bg-[var(--brand-primary)] text-sm font-semibold text-white transition hover:bg-[var(--brand-primary-hover)] disabled:opacity-55">{loginState.isLoading ? 'Signing in…' : 'Sign in to dashboard'}</button>
       </form>
     </section>
   </main>

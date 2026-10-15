@@ -296,6 +296,37 @@ export async function updateStoreStatus(req, res) {
   });
 }
 
+export async function updateStoreHours(req, res) {
+  const session = await Store.db.startSession();
+  let store;
+  try {
+    await session.withTransaction(async () => {
+      store = await Store.findById(req.auth.id).session(session);
+      if (!store) {
+        throw new AppError(404, 'Store not found');
+      }
+      const previousState = `${store.openingTime}-${store.closingTime}`;
+      const { openingTime, closingTime } = req.validated.body;
+      store.openingTime = openingTime;
+      store.closingTime = closingTime;
+      await store.save({ session });
+      await recordStoreAudit({
+        session,
+        req,
+        action: 'store.hours_updated',
+        entityType: 'store',
+        entityId: store._id,
+        previousState,
+        nextState: `${openingTime}-${closingTime}`,
+        changedFields: ['openingTime', 'closingTime']
+      });
+    });
+  } finally {
+    await session.endSession();
+  }
+  res.json({ data: store });
+}
+
 export async function getDashboard(req, res) {
   const storeId = req.auth.id;
   const { days, from, to } = req.validated.query;

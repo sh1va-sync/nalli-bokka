@@ -121,6 +121,8 @@ export async function loginStore(req, res) {
       username: store.username,
       location: store.location,
       isOpen: store.isOpen,
+      openingTime: store.openingTime,
+      closingTime: store.closingTime,
       storePhone: store.storePhone || store.storeNumber,
       googleMapsLink: store.googleMapsLink || store.googleMapLink || store.mapLink
     }

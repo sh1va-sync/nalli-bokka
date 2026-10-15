@@ -21,7 +21,7 @@ The default base URL is `http://localhost:3000/api`. `npm start` runs without wa
 
 ### Payment and refund reconciliation
 
-The signed Razorpay webhook remains the primary payment/refund update mechanism. To recover eligible pending records if a webhook is delayed or lost, run this one-shot reconciliation job:
+The signed Razorpay webhook remains the primary payment/refund update mechanism. Razorpay Checkout also uses a signed server callback for browser redirect flows, including mobile UPI app switches. On Render, the callback URL is derived from `RENDER_EXTERNAL_URL`; on other hosts, set `PUBLIC_API_URL` to the public API origin. The callback redirects only to an origin included in `CORS_ORIGIN`. To recover eligible pending records if a webhook is delayed or lost, run this one-shot reconciliation job:
 
 ```powershell
 npm run reconcile-payments
@@ -96,16 +96,18 @@ Weight-based quantities use kilograms (`0.25` means 250 g). Piece selections use
 | POST | `/cart/items` | User | Add a cart line; body `{ "productId": "<id>", "selectionType": "weight", "selectedQuantity": 0.5 }`; pack additionally requires `selectedPackLabel`. Matching selections increment an existing line |
 | PATCH | `/cart/items/:itemId` | User | Change a cart line's selection and quantity |
 | DELETE | `/cart/items/:itemId` | User | Remove a cart line |
-| POST | `/orders` | User | Place one store's cart items; body `{ "addressId": "<saved address id>", "storeId": "<store id>" }`; omit `storeId` if the cart contains a single store |
-| GET | `/orders` | User | List own orders; optional `orderStatus` and paired `from`/`to` date bounds |
+| GET | `/stores/:id/pickup-slots` | Public | List future 30-minute pickup slots for a store and India-local date |
+| POST | `/payments/razorpay/order` | User | Start checkout; choose `delivery` with `addressId` or `pickup` with `pickupAt` |
+| GET | `/orders` | User | List own orders; optional `orderStatus`, `orderType`, and paired `from`/`to` date bounds |
 | GET | `/orders/:orderId` | User | Get own order |
 | GET | `/orders/:orderId/invoice` | User | Download a PDF invoice for own order |
 | POST | `/orders/:orderId/cancel` | User | Cancel a placed or packing unpaid order |
 | POST | `/orders/:orderId/payment` | User | Create/reuse Razorpay order for payment |
 | POST | `/payments/razorpay/verify` | User | Verify captured payment; body `{ "razorpayOrderId", "paymentId", "signature" }` |
+| POST | `/payments/razorpay/callback` | Razorpay Checkout | Verify a successful redirect payment and return the browser to its order |
 | POST | `/payments/razorpay/webhook` | Razorpay | Verify Razorpay webhook signature and update payment/refund |
 
-An order can contain items from one store only. For multi-store carts, specify `storeId` to check out that store's items; other stores' items remain in the cart for subsequent orders. Product names, selected quantities, line prices, and delivery address are copied into the order. Line and order totals are calculated server-side in rupees and rounded to paise. The payment endpoint returns the Razorpay `keyId`, order ID, amount in paise, and currency for the client checkout. Configure the webhook URL in Razorpay as `https://<your-api-host>/api/payments/razorpay/webhook` and configure the same webhook secret in `RAZORPAY_WEBHOOK_SECRET`.
+An order can contain items from one store only. For multi-store carts, specify `storeId` to check out that store's items; other stores' items remain in the cart for subsequent orders. Product names, selected quantities, line prices, and fulfillment details are copied into the order. Delivery orders require a saved address; pickup orders require a future 30-minute slot within that store's daily hours (Asia/Kolkata). Store hours are edited in the dashboard; the separate open/pause control determines whether orders are accepted. Line and order totals are calculated server-side in rupees and rounded to paise. The payment endpoint returns the Razorpay `keyId`, order ID, amount in paise, and currency for the client checkout. Configure the webhook URL in Razorpay as `https://<your-api-host>/api/payments/razorpay/webhook` and configure the same webhook secret in `RAZORPAY_WEBHOOK_SECRET`.
 
 Important notes on idempotency and transactions:
 
@@ -114,13 +116,14 @@ Important notes on idempotency and transactions:
 - Razorpay webhooks are deduplicated and processed idempotently: the server persists webhook event IDs and ignores duplicate deliveries once an event has been processed. This prevents out-of-order or duplicated webhook deliveries from causing inconsistent payment/order state. Ensure the same `RAZORPAY_WEBHOOK_SECRET` is set in the environment and configured in Razorpay.
 
 
-Order statuses follow `placed -> packing -> out for delivery -> delivered`; unpaid orders can be cancelled while placed or packing. Packing requires confirmed payment. Store admins can issue a full refund for their own paid `placed` or `packing` orders. Fulfillment pauses during refund confirmation; a processed refund cancels the order, while a failed refund leaves it paid and eligible to continue fulfillment.
+Delivery statuses follow `placed -> packing -> out for delivery -> delivered`; pickup statuses follow `placed -> packing -> ready for pickup -> picked up`. Unpaid orders can be cancelled while placed or packing. Packing requires confirmed payment. Store admins can issue a full refund for their own paid `placed` or `packing` orders. Fulfillment pauses during refund confirmation; a processed refund cancels the order, while a failed refund leaves it paid and eligible to continue fulfillment.
 
 ### Store dashboard and operations
 
 | Method | Path | Access | Description |
 | --- | --- | --- | --- |
 | GET | `/store/dashboard` | Store | Inventory counts, order counts by status, rolling paid revenue, optional bounded-period metrics, and latest 10 orders |
+| PATCH | `/store/hours` | Store | Save daily pickup opening/closing times in 30-minute increments |
 | GET | `/store/product-categories` | Store | List built-in and store-created product categories |
 | POST | `/store/product-categories` | Store | Create a store-specific product category |
 | GET | `/store/products` | Store | List this store's products; optional category, search, stock, and pricing filters |
@@ -128,10 +131,10 @@ Order statuses follow `placed -> packing -> out for delivery -> delivered`; unpa
 | PATCH | `/store/products/:productId` | Store | Update own product; schema enforces product pricing rules |
 | PATCH | `/store/products/:productId/stock` | Store | Mark own product in/out of stock; body `{ "inStock": false }` |
 | DELETE | `/store/products/:productId` | Store | Delete own product |
-| GET | `/store/orders` | Store | List only this store's orders; optional `orderStatus` and paired `from`/`to` date bounds |
+| GET | `/store/orders` | Store | List only this store's orders; optional `orderStatus`, `orderType`, and paired `from`/`to` date bounds |
 | GET | `/store/orders/:orderId` | Store | Get only this store's order |
 | GET | `/store/orders/:orderId/invoice` | Store | Download a PDF invoice for an order belonging to this store |
-| PATCH | `/store/orders/:orderId/status` | Store | Advance/cancel order; body `{ "orderStatus": "packing" }` |
+| PATCH | `/store/orders/:orderId/status` | Store | Advance/cancel delivery or pickup order; body `{ "orderStatus": "packing" }` |
 | POST | `/store/orders/:orderId/refund` | Store | Request a full refund for an eligible paid order |
 | POST | `/store/orders/:orderId/refund` | Store | Request a full refund for an eligible paid order |
 | GET | `/store/transactions` | Store | List transactions for this store's orders; optional `status` and paired `from`/`to` date bounds |

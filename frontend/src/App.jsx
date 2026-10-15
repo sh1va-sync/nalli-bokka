@@ -1,10 +1,10 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
-import { ShoppingBasket } from 'lucide-react'
+import { PackageCheck, ShoppingBasket, Store, UserRound } from 'lucide-react'
 import { removeGuestItem } from './features/cart/cartSlice.js'
 import { setSelectedStore } from './features/store/storeSlice.js'
-import { api, useAddCartItemMutation, useGetCartQuery, useGetMeQuery, useGetStoresQuery, useGetUserNotificationsQuery } from './features/api/api.js'
+import { api, useAddCartItemMutation, useGetCartQuery, useGetMeQuery, useGetOrdersQuery, useGetStoresQuery, useGetUserNotificationsQuery } from './features/api/api.js'
 import { clearSessionNotice, setSessionNotice, signedOut } from './features/auth/authSlice.js'
 import Header from './features/customer/components/Header.jsx'
 import StorePicker from './features/customer/components/StorePicker.jsx'
@@ -12,6 +12,7 @@ import LoginDialog from './features/customer/components/LoginDialog.jsx'
 import CartDrawer from './features/customer/components/CartDrawer.jsx'
 import Toast from './features/customer/components/Toast.jsx'
 import HomePage from './features/customer/pages/HomePage.jsx'
+import ActiveOrderBanner from './features/customer/components/ActiveOrderBanner.jsx'
 import { createUuid, getErrorMessage } from './features/customer/utils.js'
 
 const CheckoutPage = lazy(() => import('./features/customer/pages/CheckoutPage.jsx'))
@@ -47,12 +48,40 @@ function App() {
     { page: 1, limit: 8 },
     { skip: !token || isStoreRoute, pollingInterval: token && !isStoreRoute ? 30000 : 0 }
   )
+  const isHomeRoute = location.pathname === '/'
+  const activeOrdersQueryOptions = {
+    skip: !token || isStoreRoute || !isHomeRoute,
+    pollingInterval: token && !isStoreRoute && isHomeRoute ? 15000 : 0,
+  }
+  const { data: placedOrdersResponse, error: placedOrdersError } = useGetOrdersQuery(
+    { page: 1, limit: 5, orderStatus: 'placed' },
+    activeOrdersQueryOptions
+  )
+  const { data: packingOrdersResponse, error: packingOrdersError } = useGetOrdersQuery(
+    { page: 1, limit: 5, orderStatus: 'packing' },
+    activeOrdersQueryOptions
+  )
+  const { data: deliveryOrdersResponse, error: deliveryOrdersError } = useGetOrdersQuery(
+    { page: 1, limit: 5, orderStatus: 'out for delivery' },
+    activeOrdersQueryOptions
+  )
+  const { data: pickupOrdersResponse, error: pickupOrdersError } = useGetOrdersQuery(
+    { page: 1, limit: 5, orderStatus: 'ready for pickup' },
+    activeOrdersQueryOptions
+  )
 
   const cartItems = token
     ? [...(cartResponse?.data?.items || []), ...guestItems.map((item) => ({ ...item, needsSync: true }))]
     : guestItems
   const cartCount = cartItems.length
   const selectedStoreIsClosed = selectedStore?.isOpen === false
+  const activeOrder = [
+    ...(placedOrdersResponse?.data || []),
+    ...(packingOrdersResponse?.data || []),
+    ...(deliveryOrdersResponse?.data || []),
+    ...(pickupOrdersResponse?.data || []),
+  ].sort((first, second) => new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime())[0]
+  const activeOrdersError = placedOrdersError || packingOrdersError || deliveryOrdersError || pickupOrdersError
 
   useEffect(() => {
     const latestStore = storesResponse?.data?.find(({ _id }) => _id === selectedStore?._id)
@@ -140,8 +169,8 @@ function App() {
     return ''
   }
 
-  if (isStoreRoute) return <div className="min-h-screen bg-[#fbf7f1] text-[#302724]">
-    <Suspense fallback={<div className="grid min-h-screen place-items-center text-sm text-[#82736d]"><span className="mr-2 inline-block h-4 w-4 rounded-full border-2 border-[#eadfd7] border-t-[#861923] motion-safe:animate-spin" />Loading store workspace…</div>}>
+  if (isStoreRoute) return <div className="min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
+    <Suspense fallback={<div className="grid min-h-screen place-items-center text-sm text-[var(--text-secondary)]"><span className="mr-2 inline-block h-4 w-4 rounded-full border-2 border-[var(--border-default)] border-t-[var(--brand-primary)] motion-safe:animate-spin" />Loading store workspace…</div>}>
       <Routes>
         <Route path="/store/login" element={<StoreLoginPage />} />
         <Route path="/store" element={<StoreDashboardPage />} />
@@ -151,7 +180,7 @@ function App() {
   </div>
 
   return (
-    <div className="min-h-screen bg-[#fbf7f1] text-[#302724]">
+    <div className="min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
       <Header
         cartCount={cartCount}
         onOpenCart={() => { if (!selectedStoreIsClosed) setCartOpen(true) }}
@@ -159,14 +188,16 @@ function App() {
         onLogin={() => openLogin()}
         onCartError={cartError ? getErrorMessage(cartError) : ''}
       />
+      {isHomeRoute && activeOrder && <ActiveOrderBanner order={activeOrder} />}
+      {isHomeRoute && activeOrdersError && <p role="status" className="mx-auto max-w-7xl px-4 py-2 text-xs text-[var(--status-danger)] sm:px-6 lg:px-8">{activeOrder ? 'Some order status updates could not be refreshed.' : 'Couldn’t refresh your active order status.'} {getErrorMessage(activeOrdersError)}</p>}
       <main className="pb-24 md:pb-12">
         <Suspense fallback={<div className="mx-auto max-w-7xl px-5 py-20 text-center text-slate-500">Loading your page…</div>}>
           {selectedStoreIsClosed ? <section className="mx-auto grid min-h-[65vh] max-w-xl content-center justify-items-center px-5 py-16 text-center">
-            <span className="grid h-16 w-16 place-items-center rounded-2xl bg-[#fbefec] text-[#861923]"><ShoppingBasket size={28} /></span>
-            <p className="mt-5 text-[10px] font-bold uppercase tracking-[.18em] text-[#ad7669]">Store temporarily closed</p>
-            <h1 className="mt-2 font-display text-3xl font-medium text-[#392824]">{selectedStore?.storeName} isn’t taking orders right now</h1>
-            <p className="mt-3 max-w-md text-sm leading-6 text-[#82736d]">You can choose another open store, or come back when this store reopens. Your basket will be cleared if you switch stores.</p>
-            <button type="button" onClick={() => setStoreOpen(true)} className="mt-6 rounded-xl bg-[#861923] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#70131c]">Choose an open store</button>
+            <span className="grid h-16 w-16 place-items-center rounded-2xl bg-[var(--status-danger-soft)] text-[var(--brand-primary)]"><ShoppingBasket size={28} /></span>
+            <p className="mt-5 text-[10px] font-bold uppercase tracking-[.18em] text-[var(--brand-primary)]">Store temporarily closed</p>
+            <h1 className="mt-2 font-display text-3xl font-medium text-[var(--text-primary)]">{selectedStore?.storeName} isn’t taking orders right now</h1>
+            <p className="mt-3 max-w-md text-sm leading-6 text-[var(--text-secondary)]">You can choose another open store, or come back when this store reopens. Your basket will be cleared if you switch stores.</p>
+            <button type="button" onClick={() => setStoreOpen(true)} className="mt-6 rounded-xl bg-[var(--brand-primary)] px-5 py-3 text-sm font-bold text-white transition hover:bg-[var(--brand-primary-hover)]">Choose an open store</button>
           </section> : <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/checkout" element={<CheckoutPage onLogin={openLogin} onOpenCart={() => setCartOpen(true)} onToast={showToast} />} />
@@ -177,13 +208,21 @@ function App() {
           </Routes>}
         </Suspense>
       </main>
-      <footer className="border-t border-[#eadfd7] bg-[#fbf7f1] px-5 py-7 text-center text-xs text-[#927f74]">
-        Fresh from your neighbourhood. <span className="font-semibold text-[#861923]">NalliBokka.</span>
+      <footer className="border-t border-[var(--border-default)] bg-[var(--bg-app)] px-5 py-7 text-center text-xs text-[var(--text-secondary)]">
+        Fresh from your neighbourhood. <span className="font-semibold text-[var(--brand-primary)]">NalliBokka.</span>
       </footer>
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-[#eadfd7] bg-[#fbf7f1]/95 py-2 text-xs font-medium text-[#82736d] backdrop-blur md:hidden">
-        <Link className="flex flex-col items-center gap-1 py-1 text-[#861923]" to="/">⌂<span>Shop</span></Link>
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-[var(--border-default)] bg-[var(--bg-app)]/95 py-2 text-[11px] font-medium text-[var(--text-secondary)] backdrop-blur md:hidden" aria-label="Main navigation">
+        <NavLink className={({ isActive }) => `flex flex-col items-center gap-1 py-1 ${isActive ? 'text-[var(--brand-primary)]' : ''}`} to="/" aria-label="Shop">
+          <Store size={18} strokeWidth={1.8} />
+          <span>Shop</span>
+        </NavLink>
         <button disabled={selectedStoreIsClosed} className="flex flex-col items-center gap-1 py-1 disabled:opacity-40" onClick={() => setCartOpen(true)}><ShoppingBasket size={18} /><span>Basket</span></button>
-        {token ? <Link className="flex flex-col items-center gap-1 py-1" to="/profile">◉<span>Account</span></Link> : <button className="flex flex-col items-center gap-1 py-1" onClick={() => openLogin()}>◉<span>Account</span></button>}
+        {token
+          ? <NavLink className={({ isActive }) => `flex flex-col items-center gap-1 py-1 ${isActive ? 'text-[var(--brand-primary)]' : ''}`} to="/orders" aria-label="Orders"><PackageCheck size={18} strokeWidth={1.8} /><span>Orders</span></NavLink>
+          : <button className="flex flex-col items-center gap-1 py-1" onClick={() => openLogin('Sign in to view your orders.', '/orders')} aria-label="Orders"><PackageCheck size={18} strokeWidth={1.8} /><span>Orders</span></button>}
+        {token
+          ? <NavLink className={({ isActive }) => `flex flex-col items-center gap-1 py-1 ${isActive ? 'text-[var(--brand-primary)]' : ''}`} to="/profile" aria-label="Account"><UserRound size={18} strokeWidth={1.8} /><span>Account</span></NavLink>
+          : <button className="flex flex-col items-center gap-1 py-1" onClick={() => openLogin()} aria-label="Account"><UserRound size={18} strokeWidth={1.8} /><span>Account</span></button>}
       </nav>
       {token && meError && ![401, 403].includes(meError.status) && <p role="status" className="fixed inset-x-3 bottom-20 z-40 mx-auto max-w-lg rounded-xl bg-amber-50 px-4 py-3 text-xs text-amber-900 shadow sm:bottom-4">We couldn’t verify your saved session. Some account features may be unavailable.</p>}
       {storesError && !selectedStore && (

@@ -27,7 +27,8 @@ function formatAmount(value) {
 function formatDate(value) {
   return new Date(value).toLocaleString('en-IN', {
     dateStyle: 'medium',
-    timeStyle: 'short'
+    timeStyle: 'short',
+    timeZone: 'Asia/Kolkata'
   });
 }
 
@@ -80,23 +81,32 @@ export function createInvoicePdf(order) {
 
     document.moveTo(left, 116).lineTo(right, 116).lineWidth(1).strokeColor(colors.border).stroke();
     const billTop = 133;
+    const isPickup = order.orderType === 'pickup';
     document.fillColor(colors.muted).font('Helvetica-Bold').fontSize(8)
       .text('BILLED TO', left, billTop)
-      .text('DELIVERY ADDRESS', left + contentWidth / 2, billTop);
+      .text(isPickup ? 'STORE PICKUP' : 'DELIVERY ADDRESS', left + contentWidth / 2, billTop);
 
     const customer = order.userId || {};
     const address = order.deliveryAddress || {};
     document.fillColor(colors.ink).font('Helvetica-Bold').fontSize(10)
       .text(printable(customer.name || 'Customer'), left, billTop + 15, { width: contentWidth / 2 - 15 });
     document.fillColor(colors.muted).font('Helvetica').fontSize(9)
-      .text(printable(customer.phone), left, billTop + 31, { width: contentWidth / 2 - 15 })
-      .text(printable(address.label), left + contentWidth / 2, billTop + 15, { width: contentWidth / 2 });
-    document.fillColor(colors.ink).font('Helvetica').fontSize(9)
-      .text(printable(`${address.fullAddress || ''} ${address.landmark || ''} ${address.pincode || ''}`), left + contentWidth / 2, billTop + 31, {
-        width: contentWidth / 2,
-        height: 45,
-        lineGap: 2
-      });
+      .text(printable(customer.phone), left, billTop + 31, { width: contentWidth / 2 - 15 });
+    if (isPickup) {
+      document.fillColor(colors.ink).font('Helvetica-Bold').fontSize(10)
+        .text(printable(order.storeId?.storeName || 'Store pickup'), left + contentWidth / 2, billTop + 15, { width: contentWidth / 2 });
+      document.fillColor(colors.muted).font('Helvetica').fontSize(9)
+        .text(`Pickup time: ${formatDate(order.pickupAt)}`, left + contentWidth / 2, billTop + 31, { width: contentWidth / 2, height: 45 });
+    } else {
+      document.fillColor(colors.muted).font('Helvetica').fontSize(9)
+        .text(printable(address.label), left + contentWidth / 2, billTop + 15, { width: contentWidth / 2 });
+      document.fillColor(colors.ink).font('Helvetica').fontSize(9)
+        .text(printable(`${address.fullAddress || ''} ${address.landmark || ''} ${address.pincode || ''}`), left + contentWidth / 2, billTop + 31, {
+          width: contentWidth / 2,
+          height: 45,
+          lineGap: 2
+        });
+    }
 
     document.y = 205;
     document.fillColor(colors.ink).font('Helvetica-Bold').fontSize(11).text('Order summary', left);

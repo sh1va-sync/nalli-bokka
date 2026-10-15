@@ -9,6 +9,7 @@ import Transaction from '../models/Transaction.js';
 import User from '../models/User.js';
 import WebhookEvent from '../models/WebhookEvent.js';
 import { recordStoreAudit } from '../services/audit.js';
+import { isValidPickupTime } from '../utils/pickupSlots.js';
 import getRazorpayClient from '../services/razorpay.js';
 import AppError from '../utils/AppError.js';
 import { priceSelection, roundToPaise } from '../utils/pricing.js';
@@ -286,17 +287,67 @@ export async function settleTransaction(transaction, status, paymentId, session 
   return transaction;
 }
 
-function razorpayPaymentData(attempt) {
+function razorpayPaymentData(attempt, returnOrigin) {
+  const callbackUrl = returnOrigin ? createCheckoutCallbackUrl(returnOrigin) : null;
   return {
     razorpayOrderId: attempt.razorpayOrderId,
     keyId: process.env.RAZORPAY_KEY_ID,
     amount: Math.round(attempt.amount * 100),
-    currency: 'INR'
+    currency: 'INR',
+    ...(callbackUrl ? { callbackUrl } : {})
   };
 }
 
+function allowedCheckoutReturnOrigin(origin) {
+  if (!origin) return null;
+  const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+    .split(',')
+    .map(value => value.trim());
+  try {
+    const normalizedOrigin = new URL(origin).origin;
+    return allowedOrigins.includes(normalizedOrigin) ? normalizedOrigin : null;
+  } catch {
+    return null;
+  }
+}
+
+function createCheckoutCallbackUrl(returnOrigin) {
+  const publicApiUrl = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_API_URL;
+  if (!publicApiUrl) return null;
+  const callbackUrl = new URL('/api/payments/razorpay/callback', publicApiUrl);
+  callbackUrl.searchParams.set('returnOrigin', returnOrigin);
+  return callbackUrl.toString();
+}
+
+async function fetchAndCapturePayment(paymentId, razorpayOrderId, amount) {
+  const razorpay = getRazorpayClient();
+  let payment = await razorpay.payments.fetch(paymentId);
+  const expectedAmount = Math.round(amount * 100);
+  if (
+    payment.order_id !== razorpayOrderId
+    || payment.amount !== expectedAmount
+    || payment.currency !== 'INR'
+  ) {
+    throw new AppError(409, 'Payment does not match the expected amount and order');
+  }
+  if (payment.status === 'authorized') {
+    try {
+      payment = await razorpay.payments.capture(paymentId, expectedAmount, 'INR');
+    } catch {
+      throw new AppError(502, 'Payment was authorized but could not be captured. Contact the store before retrying.');
+    }
+  }
+  return payment;
+}
+
 export async function createCheckoutPayment(req, res) {
-  const { addressId, storeId: requestedStoreId, idempotencyKey } = req.validated.body;
+  const {
+    addressId,
+    storeId: requestedStoreId,
+    orderType,
+    pickupAt,
+    idempotencyKey
+  } = req.validated.body;
   const existingAttempt = await CheckoutAttempt.findOne({
     userId: req.auth.id,
     idempotencyKey
@@ -305,11 +356,20 @@ export async function createCheckoutPayment(req, res) {
     if (existingAttempt.status !== 'pending') {
       throw new AppError(409, 'This checkout attempt is no longer active. Start checkout again to retry payment.');
     }
-    const store = await Store.findById(existingAttempt.storeId).select('isOpen');
+    const store = await Store.findById(existingAttempt.storeId).select('isOpen openingTime closingTime');
     if (!store || !store.isOpen) {
       throw new AppError(409, 'This store is closed and cannot accept new checkout payments. Choose an open store to continue.');
     }
-    return res.status(200).json({ data: razorpayPaymentData(existingAttempt) });
+    if (existingAttempt.orderType === 'pickup' && !isValidPickupTime({
+      pickupAt: existingAttempt.pickupAt,
+      openingTime: store.openingTime,
+      closingTime: store.closingTime
+    })) {
+      throw new AppError(409, 'The selected pickup slot is no longer available. Choose another slot to continue.');
+    }
+    return res.status(200).json({
+      data: razorpayPaymentData(existingAttempt, allowedCheckoutReturnOrigin(req.get('origin')))
+    });
   }
 
   const [user, cart] = await Promise.all([
@@ -323,8 +383,8 @@ export async function createCheckoutPayment(req, res) {
     throw new AppError(400, 'Your cart is empty');
   }
 
-  const address = user.addresses.id(addressId);
-  if (!address) {
+  const address = orderType === 'delivery' ? user.addresses.id(addressId) : null;
+  if (orderType === 'delivery' && !address) {
     throw new AppError(404, 'Delivery address not found');
   }
 
@@ -345,9 +405,16 @@ export async function createCheckoutPayment(req, res) {
   if (!requestedStoreId && storeIds.size > 1) {
     throw new AppError(409, 'Your cart contains products from multiple stores; specify storeId to check out one store at a time');
   }
-  const store = await Store.findById(selectedStoreId).select('isOpen');
+  const store = await Store.findById(selectedStoreId).select('isOpen openingTime closingTime');
   if (!store || !store.isOpen) {
     throw new AppError(409, 'This store is closed and cannot accept new checkout payments. Choose an open store to continue.');
+  }
+  if (orderType === 'pickup' && !isValidPickupTime({
+    pickupAt,
+    openingTime: store.openingTime,
+    closingTime: store.closingTime
+  })) {
+    throw new AppError(409, 'The selected pickup slot is unavailable. Choose a future slot during store hours.');
   }
 
   const items = cart.items
@@ -387,12 +454,14 @@ export async function createCheckoutPayment(req, res) {
     attempt = await CheckoutAttempt.create({
       userId: user._id,
       storeId: selectedStoreId,
-      deliveryAddress: {
+      ...(address ? { deliveryAddress: {
         label: address.label,
         fullAddress: address.fullAddress,
         landmark: address.landmark,
         pincode: address.pincode
-      },
+      } } : {}),
+      orderType,
+      ...(orderType === 'pickup' ? { pickupAt: new Date(pickupAt) } : {}),
       items,
       amount,
       idempotencyKey,
@@ -408,7 +477,67 @@ export async function createCheckoutPayment(req, res) {
     attempt = concurrentAttempt;
   }
 
-  res.status(201).json({ data: razorpayPaymentData(attempt) });
+  const returnOrigin = allowedCheckoutReturnOrigin(req.get('origin'));
+  res.status(201).json({ data: razorpayPaymentData(attempt, returnOrigin) });
+}
+
+export async function handleRazorpayCheckoutCallback(req, res) {
+  const razorpayOrderId = req.body?.razorpay_order_id;
+  const paymentId = req.body?.razorpay_payment_id;
+  const signature = req.body?.razorpay_signature;
+  if (
+    typeof razorpayOrderId !== 'string'
+    || typeof paymentId !== 'string'
+    || typeof signature !== 'string'
+    || !/^[a-f\d]{64}$/i.test(signature)
+  ) {
+    throw new AppError(400, 'Razorpay callback is missing valid payment details');
+  }
+
+  const attempt = await CheckoutAttempt.findOne({ razorpayOrderId });
+  if (!attempt) {
+    throw new AppError(404, 'Checkout payment attempt not found');
+  }
+  const secret = process.env.RAZORPAY_KEY_SECRET;
+  if (!secret) {
+    throw new AppError(503, 'Online payments are not configured');
+  }
+  const expected = createHmac('sha256', secret)
+    .update(`${razorpayOrderId}|${paymentId}`)
+    .digest();
+  const supplied = Buffer.from(signature, 'hex');
+  if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
+    throw new AppError(400, 'Payment signature is invalid');
+  }
+
+  const payment = await fetchAndCapturePayment(paymentId, razorpayOrderId, attempt.amount);
+  if (
+    payment.order_id !== razorpayOrderId
+    || payment.amount !== Math.round(attempt.amount * 100)
+    || payment.currency !== 'INR'
+    || payment.status !== 'captured'
+  ) {
+    throw new AppError(409, 'Payment is not captured for the expected amount and order');
+  }
+
+  const returnOrigin = allowedCheckoutReturnOrigin(req.query.returnOrigin);
+  if (!returnOrigin) {
+    throw new AppError(400, 'Checkout return address is not allowed');
+  }
+
+  const session = await Transaction.db.startSession();
+  let orderId;
+  try {
+    await session.withTransaction(async () => {
+      orderId = await completeCheckoutAttempt(attempt._id, paymentId, session);
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  const redirectUrl = new URL('/orders', returnOrigin);
+  redirectUrl.searchParams.set('order', String(orderId));
+  return res.redirect(303, redirectUrl.toString());
 }
 
 export async function markCheckoutPaymentFailed(req, res) {
@@ -441,7 +570,9 @@ export async function completeCheckoutAttempt(attemptId, paymentId, session) {
   const [order] = await Order.create([{
     userId: attempt.userId,
     storeId: attempt.storeId,
-    deliveryAddress: attempt.deliveryAddress,
+    orderType: attempt.orderType,
+    ...(attempt.pickupAt ? { pickupAt: attempt.pickupAt } : {}),
+    ...(attempt.deliveryAddress ? { deliveryAddress: attempt.deliveryAddress } : {}),
     items: attempt.items,
     totalAmount: attempt.amount,
     paymentStatus: 'paid'
@@ -564,8 +695,8 @@ export async function verifyPayment(req, res) {
     throw new AppError(400, 'Payment signature is invalid');
   }
 
-  const payment = await getRazorpayClient().payments.fetch(paymentId);
   const expectedAmount = transaction?.amount ?? attempt.amount;
+  const payment = await fetchAndCapturePayment(paymentId, razorpayOrderId, expectedAmount);
   if (
     payment.order_id !== razorpayOrderId
     || payment.amount !== Math.round(expectedAmount * 100)

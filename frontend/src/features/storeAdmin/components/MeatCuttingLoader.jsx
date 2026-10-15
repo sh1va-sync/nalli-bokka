@@ -14,7 +14,7 @@ export default function MeatCuttingLoader({ label = 'Loading store workspace…'
   }, [])
 
   return (
-    <div className={`flex flex-col items-center justify-center text-center ${compact ? 'py-4' : 'min-h-56 rounded-[20px] border border-[#eadfd7] bg-white px-5 py-8'}`} role="status" aria-live="polite">
+    <div className={`flex flex-col items-center justify-center text-center ${compact ? 'py-4' : 'min-h-56 rounded-[20px] border border-[var(--border-default)] bg-white px-5 py-8'}`} role="status" aria-live="polite">
       <LottieLight
         src={animationData}
         autoplay={!reducedMotion}
@@ -23,7 +23,7 @@ export default function MeatCuttingLoader({ label = 'Loading store workspace…'
         className={compact ? 'h-24 w-32' : 'h-36 w-44'}
         rendererSettings={{ preserveAspectRatio: 'xMidYMid meet' }}
       />
-      <p className="mt-1 text-xs font-semibold text-[#76534a]">{label}</p>
+      <p className="mt-1 text-xs font-semibold text-[var(--text-secondary)]">{label}</p>
       <span className="sr-only">A cleaver is slicing through a cut of meat.</span>
     </div>
   )

@@ -55,6 +55,18 @@ const storeSchema = new mongoose.Schema({
   isOpen: {
     type: Boolean,
     default: true
+  },
+  openingTime: {
+    type: String,
+    required: true,
+    default: '09:00',
+    match: /^(?:[01]\d|2[0-3]):[03]0$/
+  },
+  closingTime: {
+    type: String,
+    required: true,
+    default: '21:00',
+    match: /^(?:[01]\d|2[0-3]):[03]0$/
   }
 }, {
   timestamps: true,
