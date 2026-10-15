@@ -14,6 +14,10 @@ Firebase Phone Authentication validates the page origin with reCAPTCHA. If Fireb
 
 Razorpay Checkout uses its hosted browser SDK. Its public key comes from the payment-order API; no Razorpay secret belongs in this application.
 
+## Add NalliBokka to a home screen
+
+The production build includes a web app manifest, app icons, and a service worker. Deploy the frontend over HTTPS (or test on `localhost`) for browser installation support. On supported Android/desktop browsers, use the in-app **Install** prompt or the browser menu. On iPhone/iPad, open the Share menu in Safari and choose **Add to Home Screen**; the storefront displays those steps when installation is available. The service worker caches the app shell and static build assets for offline startup, but API calls, checkout, and payment processing still require a network connection.
+
 ## Stage-one customer features
 
 - Choose and persist a store; browse its available products.

@@ -547,7 +547,6 @@ Common fields:
 {
   "productType": "meat",
   "productName": "Mutton",
-  "imageUrl": "https://cdn.example.com/mutton.jpg",
   "inStock": true,
   "pricePerKg": 800,
   "pieceWeightGrams": 250
@@ -559,7 +558,7 @@ Fields and constraints:
 - `productType`: required category name, 1–40 characters; custom categories must first be created by this store.
 - `pricingMode`: required for new products: `weight` or `pack`.
 - `productName`: required, 1–120 characters.
-- `imageUrl`: required, valid HTTP or HTTPS URL, maximum 2048 characters.
+- `image`: required multipart file field for create; JPEG, PNG, or WebP, maximum 5 MB. Cloudinary stores the image and the API saves its secure URL and public ID.
 - `inStock`: optional boolean; defaults to true.
 - `pricePerKg`: optional nonnegative rupee amount (required for meat/vegetable/fruit; also used for loose rice).
 - `pieceWeightGrams`: optional positive number; enables piece-based pricing on meat/vegetable/fruit.
@@ -667,7 +666,8 @@ Each address contains required `label`, `fullAddress`, and six-digit string `pin
 | `productType` | String | Required built-in or store-created category name. |
 | `pricingMode` | String | Optional for legacy built-in products; `weight` or `pack` for new/custom products. |
 | `productName` | String | Required, trimmed. |
-| `imageUrl` | String | Required, trimmed; API requires HTTP/HTTPS URL. |
+| `imageUrl` | String | Required, trimmed; secure image URL used by storefronts and order snapshots. |
+| `imagePublicId` | String | Optional Cloudinary public ID used to replace or delete uploaded images; absent for legacy products. |
 | `inStock` | Boolean | Defaults to true. |
 | `pricePerKg` | Number | Nonnegative when present; weight pricing in rupees/kg. |
 | `pieceWeightGrams` | Number | Positive when present; permits piece pricing for weight-based product types. |
@@ -836,7 +836,7 @@ The API router is mounted under `/api`. The raw Razorpay webhook route is mounte
 - Online payment flows require configured Razorpay keys; webhook processing additionally requires its webhook secret.
 - Transactions require a replica set or equivalent transaction-capable MongoDB deployment.
 - The API has no customer password flow, store self-registration, password-reset flow, refresh tokens, partial refunds, shipping-rate calculation, or file-upload endpoint.
-- Product images are represented by an externally hosted `imageUrl`; image storage/CDN management is outside this API.
+- Store product images are uploaded to Cloudinary using the `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` backend environment variables. The API returns the secure URL in `imageUrl` and stores the Cloudinary public ID for cleanup; legacy external image URLs remain supported for existing records.
 - Product discovery exposes only in-stock products; store inventory listing includes out-of-stock items.
 - Cart totals are recalculated using current catalog pricing. Order snapshots preserve the final selected item names and prices.
 - Rate limiting uses the process's configured default in-memory store; it is not shared across multiple server instances.

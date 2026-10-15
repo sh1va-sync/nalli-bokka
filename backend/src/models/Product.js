@@ -41,6 +41,11 @@ const productSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  imagePublicId: {
+    type: String,
+    trim: true,
+    maxlength: 255
+  },
   inStock: {
     type: Boolean,
     default: true

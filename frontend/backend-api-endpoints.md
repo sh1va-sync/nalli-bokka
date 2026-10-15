@@ -67,6 +67,7 @@ The Razorpay webhook is the exception to the JSON-body rule: it receives the raw
 - Validation is strict: unknown body/query fields are rejected.
 - Standard paginated response:
 
+`productData` JSON:
 ```json
 {
   "data": [],
@@ -494,7 +495,6 @@ Slots are returned in ISO-8601 UTC timestamps and generated from the store's dai
       },
       "productType": "meat",
       "productName": "Mutton",
-      "imageUrl": "https://cdn.example.com/mutton.jpg",
       "inStock": true,
       "pricePerKg": 800,
       "pieceWeightGrams": 250,
@@ -930,28 +930,28 @@ Creates a lowercase, store-specific category with body `{ "name": "dry fruits" }
 
 **Purpose:** Creates an inventory product owned by the authenticated store. Do not send `storeId`; it is derived from the token.
 
-**Request body (weight-based product example):**
+**Request content type:** `multipart/form-data`. Add a `productData` field containing the JSON product fields and an `image` file field.
+
+**`productData` (weight-based product example):**
 
 ```json
 {
   "productType": "meat",
   "pricingMode": "weight",
   "productName": "Mutton",
-  "imageUrl": "https://cdn.example.com/mutton.jpg",
   "inStock": true,
   "pricePerKg": 800,
   "pieceWeightGrams": 250
 }
 ```
 
-**Request body (pack-based product example):**
+**`productData` (pack-based product example):**
 
 ```json
 {
   "productType": "oil",
   "pricingMode": "pack",
   "productName": "Groundnut oil",
-  "imageUrl": "https://cdn.example.com/oil.jpg",
   "packs": [
     { "label": "1 L", "price": 220 },
     { "label": "5 L", "price": 1020 }
@@ -964,7 +964,7 @@ Fields:
 - `productType`: Required category name (1–40 characters). Custom categories must first be created by this store.
 - `pricingMode`: Required for all new products: `weight` or `pack`.
 - `productName`: Required, 1–120 characters.
-- `imageUrl`: Required HTTP/HTTPS URL, maximum 2048 characters.
+- `image`: Required JPEG, PNG, or WebP file, maximum 5 MB. Uploaded to Cloudinary; the returned secure URL is stored as `imageUrl`.
 - `inStock`: Optional boolean; defaults to true.
 - `pricePerKg`: Optional nonnegative rupee price per kg.
 - `pieceWeightGrams`: Optional positive number; enables pieces for meat/vegetable/fruit.
@@ -974,7 +974,7 @@ Any category can use `weight` pricing, which requires `pricePerKg` and no packs,
 
 **Success — `201 Created`:** `{ "data": <created product document> }`.
 
-**Important errors:** `400` invalid request or incompatible pricing mode; `401` unauthorized; `403` customer token; `409` duplicate/conflicting database constraint.
+**Important errors:** `400` invalid request, file type, or incompatible pricing mode; `401` unauthorized; `403` customer token; `409` duplicate/conflicting database constraint; `413` image over 5 MB; `502` Cloudinary failure; `503` Cloudinary environment configuration missing.
 
 ### `PATCH /store/products/:productId`
 
@@ -982,9 +982,9 @@ Any category can use `weight` pricing, which requires `pricePerKg` and no packs,
 
 **Path parameter:** `productId` is the product ObjectId.
 
-**Request body:** Any nonempty subset of product creation fields. `pricePerKg` and `pieceWeightGrams` may be `null` to clear those fields; resulting pricing mode is validated before saving.
+**Request content type:** `multipart/form-data`. Add a `productData` field containing any nonempty subset of the product fields and optionally an `image` JPEG, PNG, or WebP file (maximum 5 MB). Omit `image` to retain the existing image. `pricePerKg` and `pieceWeightGrams` may be `null` to clear those fields; resulting pricing mode is validated before saving.
 
-Example:
+`productData` JSON:
 
 ```json
 {
@@ -993,9 +993,9 @@ Example:
 }
 ```
 
-**Success — `200 OK`:** `{ "data": <updated product document> }`.
+**Success — `200 OK`:** `{ "data": <updated product document> }`. If replacing an image succeeds but cleanup of the previous Cloudinary asset fails, the response also includes a `warnings` array.
 
-**Important errors:** `400` invalid ID/body or resulting pricing mode; `401` unauthorized; `403` customer token; `404` product is missing or not owned by this store.
+**Important errors:** `400` invalid ID/body, file type, or resulting pricing mode; `401` unauthorized; `403` customer token; `404` product is missing or not owned by this store; `413` image over 5 MB; `502` Cloudinary failure; `503` Cloudinary environment configuration missing.
 
 ### `PATCH /store/products/:productId/stock`
 
@@ -1015,7 +1015,7 @@ Example:
 
 **Purpose:** Deletes one of this store's products.
 
-**Success — `204 No Content`:** No response body. Existing orders retain their product-name/price snapshots. Cart entries referring to a deleted product become unavailable when the cart is loaded.
+**Success — `204 No Content`:** No response body. Existing orders retain their product-name/price snapshots. Cart entries referring to a deleted product become unavailable when the cart is loaded. Cloudinary cleanup failures are logged after the product is deleted.
 
 **Important errors:** `400` invalid ID; `401` unauthorized; `403` customer token; `404` product missing or not owned by this store.
 

@@ -12,12 +12,14 @@ import escapeRegex from '../utils/escapeRegex.js';
 import { BUILT_IN_PRODUCT_TYPES } from '../utils/productTypes.js';
 import { roundToPaise } from '../utils/pricing.js';
 import { recordStoreAudit } from '../services/audit.js';
+import { deleteProductImage, uploadProductImage } from '../services/productImages.js';
 
 const PRODUCT_FIELDS = [
   'productType',
   'pricingMode',
   'productName',
   'imageUrl',
+  'imagePublicId',
   'inStock',
   'pricePerKg',
   'pieceWeightGrams',
@@ -96,14 +98,18 @@ export async function listStoreAuditEvents(req, res) {
 }
 
 export async function createProduct(req, res) {
-  const session = await Product.db.startSession();
+  const productType = await assertStoreProductType(req.validated.body.productType, req.auth.id);
+  const image = await uploadProductImage(req.file, req.auth.id);
+  let session;
   let product;
   try {
+    session = await Product.db.startSession();
     await session.withTransaction(async () => {
-      const productType = await assertStoreProductType(req.validated.body.productType, req.auth.id, session);
+      const verifiedProductType = await assertStoreProductType(productType, req.auth.id, session);
       [product] = await Product.create([{
         ...req.validated.body,
-        productType,
+        ...image,
+        productType: verifiedProductType,
         storeId: req.auth.id
       }], { session });
       await recordStoreAudit({
@@ -112,11 +118,24 @@ export async function createProduct(req, res) {
         action: 'product.created',
         entityType: 'product',
         entityId: product._id,
-        changedFields: Object.keys(req.validated.body)
+        changedFields: [...Object.keys(req.validated.body), 'imageUrl', 'imagePublicId']
       });
     });
+  } catch (error) {
+    try {
+      await deleteProductImage(image.imagePublicId);
+    } catch (cleanupError) {
+      console.error(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'error',
+        event: 'cloudinary.product_image.rollback_cleanup.failed',
+        publicId: image.imagePublicId,
+        message: cleanupError.message
+      }));
+    }
+    throw error;
   } finally {
-    await session.endSession();
+    if (session) await session.endSession();
   }
   res.status(201).json({ data: product });
 }
@@ -154,9 +173,22 @@ export async function listStoreProducts(req, res) {
 }
 
 export async function updateProduct(req, res) {
-  const session = await Product.db.startSession();
+  const existingProduct = await Product.findOne({
+    _id: req.validated.params.productId,
+    storeId: req.auth.id
+  }).select('imagePublicId');
+  if (!existingProduct) {
+    throw new AppError(404, 'Product not found');
+  }
+
+  let image;
+  if (req.file) {
+    image = await uploadProductImage(req.file, req.auth.id);
+  }
+  let session;
   let product;
   try {
+    session = await Product.db.startSession();
     await session.withTransaction(async () => {
       product = await Product.findOne({
         _id: req.validated.params.productId,
@@ -174,7 +206,13 @@ export async function updateProduct(req, res) {
         );
       }
       const changedFields = PRODUCT_FIELDS.filter(field => req.validated.body[field] !== undefined);
+      if (image) {
+        product.imageUrl = image.imageUrl;
+        product.imagePublicId = image.imagePublicId;
+        changedFields.push('imageUrl', 'imagePublicId');
+      }
       for (const field of changedFields) {
+        if (field === 'imageUrl' || field === 'imagePublicId') continue;
         if (['pricePerKg', 'pieceWeightGrams'].includes(field) && req.validated.body[field] === null) {
           product.set(field, undefined);
         } else {
@@ -191,21 +229,46 @@ export async function updateProduct(req, res) {
         changedFields
       });
     });
+  } catch (error) {
+    if (image) {
+      try {
+        await deleteProductImage(image.imagePublicId);
+      } catch (cleanupError) {
+        console.error(JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'error',
+          event: 'cloudinary.product_image.rollback_cleanup.failed',
+          publicId: image.imagePublicId,
+          message: cleanupError.message
+        }));
+      }
+    }
+    throw error;
   } finally {
-    await session.endSession();
+    if (session) await session.endSession();
   }
-  res.json({ data: product });
+
+  const warnings = [];
+  if (image && existingProduct.imagePublicId && existingProduct.imagePublicId !== image.imagePublicId) {
+    try {
+      await deleteProductImage(existingProduct.imagePublicId);
+    } catch (cleanupError) {
+      warnings.push(cleanupError.message);
+    }
+  }
+  res.json({ data: product, ...(warnings.length ? { warnings } : {}) });
 }
 
 export async function deleteProduct(req, res) {
   const session = await Product.db.startSession();
+  let deletedProduct;
   try {
     await session.withTransaction(async () => {
-      const product = await Product.findOneAndDelete({
+      deletedProduct = await Product.findOneAndDelete({
         _id: req.validated.params.productId,
         storeId: req.auth.id
       }, { session });
-      if (!product) {
+      if (!deletedProduct) {
         throw new AppError(404, 'Product not found');
       }
       await recordStoreAudit({
@@ -213,12 +276,25 @@ export async function deleteProduct(req, res) {
         req,
         action: 'product.deleted',
         entityType: 'product',
-        entityId: product._id,
+        entityId: deletedProduct._id,
         changedFields: ['deleted']
       });
     });
   } finally {
     await session.endSession();
+  }
+  if (deletedProduct.imagePublicId) {
+    try {
+      await deleteProductImage(deletedProduct.imagePublicId);
+    } catch (cleanupError) {
+      console.error(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'error',
+        event: 'cloudinary.product_image.delete_after_product_removal.failed',
+        publicId: deletedProduct.imagePublicId,
+        message: cleanupError.message
+      }));
+    }
   }
   res.status(204).end();
 }

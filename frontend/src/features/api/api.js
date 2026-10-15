@@ -181,7 +181,7 @@ export const api = createApi({
       invalidatesTags: ['StoreProducts', 'StoreDashboard', 'StoreAudit'],
     }),
     updateStoreProduct: builder.mutation({
-      query: ({ productId, ...body }) => ({ url: `/store/products/${productId}`, method: 'PATCH', body }),
+      query: ({ productId, body }) => ({ url: `/store/products/${productId}`, method: 'PATCH', body }),
       invalidatesTags: ['StoreProducts', 'StoreDashboard', 'StoreAudit'],
     }),
     setStoreProductStock: builder.mutation({

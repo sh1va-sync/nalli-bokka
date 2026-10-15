@@ -1,0 +1,33 @@
+{
+  "id": "/",
+  "name": "NalliBokka — Fresh, fast, local",
+  "short_name": "NalliBokka",
+  "description": "Fresh groceries, fruits, vegetables and meat from your neighbourhood store.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#fbf7f1",
+  "theme_color": "#fbf7f1",
+  "icons": [
+    {
+      "src": "/icons/nallibokka-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/nallibokka-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/nallibokka-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

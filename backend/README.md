@@ -4,14 +4,14 @@ Express 5 REST API using MongoDB/Mongoose, Firebase Authentication for customer 
 
 ## Setup
 
-Requirements: Node.js 18+, npm, MongoDB, a Firebase project with Phone sign-in enabled, and Razorpay credentials for live payment flows.
+Requirements: Node.js 18+, npm, MongoDB, a Firebase project with Phone sign-in enabled, Cloudinary credentials for product image uploads, and Razorpay credentials for live payment flows.
 
 ```powershell
 npm install
 Copy-Item .env.example .env
 ```
 
-Set `MONGODB_URI`, `JWT_SECRET` (generate a unique random value of at least 32 characters), and `CORS_ORIGIN` in `.env`. `CORS_ORIGIN` accepts a comma-separated list of website origins. In Firebase Console, enable Phone Authentication and create a service-account key; set `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY` from that key to verify customer sign-in tokens. Store the private key only on the backend and never commit it. Add the Razorpay credentials and webhook secret to enable payments. The server starts only after MongoDB connects and the JWT secret is configured.
+Set `MONGODB_URI`, `JWT_SECRET` (generate a unique random value of at least 32 characters), and `CORS_ORIGIN` in `.env`. `CORS_ORIGIN` accepts a comma-separated list of website origins. In Firebase Console, enable Phone Authentication and create a service-account key; set `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY` from that key to verify customer sign-in tokens. Store the private key only on the backend and never commit it. Set `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` from your Cloudinary account to enable store product image uploads; keep the API secret only in backend environment settings. Add the Razorpay credentials and webhook secret to enable payments. The server starts only after MongoDB connects and the JWT secret is configured.
 
 ```powershell
 npm run dev
@@ -143,28 +143,28 @@ Delivery statuses follow `placed -> packing -> out for delivery -> delivered`; p
 
 Store data access is scoped to the authenticated store ID; clients cannot choose a different `storeId` for inventory or order operations.
 
-### Product create examples
+### Product image uploads
 
-Create weight-priced mutton/vegetables/fruit, or loose rice:
+Store product create and update requests use `multipart/form-data`. Send product fields as JSON in the `productData` field and attach the image as `image` (JPEG, PNG, or WebP, up to 5 MB). Images are uploaded to Cloudinary; product records keep the secure URL and Cloudinary public ID. Updates may omit `image` to keep the current image.
+
+Example `productData` for weight-priced products:
 
 ```json
 {
   "productType": "meat",
   "productName": "Mutton",
-  "imageUrl": "https://cdn.example.com/mutton.jpg",
   "pricePerKg": 800,
   "pieceWeightGrams": 250,
   "inStock": true
 }
 ```
 
-Create oil or packaged rice with individually priced packs:
+Example `productData` for pack-priced products:
 
 ```json
 {
   "productType": "oil",
   "productName": "Groundnut oil",
-  "imageUrl": "https://cdn.example.com/oil.jpg",
   "packs": [
     { "label": "1 L", "price": 220 },
     { "label": "5 L", "price": 1020 }

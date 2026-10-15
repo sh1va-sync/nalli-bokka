@@ -179,7 +179,8 @@ Represents a store's catalog item. The same collection supports weight-priced go
 | `productType` | String | Yes | Built-in or store-created category name, stored lowercase. |
 | `pricingMode` | String enum | No | `weight` or `pack`; explicit for new products and optional on legacy records. |
 | `productName` | String | Yes | Display name; trimmed. |
-| `imageUrl` | String | Yes | Product image URL. API validation only permits HTTP/HTTPS URLs. |
+| `imageUrl` | String | Yes | Secure Cloudinary URL used by storefronts and order snapshots; legacy externally hosted URLs remain readable. |
+| `imagePublicId` | String | No | Cloudinary public ID used to replace or remove uploaded product images; absent on legacy products. |
 | `inStock` | Boolean | No | Whether the item is currently purchasable; defaults to `true`. |
 | `pricePerKg` | Number | Conditional | Nonnegative price in rupees per kilogram, used for weight pricing. |
 | `pieceWeightGrams` | Number | No | Positive approximate weight per piece in grams; permits piece-based pricing on meat, vegetable, and fruit. |

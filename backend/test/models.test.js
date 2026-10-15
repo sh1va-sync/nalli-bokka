@@ -97,13 +97,16 @@ test('order notifications are user-scoped, unread by default, and unique per ord
 });
 
 test('product validation enforces weight and pack pricing modes', async () => {
-  await new Product({
+  const cloudinaryProduct = new Product({
     storeId: objectId(),
     productType: 'meat',
     productName: 'Mutton',
     imageUrl: 'https://example.test/mutton.jpg',
+    imagePublicId: 'nalli-bokka/products/store-id/product-id',
     pricePerKg: 800
-  }).validate();
+  });
+  await cloudinaryProduct.validate();
+  assert.equal(cloudinaryProduct.imagePublicId, 'nalli-bokka/products/store-id/product-id');
   await new Product({
     storeId: objectId(),
     productType: 'oil',

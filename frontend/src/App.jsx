@@ -13,6 +13,7 @@ import CartDrawer from './features/customer/components/CartDrawer.jsx'
 import Toast from './features/customer/components/Toast.jsx'
 import HomePage from './features/customer/pages/HomePage.jsx'
 import ActiveOrderBanner from './features/customer/components/ActiveOrderBanner.jsx'
+import PwaInstallPrompt from './features/customer/components/PwaInstallPrompt.jsx'
 import { createUuid, getErrorMessage } from './features/customer/utils.js'
 
 const CheckoutPage = lazy(() => import('./features/customer/pages/CheckoutPage.jsx'))
@@ -211,6 +212,7 @@ function App() {
       <footer className="border-t border-[var(--border-default)] bg-[var(--bg-app)] px-5 py-7 text-center text-xs text-[var(--text-secondary)]">
         Fresh from your neighbourhood. <span className="font-semibold text-[var(--brand-primary)]">NalliBokka.</span>
       </footer>
+      {!isStoreRoute && <PwaInstallPrompt />}
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-[var(--border-default)] bg-[var(--bg-app)]/95 py-2 text-[11px] font-medium text-[var(--text-secondary)] backdrop-blur md:hidden" aria-label="Main navigation">
         <NavLink className={({ isActive }) => `flex flex-col items-center gap-1 py-1 ${isActive ? 'text-[var(--brand-primary)]' : ''}`} to="/" aria-label="Shop">
           <Store size={18} strokeWidth={1.8} />

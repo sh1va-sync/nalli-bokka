@@ -20,6 +20,11 @@ function errorHandler(err, req, res, _next) {
   } else if (err.type === 'entity.too.large') {
     status = 413;
     message = 'Request body is too large';
+  } else if (err instanceof Error && err.name === 'MulterError') {
+    status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    message = err.code === 'LIMIT_FILE_SIZE'
+      ? 'Product image must be 5 MB or smaller'
+      : 'Product image upload is invalid';
   }
 
   if (status >= 500) {

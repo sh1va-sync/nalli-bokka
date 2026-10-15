@@ -119,10 +119,11 @@ function ProductForm({ product, categories = [], onCancel, onSaved }) {
     productType: product?.productType || 'meat',
     pricingMode: product?.pricingMode || getDefaultPricingMode(product?.productType || 'meat', product?.packs),
     productName: product?.productName || '',
-    imageUrl: product?.imageUrl || '',
     pricePerKg: product?.pricePerKg ?? '',
     packs: product?.packs?.length ? product.packs.map(({ label, price }) => ({ label, price })) : [{ label: '', price: '' }],
   }))
+  const [imageFile, setImageFile] = useState(null)
+  const [imagePreview, setImagePreview] = useState(product?.imageUrl || '')
   const [error, setError] = useState('')
   const [categoryName, setCategoryName] = useState('')
   const [categoryError, setCategoryError] = useState('')
@@ -130,28 +131,43 @@ function ProductForm({ product, categories = [], onCancel, onSaved }) {
   const packPricing = form.pricingMode === 'pack'
   const isSaving = createState.isLoading || updateState.isLoading
 
+  useEffect(() => {
+    return () => {
+      if (imagePreview.startsWith('blob:')) URL.revokeObjectURL(imagePreview)
+    }
+  }, [imagePreview])
+
   async function submit(event) {
     event.preventDefault()
     setError('')
+    if (!product && !imageFile) {
+      setError('Choose a product image file.')
+      return
+    }
     const body = {
       productType: form.productType.toLowerCase(),
       pricingMode: form.pricingMode,
       productName: form.productName.trim(),
-      imageUrl: form.imageUrl.trim(),
     }
     if (packPricing) body.packs = form.packs.map(({ label, price }) => ({ label: label.trim(), price: Number(price) }))
     else body.pricePerKg = Number(form.pricePerKg)
+    const formData = new FormData()
+    formData.append('productData', JSON.stringify(body))
+    if (imageFile) formData.append('image', imageFile)
     try {
+      let response
       if (product) {
         body.inStock = product.inStock
         if (product.packs?.length && !packPricing) body.packs = []
         if (!product.packs?.length && packPricing) body.pricePerKg = null
-        await updateProduct({ productId: product._id, ...body }).unwrap()
+        formData.set('productData', JSON.stringify(body))
+        response = await updateProduct({ productId: product._id, body: formData }).unwrap()
       } else {
         body.inStock = true
-        await createProduct(body).unwrap()
+        formData.set('productData', JSON.stringify(body))
+        response = await createProduct(formData).unwrap()
       }
-      onSaved()
+      onSaved(response.warnings)
     } catch (requestError) {
       setError(getErrorMessage(requestError))
     }
@@ -194,9 +210,32 @@ function ProductForm({ product, categories = [], onCancel, onSaved }) {
       <label className="text-xs font-semibold text-[var(--text-secondary)]">PRODUCT NAME
         <input required maxLength={120} value={form.productName} onChange={(event) => setForm({ ...form, productName: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-[var(--border-default)] bg-white px-3 text-sm font-normal text-[var(--text-primary)] outline-none focus:border-[var(--brand-primary)]" placeholder="Product name" />
       </label>
-      <label className="text-xs font-semibold text-[var(--text-secondary)] sm:col-span-2">IMAGE URL
-        <input required type="url" maxLength={2048} value={form.imageUrl} onChange={(event) => setForm({ ...form, imageUrl: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-[var(--border-default)] bg-white px-3 text-sm font-normal text-[var(--text-primary)] outline-none focus:border-[var(--brand-primary)]" placeholder="https://…" />
-      </label>
+      <div className="sm:col-span-2">
+        <label className="text-xs font-semibold text-[var(--text-secondary)]">PRODUCT IMAGE
+          <input required={!product} type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => {
+            const file = event.target.files?.[0]
+            setError('')
+            if (file && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+              setError('Choose a JPEG, PNG, or WebP image.')
+              event.target.value = ''
+              setImageFile(null)
+              setImagePreview(product?.imageUrl || '')
+              return
+            }
+            if (file && file.size > 5 * 1024 * 1024) {
+              setError('Product image must be 5 MB or smaller.')
+              event.target.value = ''
+              setImageFile(null)
+              setImagePreview(product?.imageUrl || '')
+              return
+            }
+            setImageFile(file || null)
+            setImagePreview(file ? URL.createObjectURL(file) : product?.imageUrl || '')
+          }} className="mt-1.5 block w-full rounded-lg border border-[var(--border-default)] bg-white px-3 py-2 text-sm font-normal text-[var(--text-primary)] file:mr-3 file:rounded-md file:border-0 file:bg-[var(--brand-primary-soft)] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[var(--brand-primary)]" />
+        </label>
+        <p className="mt-1 text-[10px] text-[var(--text-secondary)]">JPEG, PNG, or WebP · up to 5 MB{product ? ' · leave empty to keep the current image' : ''}</p>
+        {imagePreview && <img src={imagePreview} alt="Product image preview" className="mt-3 h-24 w-24 rounded-xl border border-[var(--border-default)] bg-white object-cover" />}
+      </div>
       <label className="text-xs font-semibold text-[var(--text-secondary)]">PRICING FOR THIS PRODUCT
         <select value={form.pricingMode} onChange={(event) => setForm({ ...form, pricingMode: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-[var(--border-default)] bg-white px-3 text-sm font-normal text-[var(--text-primary)] outline-none focus:border-[var(--brand-primary)]"><option value="weight">Per kilogram</option><option value="pack">Fixed-price packs</option></select>
       </label>
@@ -389,8 +428,8 @@ export default function StoreDashboardPage() {
     setActionSuccess('')
     setPendingAction(`${id}-${action}`)
     try {
-      await task()
-      setActionSuccess(successMessage)
+      const result = await task()
+      setActionSuccess(result?.warnings?.join(' ') || successMessage)
     } catch (requestError) {
       setActionError(getErrorMessage(requestError))
     } finally {
@@ -599,7 +638,7 @@ export default function StoreDashboardPage() {
 
         {tab === 'inventory' && <>
           <SectionTitle eyebrow="Your catalog" title="Inventory"><button onClick={() => { setEditingProduct(null); setShowProductForm((value) => !value) }} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[var(--brand-primary)] px-3 text-xs font-semibold text-white hover:bg-[var(--brand-primary-hover)]"><PackagePlus size={15} />Add product</button></SectionTitle>
-          {showProductForm && <ProductForm key={editingProduct?._id || 'new-product'} product={editingProduct} categories={productCategories} onCancel={() => { setShowProductForm(false); setEditingProduct(null) }} onSaved={() => { setShowProductForm(false); setEditingProduct(null); setActionSuccess(editingProduct ? 'Product changes saved.' : 'Product added to inventory.') }} />}
+          {showProductForm && <ProductForm key={editingProduct?._id || 'new-product'} product={editingProduct} categories={productCategories} onCancel={() => { setShowProductForm(false); setEditingProduct(null) }} onSaved={(warnings = []) => { setShowProductForm(false); setEditingProduct(null); setActionSuccess(warnings.length ? warnings.join(' ') : editingProduct ? 'Product changes saved.' : 'Product added to inventory.') }} />}
           {productCategoriesError && <p role="alert" className="mb-3 rounded-xl bg-[var(--status-danger-soft)] p-3 text-sm text-[var(--status-danger)]">{getErrorMessage(productCategoriesError)}</p>}
           <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
             <label className="flex h-10 items-center gap-2 rounded-lg border border-[var(--border-default)] bg-white px-3 text-xs text-[var(--text-secondary)] sm:col-span-2"><Search size={14} /><input value={productSearch} onChange={(event) => { setProductSearch(event.target.value); setProductPage(1) }} placeholder="Search products" className="w-full bg-transparent text-sm text-[var(--text-primary)] outline-none" /></label>

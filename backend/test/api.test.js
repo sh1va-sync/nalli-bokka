@@ -372,49 +372,46 @@ test('Razorpay webhook requires its event ID after signature verification', asyn
   }
 });
 
-test('product image URLs must use a browser-safe HTTP scheme', () => {
+test('product payloads no longer accept image URLs and keep pricing validation', () => {
   const valid = schemas.productCreate.body.safeParse({
     productType: 'meat',
     pricingMode: 'weight',
     productName: 'Mutton',
-    imageUrl: 'https://example.test/mutton.jpg',
     pricePerKg: 800
   });
-  const invalid = schemas.productCreate.body.safeParse({
+  const urlPayload = schemas.productCreate.body.safeParse({
     productType: 'meat',
     pricingMode: 'weight',
     productName: 'Mutton',
-    imageUrl: 'javascript:alert(1)',
+    imageUrl: 'https://example.test/mutton.jpg',
     pricePerKg: 800
   });
   assert.equal(valid.success, true);
-  assert.equal(invalid.success, false);
+  assert.equal(urlPayload.success, false);
   assert.equal(schemas.productCreate.body.safeParse({
     productType: 'meat',
     productName: 'Mutton',
-    imageUrl: 'https://example.test/mutton.jpg',
     pricePerKg: 800
   }).success, false);
   assert.equal(schemas.productCreate.body.safeParse({
     productType: 'meat',
     pricingMode: 'pack',
     productName: 'Mutton pack',
-    imageUrl: 'https://example.test/mutton.jpg',
     packs: [{ label: '500 g', price: 450 }]
   }).success, true);
   assert.equal(schemas.productCreate.body.safeParse({
     productType: 'dry fruits',
     pricingMode: 'weight',
     productName: 'Almonds',
-    imageUrl: 'https://example.test/almonds.jpg',
     pricePerKg: 900
   }).success, true);
   assert.equal(schemas.productCreate.body.safeParse({
     productType: 'dry fruits',
     productName: 'Almonds',
-    imageUrl: 'https://example.test/almonds.jpg',
     pricePerKg: 900
   }).success, false);
+  assert.equal(schemas.productUpdate.body.safeParse({ productName: 'New name' }).success, true);
+  assert.equal(schemas.productUpdate.body.safeParse({ imageUrl: 'https://example.test/old.jpg' }).success, false);
   assert.equal(schemas.storeProductList.query.parse({
     productType: 'dry fruits',
     inStock: 'false',

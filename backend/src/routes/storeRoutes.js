@@ -23,6 +23,7 @@ import {
 } from '../controllers/orderController.js';
 import { refundStoreOrder } from '../controllers/paymentController.js';
 import authenticate from '../middleware/authenticate.js';
+import { parseProductMultipartData, receiveProductImage, requireProductImage } from '../middleware/productImageUpload.js';
 import validate from '../middleware/validate.js';
 import { schemas } from '../validation/schemas.js';
 
@@ -36,8 +37,8 @@ router.get('/audit-events', validate(schemas.storeAuditEventList), listStoreAudi
 router.get('/product-categories', validate(schemas.storeProductCategoryList), listStoreProductCategories);
 router.post('/product-categories', validate(schemas.storeProductCategoryCreate), createStoreProductCategory);
 router.get('/products', validate(schemas.storeProductList), listStoreProducts);
-router.post('/products', validate(schemas.productCreate), createProduct);
-router.patch('/products/:productId', validate(schemas.productUpdate), updateProduct);
+router.post('/products', receiveProductImage, parseProductMultipartData, requireProductImage, validate(schemas.productCreate), createProduct);
+router.patch('/products/:productId', receiveProductImage, parseProductMultipartData, validate(schemas.productUpdate), updateProduct);
 router.patch('/products/:productId/stock', validate(schemas.stockUpdate), updateStock);
 router.delete('/products/:productId', validate(schemas.productParams), deleteProduct);
 router.get('/orders', validate(schemas.orderList), listStoreOrders);

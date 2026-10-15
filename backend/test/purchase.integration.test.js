@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { createHmac } from 'node:crypto';
+import { Writable } from 'node:stream';
+import { v2 as cloudinary } from 'cloudinary';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
@@ -25,19 +27,36 @@ const originalEnvironment = {
   RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
   RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
   RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
-  RENDER_EXTERNAL_URL: process.env.RENDER_EXTERNAL_URL
+  RENDER_EXTERNAL_URL: process.env.RENDER_EXTERNAL_URL,
+  CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,
+  CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY,
+  CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET
 };
 let replicaSet;
 let server;
 let baseUrl;
 let razorpayOrderSequence = 0;
 let capturedRazorpayOrderId;
+let originalCloudinaryUploadStream;
+let cloudinaryUploadSequence = 0;
+
+function productFormData(productData) {
+  const formData = new FormData();
+  formData.append('productData', JSON.stringify(productData));
+  formData.append('image', new Blob([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  ], { type: 'image/png' }), 'product.png');
+  return formData;
+}
 
 before(async () => {
   process.env.JWT_SECRET = 'test-secret-that-is-long-enough-for-integration-tests';
   process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
   process.env.RAZORPAY_KEY_SECRET = 'test-razorpay-secret';
   process.env.RAZORPAY_WEBHOOK_SECRET = 'test-webhook-secret';
+  process.env.CLOUDINARY_CLOUD_NAME = 'test-cloud';
+  process.env.CLOUDINARY_API_KEY = 'test-api-key';
+  process.env.CLOUDINARY_API_SECRET = 'test-api-secret';
   replicaSet = await MongoMemoryReplSet.create({
     instanceOpts: [{ launchTimeout: 60_000 }],
     replSet: { count: 1 }
@@ -67,6 +86,19 @@ before(async () => {
     status: 'created',
     notes: params.notes
   });
+  originalCloudinaryUploadStream = cloudinary.uploader.upload_stream;
+  cloudinary.uploader.upload_stream = (options, callback) => {
+    const uploadStream = new Writable({
+      write(_chunk, _encoding, done) {
+        done();
+      }
+    });
+    uploadStream.on('finish', () => callback(null, {
+      secure_url: `https://res.cloudinary.com/test-cloud/image/upload/${options.public_id}.png`,
+      public_id: `${options.public_id}-${++cloudinaryUploadSequence}`
+    }));
+    return uploadStream;
+  };
 });
 
 after(async () => {
@@ -78,6 +110,9 @@ after(async () => {
   }
   await mongoose.disconnect();
   if (replicaSet) await replicaSet.stop();
+  if (originalCloudinaryUploadStream) {
+    cloudinary.uploader.upload_stream = originalCloudinaryUploadStream;
+  }
   for (const [key, originalValue] of Object.entries(originalEnvironment)) {
     if (originalValue === undefined) delete process.env[key];
     else process.env[key] = originalValue;
@@ -111,12 +146,11 @@ test('store-created categories persist and support custom product pricing and in
 
   const productResponse = await fetch(`${baseUrl}/store/products`, {
     method: 'POST',
-    headers,
-    body: JSON.stringify({
+    headers: { authorization: headers.authorization },
+    body: productFormData({
       productType: 'pet supplies',
       pricingMode: 'pack',
       productName: 'Dog Food',
-      imageUrl: 'https://example.test/dog-food.jpg',
       packs: [{ label: '2 kg', price: 500 }]
     })
   });
@@ -124,15 +158,16 @@ test('store-created categories persist and support custom product pricing and in
   const product = (await productResponse.json()).data;
   assert.equal(product.productType, 'pet supplies');
   assert.equal(product.pricingMode, 'pack');
+  assert.match(product.imageUrl, /^https:\/\/res\.cloudinary\.com\//);
+  assert.match(product.imagePublicId, /^[a-f\d]{24}\//);
 
   const existingCategoryProductResponse = await fetch(`${baseUrl}/store/products`, {
     method: 'POST',
-    headers,
-    body: JSON.stringify({
+    headers: { authorization: headers.authorization },
+    body: productFormData({
       productType: 'meat',
       pricingMode: 'pack',
       productName: 'Packaged Mutton',
-      imageUrl: 'https://example.test/packaged-mutton.jpg',
       packs: [{ label: '500 g', price: 450 }]
     })
   });

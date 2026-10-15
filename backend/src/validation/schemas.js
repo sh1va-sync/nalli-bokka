@@ -1,13 +1,6 @@
 import { z } from 'zod';
 
 const objectId = z.string().regex(/^[a-f\d]{24}$/i, 'Must be a valid ID');
-const imageUrl = z.string().url().max(2048).refine(value => {
-  try {
-    return ['http:', 'https:'].includes(new URL(value).protocol);
-  } catch {
-    return false;
-  }
-}, 'Image URL must use HTTP or HTTPS');
 const address = z.object({
   label: z.string().trim().min(1).max(40),
   fullAddress: z.string().trim().min(5).max(500),
@@ -109,7 +102,6 @@ const schemas = {
       productType: z.string().trim().min(1).max(40),
       pricingMode: z.enum(['weight', 'pack']),
       productName: z.string().trim().min(1).max(120),
-      imageUrl,
       inStock: z.boolean().optional(),
       pricePerKg: z.number().min(0).optional(),
       pieceWeightGrams: z.number().positive().optional(),
@@ -125,7 +117,6 @@ const schemas = {
       productType: z.string().trim().min(1).max(40).optional(),
       pricingMode: z.enum(['weight', 'pack']).optional(),
       productName: z.string().trim().min(1).max(120).optional(),
-      imageUrl: imageUrl.optional(),
       inStock: z.boolean().optional(),
       pricePerKg: z.number().min(0).nullable().optional(),
       pieceWeightGrams: z.number().positive().nullable().optional(),
