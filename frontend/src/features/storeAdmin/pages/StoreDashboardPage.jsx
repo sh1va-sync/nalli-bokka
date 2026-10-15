@@ -4,18 +4,19 @@ import { useDispatch, useSelector } from 'react-redux'
 import {
   Activity, AlertCircle, ArrowDownRight, ArrowUpRight, Boxes, CalendarDays, Check, ChevronLeft,
   ChevronRight, ClipboardList, Clock3, CreditCard, LayoutDashboard, LogOut, PackagePlus,
-  Download, Power, RefreshCw, RotateCcw, Search, Trash2, Truck, X,
+  Download, FileText, Power, RefreshCw, RotateCcw, Search, Trash2, Truck, X,
 } from 'lucide-react'
 import {
   useCreateStoreProductMutation, useDeleteStoreProductMutation, useExportStoreReportMutation,
   useGetStoreDashboardQuery,
-  useGetStoreMeQuery, useGetStoreOrdersQuery, useGetStoreProductsQuery,
+  useGetStoreMeQuery, useGetStoreOrdersQuery, useGetStoreProductsQuery, useGetStoreProductCategoriesQuery,
+  useCreateStoreProductCategoryMutation,
   useGetStoreAuditEventsQuery, useGetStoreTransactionsQuery, useSetStoreProductStockMutation, useToggleStoreStatusMutation,
-  useUpdateStoreOrderStatusMutation,
+  useDownloadStoreOrderInvoiceMutation, useUpdateStoreOrderStatusMutation,
   useRefundStoreOrderMutation, useUpdateStoreProductMutation,
 } from '../../api/api.js'
 import { api } from '../../api/api.js'
-import { getErrorMessage, formatPrice } from '../../customer/utils.js'
+import { getErrorMessage, formatItemQuantity, formatPrice, saveInvoicePdf } from '../../customer/utils.js'
 import MeatCuttingLoader from '../components/MeatCuttingLoader.jsx'
 import { storeSignedOut } from '../storeAuthSlice.js'
 
@@ -28,6 +29,10 @@ const navItems = [
   { id: 'reports', label: 'Reports', icon: Download },
 ]
 const productTypes = ['meat', 'vegetable', 'fruit', 'oil', 'rice']
+const getDefaultPricingMode = (productType, packs = []) => (
+  productType === 'oil' || (productType === 'rice' && packs.length) ? 'pack' : 'weight'
+)
+const formatCategoryLabel = (name) => name.split(/\s+/).map((word) => word[0]?.toUpperCase() + word.slice(1)).join(' ')
 const getLocalDateString = (date = new Date()) => {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -57,22 +62,22 @@ function DateFilter({ selectedDate, today, onChange }) {
     year: 'numeric',
   })
 
-  return <section className="dashboard-enter mb-5 flex flex-wrap items-center justify-between gap-4 rounded-[20px] border border-[#eadfd7] bg-white p-4 shadow-[0_12px_35px_-28px_rgba(91,43,33,.45)] sm:p-5">
+  return <section className="store-dashboard-filter dashboard-enter mb-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#e9e7e2] bg-white p-4 sm:p-5">
     <div className="flex min-w-0 items-center gap-3">
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#fbefec] text-[#9b5148]"><CalendarDays size={20} /></span>
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#f4f3ef] text-[#6f6b63]"><CalendarDays size={18} /></span>
       <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#ad7669]">{selectedDate === today ? "Today's activity" : 'Daily report'}</p>
-        <p className="mt-1 truncate text-sm font-semibold text-[#493631]">{dateLabel}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#88847b]">{selectedDate === today ? "Today's activity" : 'Daily report'}</p>
+        <p className="mt-1 truncate text-sm font-semibold text-[#292724]">{dateLabel}</p>
       </div>
     </div>
     <div className="flex w-full items-center gap-2 sm:w-auto">
-      <button type="button" onClick={() => shiftDate(-1)} aria-label="View previous day" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#eadfd7] text-[#76534a] transition hover:-translate-x-0.5 hover:bg-[#fff8f4]"><ChevronLeft size={17} /></button>
-      <label className="relative flex h-10 min-w-0 flex-1 items-center rounded-xl border border-[#eadfd7] bg-[#fffdfa] px-3 text-xs font-semibold text-[#76534a] transition focus-within:border-[#c98c7f] sm:w-44 sm:flex-none">
-        <CalendarDays className="mr-2 shrink-0 text-[#ad7669]" size={15} />
-        <input aria-label="Select dashboard date" type="date" value={selectedDate} max={today} onChange={(event) => onChange(event.target.value)} className="min-w-0 flex-1 bg-transparent text-xs text-[#493631] outline-none" />
+      <button type="button" onClick={() => shiftDate(-1)} aria-label="View previous day" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#e9e7e2] text-[#666259] transition hover:bg-[#f7f6f2]"><ChevronLeft size={17} /></button>
+      <label className="relative flex h-10 min-w-0 flex-1 items-center rounded-xl border border-[#e9e7e2] bg-white px-3 text-xs font-semibold text-[#666259] transition focus-within:border-[#aaa69d] sm:w-44 sm:flex-none">
+        <CalendarDays className="mr-2 shrink-0 text-[#88847b]" size={15} />
+        <input aria-label="Select dashboard date" type="date" value={selectedDate} max={today} onChange={(event) => onChange(event.target.value)} className="min-w-0 flex-1 bg-transparent text-xs text-[#292724] outline-none" />
       </label>
-      <button type="button" onClick={() => shiftDate(1)} disabled={selectedDate >= today} aria-label="View next day" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#eadfd7] text-[#76534a] transition hover:translate-x-0.5 hover:bg-[#fff8f4] disabled:cursor-not-allowed disabled:opacity-40"><ChevronRight size={17} /></button>
-      {selectedDate !== today && <button type="button" onClick={() => onChange(today)} className="h-10 shrink-0 rounded-xl bg-[#861923] px-3 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#70131c]">Today</button>}
+      <button type="button" onClick={() => shiftDate(1)} disabled={selectedDate >= today} aria-label="View next day" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#e9e7e2] text-[#666259] transition hover:bg-[#f7f6f2] disabled:cursor-not-allowed disabled:opacity-40"><ChevronRight size={17} /></button>
+      {selectedDate !== today && <button type="button" onClick={() => onChange(today)} className="h-10 shrink-0 rounded-xl bg-[#302724] px-3 text-xs font-semibold text-white transition hover:bg-[#49423e]">Today</button>}
     </div>
   </section>
 }
@@ -83,13 +88,13 @@ function MetricCard({ label, value, detail, icon: Icon, tone = 'wine' }) {
     : tone === 'coral'
       ? 'bg-[#fbefec] text-[#a55549]'
       : 'bg-[#f5eee8] text-[#87634f]'
-  return <article className="rounded-[18px] border border-[#eadfd7] bg-white p-4 transition duration-300 hover:-translate-y-1 hover:shadow-[0_14px_32px_-24px_rgba(91,43,33,.5)] sm:p-5">
-    <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-medium text-[#82736d]">{label}</p><p className="mt-2 text-2xl font-semibold tracking-[-.04em] text-[#392824]">{value}</p><p className="mt-1 text-[11px] text-[#9a8b83]">{detail}</p></div><span className={`grid h-10 w-10 place-items-center rounded-xl ${colors}`}><Icon size={18} /></span></div>
+  return <article className="store-dashboard-metric rounded-2xl border border-[#e9e7e2] bg-white p-4 transition duration-200 hover:border-[#d3d0c9] sm:p-5">
+    <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-medium text-[#69665f]">{label}</p><p className="mt-2 text-2xl font-semibold tracking-[-.04em] text-[#242320]">{value}</p><p className="mt-1 text-[11px] text-[#8c8981]">{detail}</p></div><span className={`grid h-9 w-9 place-items-center rounded-xl ${colors}`}><Icon size={17} /></span></div>
   </article>
 }
 
 function SectionTitle({ eyebrow, title, children }) {
-  return <div className="mb-5 flex flex-wrap items-end justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#ad7669]">{eyebrow}</p><h1 className="mt-1 font-display text-2xl font-medium tracking-[-.03em] text-[#392824] sm:text-[28px]">{title}</h1></div>{children}</div>
+  return <div className="store-dashboard-heading mb-5 flex flex-wrap items-end justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#88847b]">{eyebrow}</p><h1 className="mt-1 text-2xl font-semibold tracking-[-.035em] text-[#242320] sm:text-[28px]">{title}</h1></div>{children}</div>
 }
 
 function PaginationControls({ pagination, page, onPageChange }) {
@@ -105,26 +110,31 @@ function PaginationControls({ pagination, page, onPageChange }) {
   </div>
 }
 
-function ProductForm({ product, onCancel, onSaved }) {
+function ProductForm({ product, categories = [], onCancel, onSaved }) {
   const [createProduct, createState] = useCreateStoreProductMutation()
   const [updateProduct, updateState] = useUpdateStoreProductMutation()
+  const [createCategory, createCategoryState] = useCreateStoreProductCategoryMutation()
   const [form, setForm] = useState(() => ({
     productType: product?.productType || 'meat',
+    pricingMode: product?.pricingMode || getDefaultPricingMode(product?.productType || 'meat', product?.packs),
     productName: product?.productName || '',
     imageUrl: product?.imageUrl || '',
     pricePerKg: product?.pricePerKg ?? '',
-    riceMode: product?.packs?.length ? 'pack' : 'weight',
     packs: product?.packs?.length ? product.packs.map(({ label, price }) => ({ label, price })) : [{ label: '', price: '' }],
   }))
   const [error, setError] = useState('')
-  const packPricing = form.productType === 'oil' || (form.productType === 'rice' && form.riceMode === 'pack')
+  const [categoryName, setCategoryName] = useState('')
+  const [categoryError, setCategoryError] = useState('')
+  const [showCategoryInput, setShowCategoryInput] = useState(false)
+  const packPricing = form.pricingMode === 'pack'
   const isSaving = createState.isLoading || updateState.isLoading
 
   async function submit(event) {
     event.preventDefault()
     setError('')
     const body = {
-      productType: form.productType,
+      productType: form.productType.toLowerCase(),
+      pricingMode: form.pricingMode,
       productName: form.productName.trim(),
       imageUrl: form.imageUrl.trim(),
     }
@@ -147,24 +157,48 @@ function ProductForm({ product, onCancel, onSaved }) {
   }
 
   function changeType(productType) {
-    setForm((current) => ({ ...current, productType, riceMode: productType === 'rice' ? current.riceMode : 'weight' }))
+    setForm((current) => ({
+      ...current,
+      productType,
+      pricingMode: getDefaultPricingMode(productType),
+    }))
+  }
+
+  async function saveCategory() {
+    setCategoryError('')
+    try {
+      const response = await createCategory({ name: categoryName.trim() }).unwrap()
+      setForm((current) => ({ ...current, productType: response.data.name, pricingMode: 'weight' }))
+      setCategoryName('')
+      setShowCategoryInput(false)
+    } catch (requestError) {
+      setCategoryError(getErrorMessage(requestError))
+    }
   }
 
   return <form onSubmit={submit} className="mt-4 rounded-[18px] border border-[#eadfd7] bg-[#fffdfa] p-4 sm:p-5">
-    <div className="flex items-start justify-between gap-3"><div><h3 className="text-sm font-semibold text-[#493631]">{product ? `Edit ${product.productName}` : 'Add product to inventory'}</h3><p className="mt-1 text-xs text-[#8b7d76]">Products use the catalog categories supported by the server.</p></div><button type="button" onClick={onCancel} className="text-xs font-semibold text-[#9b5148]">Cancel</button></div>
+    <div className="flex items-start justify-between gap-3"><div><h3 className="text-sm font-semibold text-[#493631]">{product ? `Edit ${product.productName}` : 'Add product to inventory'}</h3><p className="mt-1 text-xs text-[#8b7d76]">Add a category for your store, then choose pricing for each product.</p></div><button type="button" onClick={onCancel} className="text-xs font-semibold text-[#9b5148]">Cancel</button></div>
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
-      <label className="text-xs font-semibold text-[#76534a]">CATEGORY
-        <select disabled={Boolean(product)} value={form.productType} onChange={(event) => changeType(event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-[#eadfd7] bg-white px-3 text-sm font-normal text-[#392824] outline-none focus:border-[#c98c7f] disabled:bg-[#f7f3ef]">{productTypes.map((type) => <option key={type} value={type}>{type[0].toUpperCase() + type.slice(1)}</option>)}</select>
-      </label>
+      <div>
+        <label className="text-xs font-semibold text-[#76534a]">CATEGORY
+          <select disabled={Boolean(product)} value={form.productType} onChange={(event) => changeType(event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-[#eadfd7] bg-white px-3 text-sm font-normal text-[#392824] outline-none focus:border-[#c98c7f] disabled:bg-[#f7f3ef]">{categories.map((type) => <option key={type} value={type}>{formatCategoryLabel(type)}</option>)}</select>
+        </label>
+        {!product && (showCategoryInput
+          ? <div className="mt-2">
+            <div className="flex gap-2"><input autoFocus maxLength={40} value={categoryName} onChange={(event) => setCategoryName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (categoryName.trim()) saveCategory() } }} aria-label="New category name" placeholder="New category name" className="h-9 min-w-0 flex-1 rounded-lg border border-[#eadfd7] bg-white px-3 text-xs outline-none focus:border-[#c98c7f]" /><button type="button" disabled={!categoryName.trim() || createCategoryState.isLoading} onClick={saveCategory} className="rounded-lg bg-[#861923] px-3 text-xs font-semibold text-white disabled:opacity-50">{createCategoryState.isLoading ? 'Saving…' : 'Save'}</button><button type="button" onClick={() => { setShowCategoryInput(false); setCategoryError('') }} className="rounded-lg px-2 text-xs font-semibold text-[#9b5148]">Cancel</button></div>
+            {categoryError && <p role="alert" className="mt-2 text-xs text-rose-700">{categoryError}</p>}
+          </div>
+          : <button type="button" onClick={() => setShowCategoryInput(true)} className="mt-2 text-xs font-semibold text-[#861923]">+ Add category</button>)}
+      </div>
       <label className="text-xs font-semibold text-[#76534a]">PRODUCT NAME
         <input required maxLength={120} value={form.productName} onChange={(event) => setForm({ ...form, productName: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-[#eadfd7] bg-white px-3 text-sm font-normal text-[#392824] outline-none focus:border-[#c98c7f]" placeholder="Product name" />
       </label>
       <label className="text-xs font-semibold text-[#76534a] sm:col-span-2">IMAGE URL
         <input required type="url" maxLength={2048} value={form.imageUrl} onChange={(event) => setForm({ ...form, imageUrl: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-[#eadfd7] bg-white px-3 text-sm font-normal text-[#392824] outline-none focus:border-[#c98c7f]" placeholder="https://…" />
       </label>
-      {form.productType === 'rice' && <label className="text-xs font-semibold text-[#76534a]">RICE PRICING
-        <select value={form.riceMode} onChange={(event) => setForm({ ...form, riceMode: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-[#eadfd7] bg-white px-3 text-sm font-normal text-[#392824] outline-none focus:border-[#c98c7f]"><option value="weight">Loose — price per kg</option><option value="pack">Packaged — pack prices</option></select>
-      </label>}
+      <label className="text-xs font-semibold text-[#76534a]">PRICING FOR THIS PRODUCT
+        <select value={form.pricingMode} onChange={(event) => setForm({ ...form, pricingMode: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-[#eadfd7] bg-white px-3 text-sm font-normal text-[#392824] outline-none focus:border-[#c98c7f]"><option value="weight">Per kilogram</option><option value="pack">Fixed-price packs</option></select>
+      </label>
       {packPricing ? <div className="sm:col-span-2">
         <div className="flex items-center justify-between"><p className="text-xs font-semibold text-[#76534a]">PACKS & PRICES</p><button type="button" onClick={() => setForm({ ...form, packs: [...form.packs, { label: '', price: '' }] })} className="text-xs font-semibold text-[#861923]">+ Add pack</button></div>
         <div className="mt-2 space-y-2">{form.packs.map((pack, index) => <div key={index} className="grid grid-cols-[1fr_120px_34px] gap-2">
@@ -188,6 +222,9 @@ export default function StoreDashboardPage() {
   const { data: meResponse, error: meError } = useGetStoreMeQuery(undefined, { skip: !token })
   const [tab, setTab] = useState('overview')
   const [productSearch, setProductSearch] = useState('')
+  const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('')
+  const [inventoryStockFilter, setInventoryStockFilter] = useState('')
+  const [inventoryPricingFilter, setInventoryPricingFilter] = useState('')
   const [orderSearch, setOrderSearch] = useState('')
   const [debouncedOrderSearch, setDebouncedOrderSearch] = useState('')
   const [orderSort, setOrderSort] = useState('newest')
@@ -197,6 +234,8 @@ export default function StoreDashboardPage() {
   const [editingProduct, setEditingProduct] = useState(null)
   const [actionError, setActionError] = useState('')
   const [actionSuccess, setActionSuccess] = useState('')
+  const [invoiceError, setInvoiceError] = useState('')
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState('')
   const [pendingAction, setPendingAction] = useState('')
   const [exportingReport, setExportingReport] = useState('')
   const [selectedDate, setSelectedDate] = useState(() => getLocalDateString())
@@ -215,11 +254,21 @@ export default function StoreDashboardPage() {
   const [deleteProduct] = useDeleteStoreProductMutation()
   const [updateOrder] = useUpdateStoreOrderStatusMutation()
   const [refundOrder] = useRefundStoreOrderMutation()
+  const [downloadStoreOrderInvoice] = useDownloadStoreOrderInvoiceMutation()
   const today = getLocalDateString()
   const selectedDayRange = getLocalDayRange(selectedDate)
   const storeOpenState = meResponse?.account?.isOpen ?? store?.isOpen ?? true
   const { data: dashboardResponse, error: dashboardError, isLoading: dashboardLoading, refetch: refetchDashboard } = useGetStoreDashboardQuery({ days: 1, ...selectedDayRange }, { skip: !token, pollingInterval: 30000 })
-  const { data: productsResponse, error: productsError, isLoading: productsLoading } = useGetStoreProductsQuery({ page: productPage, limit: 100, search: productSearch || undefined }, { skip: !token || tab !== 'inventory' })
+  const { data: productCategoriesResponse, error: productCategoriesError } = useGetStoreProductCategoriesQuery(undefined, { skip: !token || tab !== 'inventory' })
+  const productCategories = productCategoriesResponse?.data || productTypes
+  const { data: productsResponse, error: productsError, isLoading: productsLoading } = useGetStoreProductsQuery({
+    page: productPage,
+    limit: 100,
+    search: productSearch || undefined,
+    productType: inventoryCategoryFilter || undefined,
+    inStock: inventoryStockFilter || undefined,
+    pricingMode: inventoryPricingFilter || undefined,
+  }, { skip: !token || tab !== 'inventory' })
   const orderQueryKey = JSON.stringify([
     selectedDate,
     tab === 'orders' ? orderPage : 1,
@@ -389,28 +438,41 @@ export default function StoreDashboardPage() {
     }
   }
 
+  async function downloadInvoice(order) {
+    setInvoiceError('')
+    setDownloadingInvoiceId(order._id)
+    try {
+      const blob = await downloadStoreOrderInvoice(order._id).unwrap()
+      saveInvoicePdf(blob, order._id)
+    } catch (requestError) {
+      setInvoiceError(getErrorMessage(requestError))
+    } finally {
+      setDownloadingInvoiceId('')
+    }
+  }
+
   async function toggleStatus() {
     await runAction('status', 'toggle', async () => {
       await toggleStoreStatus(!storeOpenState).unwrap()
     }, `Store marked ${!storeOpenState ? 'open' : 'closed'}.`)
   }
 
-  return <div className="min-h-screen bg-[#fbf7f1] text-[#392824]">
-    <header className="sticky top-0 z-20 border-b border-[#eadfd7] bg-[#fbf7f1]/95 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-        <Link to="/store" className="flex items-center gap-3"><img src="/nallibokka-logo.png" alt="" className="h-9 w-9 object-contain" /><span><span className="block text-sm font-semibold">NalliBokka</span><span className="block text-[10px] text-[#9a8176]">Store dashboard</span></span></Link>
-        <div className="flex items-center gap-3"><span className="hidden text-right sm:block"><span className="block text-xs font-semibold">{store?.storeName || meResponse?.store?.storeName || 'Your store'}</span><span className="block text-[10px] text-[#9a8176]">{store?.location || meResponse?.store?.location}</span></span><button onClick={logout} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#eadfd7] px-3 text-xs font-semibold text-[#76534a] hover:bg-[#f8eeea]"><LogOut size={14} /><span className="hidden sm:inline">Sign out</span></button></div>
+  return <div className="store-workspace min-h-screen bg-[#f1f1ed] text-[#292724]">
+    <header className="store-workspace-header sticky top-0 z-20 border-b border-[#e5e4de] bg-[#f1f1ed]/95 backdrop-blur">
+      <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
+        <Link to="/store" className="flex items-center gap-3"><img src="/nallibokka-logo.png" alt="" className="h-9 w-9 object-contain" /><span><span className="block text-sm font-semibold text-[#242320]">NalliBokka</span><span className="block text-[10px] text-[#858178]">Store workspace</span></span></Link>
+        <div className="flex items-center gap-3"><span className="hidden text-right sm:block"><span className="block text-xs font-semibold text-[#292724]">{store?.storeName || meResponse?.store?.storeName || 'Your store'}</span><span className="block text-[10px] text-[#858178]">{store?.location || meResponse?.store?.location}</span></span><button onClick={logout} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#e1dfd8] bg-white px-3 text-xs font-semibold text-[#56534d] hover:bg-[#f8f7f4]"><LogOut size={14} /><span className="hidden sm:inline">Sign out</span></button></div>
       </div>
     </header>
-    <div className="mx-auto grid max-w-7xl gap-5 px-4 py-5 sm:px-6 sm:py-7 lg:grid-cols-[210px_1fr]">
-      <aside className="lg:sticky lg:top-[82px] lg:h-fit">
-        <section className={`mb-3 overflow-hidden rounded-2xl border p-3.5 transition-colors duration-300 ${storeOpenState ? 'border-[#d4e4d5] bg-gradient-to-br from-[#f3f8f1] to-white' : 'border-[#ead0ca] bg-gradient-to-br from-[#fbefec] to-white'}`} aria-label="Store availability">
+    <div className="store-workspace-layout mx-auto grid max-w-[1600px] gap-5 px-4 py-5 sm:px-6 sm:py-6 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-6 lg:px-8">
+      <aside className="store-workspace-sidebar lg:sticky lg:top-[88px] lg:h-[calc(100vh-104px)]">
+        <section className={`store-availability-card mb-3 overflow-hidden rounded-2xl border p-3.5 transition-colors duration-300 ${storeOpenState ? 'border-[#e3e5dc] bg-[#f8f8f5]' : 'border-[#ead0ca] bg-[#fffaf9]'}`} aria-label="Store availability">
           <div className="flex items-center gap-3">
-            <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${storeOpenState ? 'bg-[#e2f0e2] text-[#427255]' : 'bg-[#f4dfdc] text-[#8b4f49]'}`}>
+            <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${storeOpenState ? 'bg-[#e9eee5] text-[#547254]' : 'bg-[#f4e5e1] text-[#8b4f49]'}`}>
               <Power size={18} />
             </span>
             <div className="min-w-0 flex-1">
-              <span className="block text-[10px] font-semibold uppercase tracking-[.12em] text-[#8a7a71]">Store status</span>
+              <span className="block text-[10px] font-semibold uppercase tracking-[.12em] text-[#858178]">Store status</span>
               <span className={`mt-0.5 flex items-center gap-1.5 text-sm font-bold ${storeOpenState ? 'text-[#427255]' : 'text-[#8b4f49]'}`}>
                 <span className={`h-1.5 w-1.5 rounded-full ${storeOpenState ? 'bg-[#5c9567] motion-safe:animate-pulse' : 'bg-[#b66b61]'}`} />
                 {storeOpenState ? 'Open for orders' : 'Not accepting orders'}
@@ -423,20 +485,24 @@ export default function StoreDashboardPage() {
             onClick={toggleStatus}
             disabled={pendingAction === 'status-toggle'}
             aria-pressed={storeOpenState}
-            className={`mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl text-xs font-bold transition duration-200 hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-wait disabled:opacity-60 ${storeOpenState ? 'bg-[#fff] text-[#8b4f49] ring-1 ring-inset ring-[#e6cbc5] hover:bg-[#fcf1ee]' : 'bg-[#427255] text-white hover:bg-[#365e46]'}`}
+            className={`mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl text-xs font-bold transition duration-200 hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-wait disabled:opacity-60 ${storeOpenState ? 'bg-white text-[#655f57] ring-1 ring-inset ring-[#e2e0d9] hover:bg-[#f8f7f4]' : 'bg-[#547254] text-white hover:bg-[#456045]'}`}
           >
             <Power size={14} />
             {pendingAction === 'status-toggle' ? 'Updating availability…' : storeOpenState ? 'Pause orders' : 'Resume orders'}
           </button>
         </section>
-        <nav className="no-scrollbar flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">{navItems.map(({ id, label, icon: Icon }) => <button key={id} onClick={() => { setTab(id); setActionError(''); setActionSuccess('') }} className={`flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs font-semibold transition lg:w-full ${tab === id ? 'bg-[#861923] text-white shadow-sm' : 'text-[#796a63] hover:bg-[#f4e8e2]'}`}><Icon size={16} />{label}</button>)}</nav>
+        <nav aria-label="Store dashboard" className="store-dashboard-nav no-scrollbar flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">{navItems.map(({ id, label, icon: Icon }) => <button key={id} aria-current={tab === id ? 'page' : undefined} onClick={() => {
+          setActionError('')
+          setActionSuccess('')
+          setTab(id)
+        }} className={`flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs font-semibold transition lg:w-full ${tab === id ? 'bg-[#302724] text-white shadow-sm' : 'text-[#666259] hover:bg-[#e7e7e1]'}`}><Icon size={16} />{label}</button>)}</nav>
       </aside>
 
-      <main key={tab} className="min-w-0 dashboard-page-transition">
+      <main key={tab} className="store-workspace-main min-w-0 dashboard-page-transition">
         {tab !== 'inventory' && tab !== 'reports' && tab !== 'activity' && <DateFilter selectedDate={selectedDate} today={today} onChange={changeSelectedDate} />}
         {(actionError || actionSuccess) && <p role={actionError ? 'alert' : 'status'} className={`mb-4 flex items-center gap-2 rounded-xl p-3 text-sm ${actionError ? 'bg-[#fbefec] text-[#8c4034]' : 'bg-[#eef4ed] text-[#4f7754]'}`}>{actionError ? <AlertCircle size={16} /> : <Check size={16} />}{actionError || actionSuccess}</p>}
         {tab === 'overview' && <>
-          <SectionTitle eyebrow={selectedDate === today ? 'Today at a glance' : 'Daily snapshot'} title="Store overview"><button onClick={() => refetchDashboard()} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#eadfd7] bg-white px-3 text-xs font-semibold text-[#76534a] transition hover:bg-[#fff8f4]"><RefreshCw size={14} />Refresh</button></SectionTitle>
+          <SectionTitle eyebrow={selectedDate === today ? 'Today at a glance' : 'Daily snapshot'} title="Store overview"><button onClick={() => refetchDashboard()} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#e2e0d9] bg-white px-3 text-xs font-semibold text-[#56534d] transition hover:bg-[#f8f7f4]"><RefreshCw size={14} />Refresh</button></SectionTitle>
           {dashboardError && <p role="alert" className="mb-4 rounded-xl bg-[#fbefec] p-3 text-sm text-[#8c4034]">{getErrorMessage(dashboardError)}</p>}
           {(ordersError || transactionsError) && <p role="alert" className="mb-4 rounded-xl bg-[#fbefec] p-3 text-sm text-[#8c4034]">{ordersError && `Orders: ${getErrorMessage(ordersError)} `}{transactionsError && `Transactions: ${getErrorMessage(transactionsError)}`}</p>}
           {dashboardLoading || ordersLoading || transactionsLoading ? <MeatCuttingLoader label="Preparing your store overview…" compact /> : <div className="dashboard-stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -469,6 +535,7 @@ export default function StoreDashboardPage() {
           <div className="mb-3 rounded-xl border border-[#eadfd7] bg-[#fffdfa] p-3 text-xs leading-5 text-[#82736d]">New orders are <strong>placed</strong>. Accept moves an order to <strong>packing</strong> (the API requires it to be paid). Decline requests cancellation; the server enforces its payment restrictions.</div>
           {ordersFetching && !ordersLoading && <p role="status" className="mb-3 flex items-center gap-2 text-[10px] font-medium text-[#8a766d]"><span className="h-3 w-3 rounded-full border-2 border-[#eadfd7] border-t-[#861923] motion-safe:animate-spin" />Refreshing orders</p>}
           {ordersError && <p role="alert" className="mb-3 rounded-xl bg-[#fbefec] p-3 text-sm text-[#8c4034]">{getErrorMessage(ordersError)}</p>}
+          {invoiceError && <p role="alert" className="mb-3 rounded-xl bg-[#fbefec] p-3 text-sm text-[#8c4034]">{invoiceError}</p>}
           {ordersLoading ? <MeatCuttingLoader label="Fetching today’s orders…" compact /> : orders.length ? <div className="space-y-3">{orders.map((order) => {
             const customer = typeof order.userId === 'object' ? order.userId : {}
             const next = order.orderStatus === 'packing' ? 'out for delivery' : order.orderStatus === 'out for delivery' ? 'delivered' : null
@@ -476,8 +543,9 @@ export default function StoreDashboardPage() {
             const motion = orderMotion[order._id]
             return <article key={order._id} className={`rounded-[18px] border bg-white p-4 transition-all duration-500 sm:p-5 ${motion === 'new' ? 'order-live-new border-[#d9aaa0] shadow-[0_14px_42px_-24px_rgba(134,25,35,.55)]' : motion === 'updated' ? 'order-live-updated border-[#d7e6d8]' : 'border-[#eadfd7]'}`}>
               <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><p className="text-[10px] font-semibold uppercase tracking-[.12em] text-[#ad7669]">Order #{order._id.slice(-8).toUpperCase()}</p>{motion && <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[.08em] ${motion === 'new' ? 'bg-[#fbefec] text-[#9b5148]' : 'bg-[#edf5ee] text-[#427255]'}`}>{motion === 'new' ? 'New order' : 'Just updated'}</span>}</div><h3 className="mt-1 text-sm font-semibold text-[#493631]">{customer.name || 'Customer'} <span className="font-normal text-[#8b7d76]">{customer.phone || ''}</span></h3><p className="mt-1 text-[10px] text-[#8b7d76]">{new Date(order.createdAt).toLocaleString('en-IN')}</p></div><div className="text-right"><p className="text-base font-semibold">{formatPrice(order.totalAmount)}</p><p className="mt-1 text-[10px] capitalize text-[#8b7d76]">Payment: {order.paymentStatus}</p></div></div>
-              <div className={`mt-3 space-y-1 border-t border-[#f1e9e4] pt-3 ${motion ? 'order-items-highlight' : ''}`}>{order.items?.map((item, index) => <p key={`${item.productId}-${index}`} className={`rounded-lg px-2 py-1 text-xs text-[#64554e] transition-colors ${motion ? 'bg-[#fff5ed] text-[#714336]' : ''}`}><span className="font-semibold">{item.productName}</span> · {item.quantity} {item.selectionType === 'weight' ? 'kg' : item.selectionType === 'pieces' ? 'pieces' : item.packLabel}</p>)}</div>
+              <div className={`mt-3 space-y-1 border-t border-[#f1e9e4] pt-3 ${motion ? 'order-items-highlight' : ''}`}>{order.items?.map((item, index) => <p key={`${item.productId}-${index}`} className={`rounded-lg px-2 py-1 text-xs text-[#64554e] transition-colors ${motion ? 'bg-[#fff5ed] text-[#714336]' : ''}`}><span className="font-semibold">{item.productName}</span> · {formatItemQuantity(item)}</p>)}</div>
               <div className="mt-4 flex flex-wrap items-center justify-between gap-2"><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold capitalize ${order.orderStatus === 'placed' ? 'bg-[#fbefec] text-[#9b5148]' : order.orderStatus === 'delivered' ? 'bg-[#eef4ed] text-[#4f7754]' : 'bg-[#f5eee8] text-[#87634f]'}`}>{order.orderStatus}</span><div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => downloadInvoice(order)} disabled={Boolean(downloadingInvoiceId)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#dfe7dc] px-3 text-xs font-semibold text-[#34553e] hover:bg-[#f6f8f3] disabled:cursor-wait disabled:opacity-50"><FileText size={14} />{downloadingInvoiceId === order._id ? 'Preparing PDF…' : 'Download invoice'}</button>
                 {order.orderStatus === 'placed' && <><button disabled={!paymentConfirmed || pendingAction === `${order._id}-packing`} title={!paymentConfirmed ? 'The API allows accepting an order only after payment is confirmed.' : undefined} onClick={() => changeOrderStatus(order, 'packing')} className="h-9 rounded-lg bg-[#861923] px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-45">{pendingAction === `${order._id}-packing` ? 'Accepting…' : paymentConfirmed ? 'Accept order' : 'Awaiting payment'}</button><button disabled={pendingAction === `${order._id}-cancelled`} onClick={() => changeOrderStatus(order, 'cancelled')} className="h-9 rounded-lg border border-[#eadfd7] px-3 text-xs font-semibold text-[#76534a] disabled:opacity-55">Decline</button></>}
                 {['placed', 'packing'].includes(order.orderStatus) && order.paymentStatus === 'paid' && <button disabled={pendingAction === `${order._id}-refund`} onClick={() => requestOrderRefund(order)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-rose-200 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-55"><RotateCcw size={13} />{pendingAction === `${order._id}-refund` ? 'Requesting…' : 'Full refund'}</button>}
                 {next && <button disabled={pendingAction === `${order._id}-${next}`} onClick={() => changeOrderStatus(order, next)} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#861923] px-3 text-xs font-semibold text-white disabled:opacity-55">{next === 'delivered' ? <Check size={14} /> : <Truck size={14} />}{pendingAction === `${order._id}-${next}` ? 'Updating…' : next === 'delivered' ? 'Mark delivered' : 'Out for delivery'}</button>}
@@ -489,11 +557,17 @@ export default function StoreDashboardPage() {
 
         {tab === 'inventory' && <>
           <SectionTitle eyebrow="Your catalog" title="Inventory"><button onClick={() => { setEditingProduct(null); setShowProductForm((value) => !value) }} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#861923] px-3 text-xs font-semibold text-white hover:bg-[#70131c]"><PackagePlus size={15} />Add product</button></SectionTitle>
-          {showProductForm && <ProductForm key={editingProduct?._id || 'new-product'} product={editingProduct} onCancel={() => { setShowProductForm(false); setEditingProduct(null) }} onSaved={() => { setShowProductForm(false); setEditingProduct(null); setActionSuccess(editingProduct ? 'Product changes saved.' : 'Product added to inventory.') }} />}
-          <label className="mb-3 flex h-10 items-center gap-2 rounded-lg border border-[#eadfd7] bg-white px-3 text-xs text-[#82736d]"><Boxes size={14} /><input value={productSearch} onChange={(event) => { setProductSearch(event.target.value); setProductPage(1) }} placeholder="Search products" className="w-full bg-transparent text-sm text-[#392824] outline-none" /></label>
+          {showProductForm && <ProductForm key={editingProduct?._id || 'new-product'} product={editingProduct} categories={productCategories} onCancel={() => { setShowProductForm(false); setEditingProduct(null) }} onSaved={() => { setShowProductForm(false); setEditingProduct(null); setActionSuccess(editingProduct ? 'Product changes saved.' : 'Product added to inventory.') }} />}
+          {productCategoriesError && <p role="alert" className="mb-3 rounded-xl bg-[#fbefec] p-3 text-sm text-[#8c4034]">{getErrorMessage(productCategoriesError)}</p>}
+          <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            <label className="flex h-10 items-center gap-2 rounded-lg border border-[#eadfd7] bg-white px-3 text-xs text-[#82736d] sm:col-span-2"><Search size={14} /><input value={productSearch} onChange={(event) => { setProductSearch(event.target.value); setProductPage(1) }} placeholder="Search products" className="w-full bg-transparent text-sm text-[#392824] outline-none" /></label>
+            <label className="flex h-10 items-center rounded-lg border border-[#eadfd7] bg-white px-3 text-xs text-[#82736d]"><select aria-label="Filter inventory by category" value={inventoryCategoryFilter} onChange={(event) => { setInventoryCategoryFilter(event.target.value); setProductPage(1) }} className="w-full bg-transparent text-sm text-[#392824] outline-none"><option value="">All categories</option>{productCategories.map((category) => <option key={category} value={category}>{formatCategoryLabel(category)}</option>)}</select></label>
+            <label className="flex h-10 items-center rounded-lg border border-[#eadfd7] bg-white px-3 text-xs text-[#82736d]"><select aria-label="Filter inventory by stock status" value={inventoryStockFilter} onChange={(event) => { setInventoryStockFilter(event.target.value); setProductPage(1) }} className="w-full bg-transparent text-sm text-[#392824] outline-none"><option value="">All stock states</option><option value="true">In stock</option><option value="false">Sold out</option></select></label>
+            <label className="flex h-10 items-center rounded-lg border border-[#eadfd7] bg-white px-3 text-xs text-[#82736d]"><select aria-label="Filter inventory by pricing" value={inventoryPricingFilter} onChange={(event) => { setInventoryPricingFilter(event.target.value); setProductPage(1) }} className="w-full bg-transparent text-sm text-[#392824] outline-none"><option value="">All pricing types</option><option value="weight">Per kilogram</option><option value="pack">Fixed-price packs</option></select></label>
+          </div>
           {productsError && <p role="alert" className="mb-3 rounded-xl bg-[#fbefec] p-3 text-sm text-[#8c4034]">{getErrorMessage(productsError)}</p>}
           {productsLoading ? <MeatCuttingLoader label="Preparing your inventory…" compact /> : products.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{products.map((product) => <article key={product._id} className="overflow-hidden rounded-[16px] border border-[#eadfd7] bg-white">
-            <div className="flex gap-3 p-3"><img src={product.imageUrl} alt="" className="h-16 w-16 rounded-xl bg-[#f5eee8] object-cover" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{product.productName}</p><p className="mt-1 text-[10px] capitalize text-[#8b7d76]">{product.productType}</p><p className="mt-1 text-xs font-semibold text-[#76534a]">{product.packs?.length ? product.packs.map(({ label, price }) => `${label} ${formatPrice(price)}`).join(' · ') : `${formatPrice(product.pricePerKg)} / kg`}</p></div></div>
+            <div className="flex gap-3 p-3"><img src={product.imageUrl} alt="" className="h-16 w-16 rounded-xl bg-[#f5eee8] object-cover" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{product.productName}</p><p className="mt-1 text-[10px] text-[#8b7d76]">{formatCategoryLabel(product.productType)}</p><p className="mt-1 text-xs font-semibold text-[#76534a]">{product.packs?.length ? product.packs.map(({ label, price }) => `${label} ${formatPrice(price)}`).join(' · ') : `${formatPrice(product.pricePerKg)} / kg`}</p></div></div>
             <div className="flex items-center justify-between border-t border-[#f1e9e4] px-3 py-2.5"><button onClick={() => runAction(product._id, 'stock', () => setStock({ productId: product._id, inStock: !product.inStock }).unwrap())} className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${product.inStock ? 'bg-[#eef4ed] text-[#4f7754]' : 'bg-[#fbefec] text-[#9b5148]'}`}>{product.inStock ? 'In stock' : 'Sold out'} · toggle</button><div className="flex items-center"><button onClick={() => { setEditingProduct(product); setShowProductForm(true); setActionError(''); setActionSuccess('') }} aria-label={`Edit ${product.productName}`} className="rounded-lg px-2 py-1.5 text-[10px] font-semibold text-[#861923] hover:bg-[#fbefec]">Edit</button><button onClick={() => { if (window.confirm(`Delete ${product.productName} from inventory?`)) runAction(product._id, 'delete', () => deleteProduct(product._id).unwrap()) }} aria-label={`Delete ${product.productName}`} className="rounded-lg p-2 text-[#9b8178] hover:bg-[#fbefec] hover:text-[#861923]"><Trash2 size={15} /></button></div></div>
           </article>)}</div> : <div className="rounded-[18px] border border-[#eadfd7] bg-white p-10 text-center"><Boxes className="mx-auto text-[#c0988e]" size={26} /><h3 className="mt-3 text-sm font-semibold">No products found</h3><p className="mt-1 text-xs text-[#8b7d76]">Add your first product or adjust search.</p></div>}
           {!productsLoading && <PaginationControls pagination={productsResponse?.pagination} page={productPage} onPageChange={setProductPage} />}

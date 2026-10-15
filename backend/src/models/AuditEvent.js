@@ -17,6 +17,7 @@ const auditEventSchema = new mongoose.Schema({
     enum: [
       'order.status_updated',
       'order.refund_requested',
+      'product.category.created',
       'product.created',
       'product.updated',
       'product.deleted',
@@ -27,7 +28,7 @@ const auditEventSchema = new mongoose.Schema({
   entityType: {
     type: String,
     required: true,
-    enum: ['order', 'product', 'store']
+    enum: ['order', 'product', 'productCategory', 'store']
   },
   entityId: {
     type: mongoose.Schema.Types.ObjectId,

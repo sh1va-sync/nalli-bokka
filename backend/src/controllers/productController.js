@@ -1,6 +1,13 @@
 import Product from '../models/Product.js';
+import ProductCategory from '../models/ProductCategory.js';
 import AppError from '../utils/AppError.js';
 import escapeRegex from '../utils/escapeRegex.js';
+import { BUILT_IN_PRODUCT_TYPES } from '../utils/productTypes.js';
+
+export async function listProductCategories(req, res) {
+  const names = await ProductCategory.distinct('name');
+  res.json({ data: [...new Set([...BUILT_IN_PRODUCT_TYPES, ...names])].sort() });
+}
 
 export async function listProducts(req, res) {
   const { page, limit, storeId, productType, search } = req.validated.query;

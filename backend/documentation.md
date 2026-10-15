@@ -266,11 +266,15 @@ Public, paginated, returns only products currently marked in stock. Optional fil
 | Query | Meaning |
 | --- | --- |
 | `storeId` | Filter by store ObjectId. |
-| `productType` | One of `meat`, `vegetable`, `fruit`, `oil`, `rice`. |
+| `productType` | A built-in or store-created category name. |
 | `search` | Case-insensitive product-name substring, up to 100 characters. |
 | `page`, `limit` | Standard pagination. |
 
 Each product's `storeId` is populated with the store's `storeName` and `location`.
+
+#### `GET /products/categories`
+
+Public list of built-in categories and store-created category names.
 
 #### `GET /products/:id`
 
@@ -374,6 +378,12 @@ Returns one order owned by the current user, with populated store details:
 ```
 
 The `refund` field is `null` when no refund has been requested. Otherwise it includes the current provider status, amount in rupees, provider reference when available, request time, and last status update time.
+
+Returns `404` when the order is missing or belongs to another user.
+
+#### `GET /orders/:orderId/invoice`
+
+Downloads a PDF invoice for an order owned by the authenticated customer. The invoice uses the saved order item, price, customer, store, and delivery-address details, is stored with the order when first generated, and is returned as a private attachment on each download.
 
 Returns `404` when the order is missing or belongs to another user.
 
@@ -517,7 +527,15 @@ Counts are for this store. `paidRevenue` sums `totalAmount` on paid orders whose
 
 #### `GET /store/products`
 
-Paged list of all this store's products, including out-of-stock products. Optional `productType` and `search` filters. Response is a paginated envelope.
+Paged list of all this store's products, including out-of-stock products. Optional `productType`, `search`, `inStock`, and `pricingMode` filters. Response is a paginated envelope.
+
+#### `GET /store/product-categories`
+
+Lists built-in categories and categories created by this store.
+
+#### `POST /store/product-categories`
+
+Creates a lowercase, store-specific category with a `{ "name": "dry fruits" }` request body. Duplicate or built-in names return `409`.
 
 #### `POST /store/products`
 
@@ -538,7 +556,8 @@ Common fields:
 
 Fields and constraints:
 
-- `productType`: required; one of `meat`, `vegetable`, `fruit`, `oil`, `rice`.
+- `productType`: required category name, 1–40 characters; custom categories must first be created by this store.
+- `pricingMode`: required for new products: `weight` or `pack`.
 - `productName`: required, 1–120 characters.
 - `imageUrl`: required, valid HTTP or HTTPS URL, maximum 2048 characters.
 - `inStock`: optional boolean; defaults to true.
@@ -546,11 +565,7 @@ Fields and constraints:
 - `pieceWeightGrams`: optional positive number; enables piece-based pricing on meat/vegetable/fruit.
 - `packs`: optional array of up to 50 `{ "label": "...", "price": 0 }` objects. Pack label is 1–40 characters; price is a nonnegative rupee amount. Labels must be unique within a product.
 
-Pricing mode rules:
-
-- Meat, vegetable, fruit: `pricePerKg` required; `packs` must be empty.
-- Oil: one or more `packs` required; `pricePerKg` cannot be set.
-- Rice: exactly one of `pricePerKg` (loose) or nonempty `packs` (packaged).
+Any category can use `weight` pricing, which requires `pricePerKg` and no packs, or `pack` pricing, which requires at least one pack and no `pricePerKg`. Legacy products without `pricingMode` continue to use their previous category-based behavior.
 
 Success: `201 { "data": <created product> }`. Invalid pricing combinations are rejected as `400`.
 
@@ -579,6 +594,12 @@ Paged, newest-first list of this store's orders. Optional `orderStatus` filter a
 #### `GET /store/orders/:orderId`
 
 Returns one order belonging to this store, with customer name and phone populated. Missing or non-owned order returns `404`.
+
+#### `GET /store/orders/:orderId/invoice`
+
+Downloads a PDF invoice for an order belonging to the authenticated store. The invoice uses the saved order item, price, customer, store, and delivery-address details, is stored with the order when first generated, and is returned as a private attachment on each download.
+
+Missing or non-owned order returns `404`.
 
 #### `PATCH /store/orders/:orderId/status`
 
@@ -643,7 +664,8 @@ Each address contains required `label`, `fullAddress`, and six-digit string `pin
 | Field | Type | Rules |
 | --- | --- | --- |
 | `storeId` | ObjectId → Store | Required and indexed. |
-| `productType` | String | Required enum: `meat`, `vegetable`, `fruit`, `oil`, `rice`. |
+| `productType` | String | Required built-in or store-created category name. |
+| `pricingMode` | String | Optional for legacy built-in products; `weight` or `pack` for new/custom products. |
 | `productName` | String | Required, trimmed. |
 | `imageUrl` | String | Required, trimmed; API requires HTTP/HTTPS URL. |
 | `inStock` | Boolean | Defaults to true. |

@@ -17,7 +17,7 @@ export const api = createApi({
       return headers
     },
   }),
-  tagTypes: ['Stores', 'Products', 'Cart', 'Profile', 'Orders', 'Notifications', 'StoreMe', 'StoreDashboard', 'StoreProducts', 'StoreOrders', 'StoreTransactions', 'StoreAudit'],
+  tagTypes: ['Stores', 'Products', 'ProductCategories', 'Cart', 'Profile', 'Orders', 'Notifications', 'StoreMe', 'StoreDashboard', 'StoreProducts', 'StoreProductCategories', 'StoreOrders', 'StoreTransactions', 'StoreAudit'],
   endpoints: (builder) => ({
     getStores: builder.query({
       query: (params = {}) => ({ url: '/stores', params }),
@@ -29,6 +29,10 @@ export const api = createApi({
         'Products',
         ...(result?.data || []).map(({ _id }) => ({ type: 'Products', id: _id })),
       ],
+    }),
+    getProductCategories: builder.query({
+      query: () => '/products/categories',
+      providesTags: ['ProductCategories'],
     }),
     verifyFirebasePhoneToken: builder.mutation({
       query: (body) => ({ url: '/auth/users/verify', method: 'POST', body }),
@@ -114,6 +118,12 @@ export const api = createApi({
     }),
     getOrder: builder.query({
       query: (orderId) => `/orders/${orderId}`,
+    }),
+    downloadOrderInvoice: builder.mutation({
+      query: (orderId) => ({
+        url: `/orders/${orderId}/invoice`,
+        responseHandler: async (response) => response.ok ? response.blob() : response.json(),
+      }),
       providesTags: (_result, _error, orderId) => [{ type: 'Orders', id: orderId }],
     }),
     cancelOrder: builder.mutation({
@@ -148,6 +158,14 @@ export const api = createApi({
       query: (params = {}) => ({ url: '/store/audit-events', params }),
       providesTags: ['StoreAudit'],
     }),
+    getStoreProductCategories: builder.query({
+      query: () => '/store/product-categories',
+      providesTags: ['StoreProductCategories'],
+    }),
+    createStoreProductCategory: builder.mutation({
+      query: (body) => ({ url: '/store/product-categories', method: 'POST', body }),
+      invalidatesTags: ['StoreProductCategories', 'ProductCategories', 'StoreAudit'],
+    }),
     getStoreProducts: builder.query({
       query: (params = {}) => ({ url: '/store/products', params }),
       providesTags: ['StoreProducts'],
@@ -171,6 +189,12 @@ export const api = createApi({
     getStoreOrders: builder.query({
       query: (params = {}) => ({ url: '/store/orders', params }),
       providesTags: ['StoreOrders'],
+    }),
+    downloadStoreOrderInvoice: builder.mutation({
+      query: (orderId) => ({
+        url: `/store/orders/${orderId}/invoice`,
+        responseHandler: async (response) => response.ok ? response.blob() : response.json(),
+      }),
     }),
     updateStoreOrderStatus: builder.mutation({
       query: ({ orderId, orderStatus }) => ({ url: `/store/orders/${orderId}/status`, method: 'PATCH', body: { orderStatus } }),
@@ -205,6 +229,7 @@ export const api = createApi({
 export const {
   useGetStoresQuery,
   useGetProductsQuery,
+  useGetProductCategoriesQuery,
   useVerifyFirebasePhoneTokenMutation,
   useRegisterUserMutation,
   useGetMeQuery,
@@ -223,6 +248,7 @@ export const {
   useCreateCheckoutPaymentMutation,
   useGetOrdersQuery,
   useGetOrderQuery,
+  useDownloadOrderInvoiceMutation,
   useCancelOrderMutation,
   useCreatePaymentMutation,
   useMarkCheckoutPaymentFailedMutation,
@@ -231,12 +257,15 @@ export const {
   useGetStoreMeQuery,
   useGetStoreDashboardQuery,
   useGetStoreAuditEventsQuery,
+  useGetStoreProductCategoriesQuery,
+  useCreateStoreProductCategoryMutation,
   useGetStoreProductsQuery,
   useCreateStoreProductMutation,
   useUpdateStoreProductMutation,
   useSetStoreProductStockMutation,
   useDeleteStoreProductMutation,
   useGetStoreOrdersQuery,
+  useDownloadStoreOrderInvoiceMutation,
   useUpdateStoreOrderStatusMutation,
   useRefundStoreOrderMutation,
   useGetStoreTransactionsQuery,

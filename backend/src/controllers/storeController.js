@@ -4,15 +4,18 @@ import { pipeline } from 'node:stream/promises';
 import AuditEvent from '../models/AuditEvent.js';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
+import ProductCategory from '../models/ProductCategory.js';
 import Store from '../models/Store.js';
 import Transaction from '../models/Transaction.js';
 import AppError from '../utils/AppError.js';
 import escapeRegex from '../utils/escapeRegex.js';
+import { BUILT_IN_PRODUCT_TYPES } from '../utils/productTypes.js';
 import { roundToPaise } from '../utils/pricing.js';
 import { recordStoreAudit } from '../services/audit.js';
 
 const PRODUCT_FIELDS = [
   'productType',
+  'pricingMode',
   'productName',
   'imageUrl',
   'inStock',
@@ -20,6 +23,63 @@ const PRODUCT_FIELDS = [
   'pieceWeightGrams',
   'packs'
 ];
+
+async function assertStoreProductType(productType, storeId, session) {
+  const normalizedType = productType.toLowerCase();
+  if (BUILT_IN_PRODUCT_TYPES.includes(normalizedType)) return normalizedType;
+  const category = await ProductCategory.exists({ storeId, normalizedName: normalizedType }).session(session);
+  if (!category) {
+    throw new AppError(400, 'Create this category before adding products to it');
+  }
+  return normalizedType;
+}
+
+export async function listStoreProductCategories(req, res) {
+  const categories = await ProductCategory.find({ storeId: req.auth.id }).select('name -_id').sort({ name: 1 }).lean();
+  res.json({ data: [...BUILT_IN_PRODUCT_TYPES, ...categories.map(category => category.name)] });
+}
+
+export async function createStoreProductCategory(req, res) {
+  const name = req.validated.body.name.trim().toLowerCase();
+  if (BUILT_IN_PRODUCT_TYPES.includes(name)) {
+    throw new AppError(409, 'That category already exists');
+  }
+
+  const session = await ProductCategory.db.startSession();
+  let category;
+  try {
+    await session.withTransaction(async () => {
+      const exists = await ProductCategory.exists({
+        storeId: req.auth.id,
+        normalizedName: name
+      }).session(session);
+      if (exists) {
+        throw new AppError(409, 'That category already exists');
+      }
+      [category] = await ProductCategory.create([{
+        storeId: req.auth.id,
+        name,
+        normalizedName: name
+      }], { session });
+      await recordStoreAudit({
+        session,
+        req,
+        action: 'product.category.created',
+        entityType: 'productCategory',
+        entityId: category._id,
+        changedFields: ['name']
+      });
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      throw new AppError(409, 'That category already exists');
+    }
+    throw error;
+  } finally {
+    await session.endSession();
+  }
+  res.status(201).json({ data: { name: category.name } });
+}
 
 export async function listStoreAuditEvents(req, res) {
   const { page, limit } = req.validated.query;
@@ -40,8 +100,10 @@ export async function createProduct(req, res) {
   let product;
   try {
     await session.withTransaction(async () => {
+      const productType = await assertStoreProductType(req.validated.body.productType, req.auth.id, session);
       [product] = await Product.create([{
         ...req.validated.body,
+        productType,
         storeId: req.auth.id
       }], { session });
       await recordStoreAudit({
@@ -60,10 +122,26 @@ export async function createProduct(req, res) {
 }
 
 export async function listStoreProducts(req, res) {
-  const { page, limit, productType, search } = req.validated.query;
+  const { page, limit, productType, search, inStock, pricingMode } = req.validated.query;
   const filter = { storeId: req.auth.id };
   if (productType) {
     filter.productType = productType;
+  }
+  if (inStock !== undefined) {
+    filter.inStock = inStock;
+  }
+  if (pricingMode === 'weight') {
+    filter.$or = [
+      { pricingMode: 'weight' },
+      { pricingMode: { $exists: false }, productType: { $in: ['meat', 'vegetable', 'fruit'] } },
+      { pricingMode: { $exists: false }, productType: 'rice', pricePerKg: { $exists: true } }
+    ];
+  } else if (pricingMode === 'pack') {
+    filter.$or = [
+      { pricingMode: 'pack' },
+      { pricingMode: { $exists: false }, productType: 'oil' },
+      { pricingMode: { $exists: false }, productType: 'rice', packs: { $exists: true, $ne: [] } }
+    ];
   }
   if (search) {
     filter.productName = { $regex: escapeRegex(search), $options: 'i' };
@@ -88,6 +166,13 @@ export async function updateProduct(req, res) {
         throw new AppError(404, 'Product not found');
       }
 
+      if (req.validated.body.productType !== undefined) {
+        req.validated.body.productType = await assertStoreProductType(
+          req.validated.body.productType,
+          req.auth.id,
+          session
+        );
+      }
       const changedFields = PRODUCT_FIELDS.filter(field => req.validated.body[field] !== undefined);
       for (const field of changedFields) {
         if (['pricePerKg', 'pieceWeightGrams'].includes(field) && req.validated.body[field] === null) {

@@ -147,6 +147,7 @@ export default function ProductCard({ product }) {
         </div>
         <div className="px-2 pb-2 pt-2.5 sm:px-2.5 sm:pb-2.5">
           <h3 className="line-clamp-2 min-h-10 text-[13px] font-semibold leading-5 text-[#30312c] sm:text-sm">{product.productName}</h3>
+          <p className="mt-0.5 text-[10px] capitalize text-[#858478]">{product.productType}</p>
           <p className="mt-0.5 text-sm font-semibold tracking-[-.02em] text-[#34362f]">{getPriceRange(product)}</p>
           <p className="mt-0.5 min-h-4 text-[10px] text-[#929186]">{product.packs?.length ? 'Prices vary by pack' : 'Prices vary by quantity'}</p>
           {store?.storeName && <p className="mt-1 truncate text-[10px] text-[#939387]">{store.storeName}</p>}

@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 360" fill="none">
+  <defs>
+    <linearGradient id="fruit" x1="110" y1="96" x2="392" y2="296" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F45D55"/>
+      <stop offset="1" stop-color="#A8162B"/>
+    </linearGradient>
+    <linearGradient id="orange" x1="310" y1="82" x2="427" y2="204" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFC45A"/>
+      <stop offset="1" stop-color="#EF762D"/>
+    </linearGradient>
+    <linearGradient id="bowl" x1="89" y1="224" x2="429" y2="337" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E8A45F"/>
+      <stop offset="1" stop-color="#C86D45"/>
+    </linearGradient>
+    <filter id="shadow" x="44" y="41" width="434" height="321" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+  </defs>
+  <ellipse cx="263" cy="320" fill="#563A2E" fill-opacity=".14" rx="173" ry="20" filter="url(#shadow)"/>
+  <circle cx="367" cy="139" r="64" fill="url(#orange)"/>
+  <path d="M365 75c6-20 23-31 43-29-7 18-21 29-43 29Z" fill="#4E8D4F"/>
+  <path d="M366 78c-5-16-1-28 12-38 7 15 4 28-12 38Z" fill="#77A85D"/>
+  <circle cx="163" cy="153" r="68" fill="url(#fruit)"/>
+  <path d="M159 87c0-25 12-40 36-45 1 21-10 36-36 45Z" fill="#477A43"/>
+  <path d="M176 88c15-23 32-29 53-19-13 19-30 25-53 19Z" fill="#6FA052"/>
+  <circle cx="267" cy="127" r="69" fill="#D93540"/>
+  <path d="M265 58c2-23 14-37 36-42 0 20-12 34-36 42Z" fill="#487A3C"/>
+  <path d="M280 61c15-20 31-25 50-15-13 17-28 22-50 15Z" fill="#79A855"/>
+  <circle cx="219" cy="212" r="70" fill="#C82939"/>
+  <path d="M216 143c1-23 13-37 35-42 1 20-11 34-35 42Z" fill="#477A43"/>
+  <path d="M234 146c14-20 29-25 49-16-12 18-27 23-49 16Z" fill="#75A550"/>
+  <circle cx="338" cy="218" r="68" fill="url(#fruit)"/>
+  <path d="M336 151c2-23 14-37 36-41 0 20-12 34-36 41Z" fill="#477A43"/>
+  <path d="M352 154c15-20 31-25 50-15-13 17-28 22-50 15Z" fill="#75A550"/>
+  <path d="M80 218c12 74 81 120 181 120s169-46 181-120H80Z" fill="url(#bowl)"/>
+  <path d="M80 218c0-22 81-40 181-40s181 18 181 40-81 40-181 40S80 240 80 218Z" fill="#F4C17B"/>
+  <path d="M106 222c28 16 86 25 155 25s127-9 155-25" stroke="#FFF1CC" stroke-opacity=".72" stroke-width="7" stroke-linecap="round"/>
+  <path d="M124 282c35 18 80 27 137 27" stroke="#A9573C" stroke-opacity=".35" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="142" cy="128" r="12" fill="#FFF" fill-opacity=".19"/>
+  <circle cx="245" cy="100" r="12" fill="#FFF" fill-opacity=".2"/>
+  <circle cx="321" cy="192" r="11" fill="#FFF" fill-opacity=".17"/>
+</svg>

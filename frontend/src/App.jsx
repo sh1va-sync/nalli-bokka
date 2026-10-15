@@ -17,7 +17,6 @@ import { createUuid, getErrorMessage } from './features/customer/utils.js'
 const CheckoutPage = lazy(() => import('./features/customer/pages/CheckoutPage.jsx'))
 const ProfilePage = lazy(() => import('./features/customer/pages/ProfilePage.jsx'))
 const OrdersPage = lazy(() => import('./features/customer/pages/OrdersPage.jsx'))
-const NotificationsPage = lazy(() => import('./features/customer/pages/NotificationsPage.jsx'))
 const StoreLoginPage = lazy(() => import('./features/storeAdmin/pages/StoreLoginPage.jsx'))
 const StoreDashboardPage = lazy(() => import('./features/storeAdmin/pages/StoreDashboardPage.jsx'))
 
@@ -45,7 +44,7 @@ function App() {
   )
   const { data: cartResponse, error: cartError } = useGetCartQuery(undefined, { skip: !token || isStoreRoute })
   const { data: notificationResponse } = useGetUserNotificationsQuery(
-    { page: 1, limit: 100 },
+    { page: 1, limit: 8 },
     { skip: !token || isStoreRoute, pollingInterval: token && !isStoreRoute ? 30000 : 0 }
   )
 
@@ -173,7 +172,7 @@ function App() {
             <Route path="/checkout" element={<CheckoutPage onLogin={openLogin} onOpenCart={() => setCartOpen(true)} onToast={showToast} />} />
             <Route path="/profile" element={token ? <ProfilePage /> : <Navigate to="/" replace />} />
             <Route path="/orders" element={token ? <OrdersPage /> : <Navigate to="/" replace />} />
-            <Route path="/notifications" element={token ? <NotificationsPage /> : <Navigate to="/" replace />} />
+            <Route path="/notifications" element={<Navigate to={token ? '/orders' : '/'} replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>}
         </Suspense>

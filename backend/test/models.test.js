@@ -8,6 +8,7 @@ import IdempotencyKey from '../src/models/IdempotencyKey.js';
 import Order from '../src/models/Order.js';
 import Notification from '../src/models/Notification.js';
 import Product from '../src/models/Product.js';
+import ProductCategory from '../src/models/ProductCategory.js';
 import Store from '../src/models/Store.js';
 import Transaction from '../src/models/Transaction.js';
 import User from '../src/models/User.js';
@@ -16,11 +17,11 @@ import { priceSelection } from '../src/utils/pricing.js';
 
 const objectId = () => new mongoose.Types.ObjectId();
 
-test('all eleven Mongoose models use their intended collections', () => {
+test('all twelve Mongoose models use their intended collections', () => {
   assert.deepEqual(
-    [Store, User, Product, Cart, Order, Transaction, CheckoutAttempt, IdempotencyKey, WebhookEvent, Notification, AuditEvent]
+    [Store, User, Product, ProductCategory, Cart, Order, Transaction, CheckoutAttempt, IdempotencyKey, WebhookEvent, Notification, AuditEvent]
       .map(model => model.collection.collectionName),
-    ['stores', 'users', 'products', 'carts', 'orders', 'transactions', 'checkoutattempts', 'idempotencykeys', 'webhookevents', 'notifications', 'auditevents']
+    ['stores', 'users', 'products', 'productcategories', 'carts', 'orders', 'transactions', 'checkoutattempts', 'idempotencykeys', 'webhookevents', 'notifications', 'auditevents']
   );
 });
 
@@ -37,6 +38,14 @@ test('store audit events keep only action metadata and expire after one year', a
     requestId: 'request-id'
   });
   await event.validate();
+  await new AuditEvent({
+    actorId: objectId(),
+    actorRole: 'store',
+    action: 'product.category.created',
+    entityType: 'productCategory',
+    entityId: objectId(),
+    changedFields: ['name']
+  }).validate();
   assert.equal(AuditEvent.schema.path('phone'), undefined);
   assert.ok(AuditEvent.schema.indexes().some(([fields, options]) => (
     fields.createdAt === 1 && options.expireAfterSeconds === 60 * 60 * 24 * 365
@@ -103,6 +112,22 @@ test('product validation enforces weight and pack pricing modes', async () => {
   }).validate();
   await new Product({
     storeId: objectId(),
+    productType: 'oil',
+    pricingMode: 'weight',
+    productName: 'Custom-priced oil',
+    imageUrl: 'https://example.test/oil.jpg',
+    pricePerKg: 250
+  }).validate();
+  await new Product({
+    storeId: objectId(),
+    productType: 'meat',
+    pricingMode: 'pack',
+    productName: 'Packaged meat',
+    imageUrl: 'https://example.test/meat.jpg',
+    packs: [{ label: '500 g', price: 450 }]
+  }).validate();
+  await new Product({
+    storeId: objectId(),
     productType: 'rice',
     productName: 'Loose rice',
     imageUrl: 'https://example.test/rice.jpg',
@@ -114,6 +139,14 @@ test('product validation enforces weight and pack pricing modes', async () => {
     productName: 'Packed rice',
     imageUrl: 'https://example.test/packed-rice.jpg',
     packs: [{ label: '5 kg', price: 280 }]
+  }).validate();
+  await new Product({
+    storeId: objectId(),
+    productType: 'rice',
+    pricingMode: 'pack',
+    productName: 'Explicit packaged rice',
+    imageUrl: 'https://example.test/rice-pack.jpg',
+    packs: [{ label: '2 kg', price: 140 }]
   }).validate();
   await assert.rejects(new Product({
     storeId: objectId(),
@@ -129,6 +162,32 @@ test('product validation enforces weight and pack pricing modes', async () => {
     imageUrl: 'https://example.test/oil.jpg',
     packs: [{ label: '1 L', price: 10 }, { label: '1 L', price: 9 }]
   }).validate());
+  await new Product({
+    storeId: objectId(),
+    productType: 'dry fruits',
+    pricingMode: 'weight',
+    productName: 'Almonds',
+    imageUrl: 'https://example.test/almonds.jpg',
+    pricePerKg: 900
+  }).validate();
+  await new Product({
+    storeId: objectId(),
+    productType: 'dry fruits',
+    pricingMode: 'pack',
+    productName: 'Walnuts',
+    imageUrl: 'https://example.test/walnuts.jpg',
+    packs: [{ label: '250 g', price: 200 }]
+  }).validate();
+  await assert.rejects(new Product({
+    storeId: objectId(),
+    productType: 'dry fruits',
+    productName: 'Unconfigured product',
+    imageUrl: 'https://example.test/product.jpg',
+    pricePerKg: 100
+  }).validate());
+  assert.ok(ProductCategory.schema.indexes().some(([fields, options]) => (
+    fields.storeId === 1 && fields.normalizedName === 1 && options.unique
+  )));
 });
 
 test('server recalculates weight, piece, and pack prices', () => {
@@ -142,6 +201,27 @@ test('server recalculates weight, piece, and pack prices', () => {
   };
   assert.equal(priceSelection(mutton, 'weight', 0.5).lineTotal, 400);
   assert.equal(priceSelection(mutton, 'pieces', 2).lineTotal, 400);
+  assert.equal(priceSelection({
+    productType: 'meat',
+    pricingMode: 'pack',
+    productName: 'Packaged meat',
+    inStock: true,
+    packs: [{ label: '500 g', price: 450 }]
+  }, 'pack', 1, '500 g').lineTotal, 450);
+  assert.equal(priceSelection({
+    productType: 'oil',
+    pricingMode: 'weight',
+    productName: 'Oil',
+    inStock: true,
+    pricePerKg: 250
+  }, 'weight', 2).lineTotal, 500);
+  assert.equal(priceSelection({
+    productType: 'dry fruits',
+    pricingMode: 'weight',
+    productName: 'Almonds',
+    inStock: true,
+    pricePerKg: 900
+  }, 'weight', 0.25).lineTotal, 225);
 
   const oil = {
     productType: 'oil',
@@ -150,6 +230,13 @@ test('server recalculates weight, piece, and pack prices', () => {
     packs: [{ label: '5 L', price: 850 }]
   };
   assert.equal(priceSelection(oil, 'pack', 2, '5 L').lineTotal, 1700);
+  assert.equal(priceSelection({
+    productType: 'dry fruits',
+    pricingMode: 'pack',
+    productName: 'Walnuts',
+    inStock: true,
+    packs: [{ label: '250 g', price: 200 }]
+  }, 'pack', 2, '250 g').lineTotal, 400);
 });
 
 test('cart does not store a total and order total is derived from snapshot line prices', async () => {

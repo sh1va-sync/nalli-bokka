@@ -498,6 +498,10 @@ For a product type not using a field, such as `packs` for meat, the field may be
 
 **Important errors:** `400` invalid filter or pagination.
 
+### `GET /products/categories`
+
+Public list of built-in categories and store-created categories, returned as `{ "data": ["meat", "vegetable", "..."] }`.
+
 ### `GET /products/:id`
 
 **Access:** Public  
@@ -663,6 +667,14 @@ Other order fields such as the delivery-address snapshot and timestamps are incl
   "updatedAt": "<ISO-8601>"
 }
 ```
+
+**Important errors:** `400` invalid ObjectId; `401` unauthorized; `404` order does not exist or is not owned by this user.
+
+### `GET /orders/:orderId/invoice`
+
+**Purpose:** Downloads a PDF invoice for an order owned by the authenticated customer. The PDF uses the saved order item, price, customer, store, and delivery-address details. It is generated on the first request and stored with the order, then reused for later downloads.
+
+**Success — `200 OK`:** PDF file (`application/pdf`) with a private, non-cacheable attachment filename.
 
 **Important errors:** `400` invalid ObjectId; `401` unauthorized; `404` order does not exist or is not owned by this user.
 
@@ -877,11 +889,19 @@ Revenue is in rupees. `paidRevenue` includes paid orders created within the sele
 
 **Purpose:** Lists this store's inventory, including out-of-stock products.
 
-**Query parameters:** Standard pagination; optional `productType` (`meat`, `vegetable`, `fruit`, `oil`, `rice`) and `search` (product-name substring, max 100 characters).
+**Query parameters:** Standard pagination; optional `productType` (category name), `search` (product-name substring, max 100 characters), `inStock` (`true` or `false`), and `pricingMode` (`weight` or `pack`).
 
 **Success — `200 OK`:** Paginated envelope containing this store's product documents.
 
 **Important errors:** `400` invalid query; `401` unauthorized; `403` customer token.
+
+### `GET /store/product-categories`
+
+Lists built-in categories and categories created by this store.
+
+### `POST /store/product-categories`
+
+Creates a lowercase, store-specific category with body `{ "name": "dry fruits" }`. Names are limited to 40 characters; duplicate and built-in names return `409`.
 
 ### `POST /store/products`
 
@@ -892,6 +912,7 @@ Revenue is in rupees. `paidRevenue` includes paid orders created within the sele
 ```json
 {
   "productType": "meat",
+  "pricingMode": "weight",
   "productName": "Mutton",
   "imageUrl": "https://cdn.example.com/mutton.jpg",
   "inStock": true,
@@ -905,6 +926,7 @@ Revenue is in rupees. `paidRevenue` includes paid orders created within the sele
 ```json
 {
   "productType": "oil",
+  "pricingMode": "pack",
   "productName": "Groundnut oil",
   "imageUrl": "https://cdn.example.com/oil.jpg",
   "packs": [
@@ -916,7 +938,8 @@ Revenue is in rupees. `paidRevenue` includes paid orders created within the sele
 
 Fields:
 
-- `productType`: Required enum: `meat`, `vegetable`, `fruit`, `oil`, `rice`.
+- `productType`: Required category name (1–40 characters). Custom categories must first be created by this store.
+- `pricingMode`: Required for all new products: `weight` or `pack`.
 - `productName`: Required, 1–120 characters.
 - `imageUrl`: Required HTTP/HTTPS URL, maximum 2048 characters.
 - `inStock`: Optional boolean; defaults to true.
@@ -924,7 +947,7 @@ Fields:
 - `pieceWeightGrams`: Optional positive number; enables pieces for meat/vegetable/fruit.
 - `packs`: Optional array (up to 50) of objects with required `label` (1–40 characters) and nonnegative `price` in rupees.
 
-Pricing modes: meat/vegetable/fruit require `pricePerKg` and no packs; oil requires packs and no `pricePerKg`; rice must have either `pricePerKg` (loose) or packs (packaged), but not both. Pack labels must be unique within the product.
+Any category can use `weight` pricing, which requires `pricePerKg` and no packs, or `pack` pricing, which requires at least one pack and no `pricePerKg`. Legacy products without `pricingMode` continue to use their previous category-based behavior. Pack labels must be unique within the product.
 
 **Success — `201 Created`:** `{ "data": <created product document> }`.
 
@@ -988,6 +1011,14 @@ Example:
 **Purpose:** Retrieves one order belonging to this store, including customer name and phone.
 
 **Success — `200 OK`:** `{ "data": <order with populated userId> }`.
+
+**Important errors:** `400` invalid ObjectId; `401` unauthorized; `403` customer token; `404` order missing or not owned by this store.
+
+### `GET /store/orders/:orderId/invoice`
+
+**Purpose:** Downloads a professional PDF invoice for an order belonging to the authenticated store. The PDF uses the order's saved product, quantity, price, customer, and delivery-address details. It is generated on the first request and stored with the order, then reused for later downloads.
+
+**Success — `200 OK`:** PDF file (`application/pdf`) with a private, non-cacheable attachment filename.
 
 **Important errors:** `400` invalid ObjectId; `401` unauthorized; `403` customer token; `404` order missing or not owned by this store.
 

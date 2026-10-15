@@ -8,9 +8,11 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'https://nalli-bokka-backend.onrender.com',
+        target: 'http://localhost:3000',
         changeOrigin: true,
       },
     },
   },
 })
+
+// https://nalli-bokka-backend.onrender.com

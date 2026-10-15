@@ -76,7 +76,7 @@ const schemas = {
     query: z.object({
       ...pagination,
       storeId: objectId.optional(),
-      productType: z.enum(['meat', 'vegetable', 'fruit', 'oil', 'rice']).optional(),
+      productType: z.string().trim().min(1).max(40).optional(),
       search: z.string().trim().max(100).optional()
     }).strict()
   },
@@ -89,14 +89,25 @@ const schemas = {
   storeProductList: {
     query: z.object({
       ...pagination,
-      productType: z.enum(['meat', 'vegetable', 'fruit', 'oil', 'rice']).optional(),
-      search: z.string().trim().max(100).optional()
+      productType: z.string().trim().min(1).max(40).optional(),
+      search: z.string().trim().max(100).optional(),
+      inStock: z.enum(['true', 'false']).transform(value => value === 'true').optional(),
+      pricingMode: z.enum(['weight', 'pack']).optional()
     }).strict()
+  },
+  storeProductCategoryCreate: {
+    body: z.object({
+      name: z.string().trim().min(1).max(40)
+    }).strict()
+  },
+  storeProductCategoryList: {
+    query: z.object({}).strict()
   },
   idParams: { params: z.object({ id: objectId }) },
   productCreate: {
     body: z.object({
-      productType: z.enum(['meat', 'vegetable', 'fruit', 'oil', 'rice']),
+      productType: z.string().trim().min(1).max(40),
+      pricingMode: z.enum(['weight', 'pack']),
       productName: z.string().trim().min(1).max(120),
       imageUrl,
       inStock: z.boolean().optional(),
@@ -111,7 +122,8 @@ const schemas = {
   productUpdate: {
     params: z.object({ productId: objectId }),
     body: z.object({
-      productType: z.enum(['meat', 'vegetable', 'fruit', 'oil', 'rice']).optional(),
+      productType: z.string().trim().min(1).max(40).optional(),
+      pricingMode: z.enum(['weight', 'pack']).optional(),
       productName: z.string().trim().min(1).max(120).optional(),
       imageUrl: imageUrl.optional(),
       inStock: z.boolean().optional(),

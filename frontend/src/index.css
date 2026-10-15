@@ -116,6 +116,71 @@ select:focus-visible {
   animation-delay: 220ms;
 }
 
+.store-workspace-layout {
+  align-items: start;
+}
+
+.store-workspace-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.store-dashboard-nav {
+  gap: 4px;
+}
+
+.store-dashboard-nav button {
+  min-height: 42px;
+}
+
+.store-workspace-main {
+  min-height: calc(100vh - 104px);
+  padding: clamp(20px, 3vw, 38px);
+  border: 1px solid #e7e6e0;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgb(35 33 28 / 4%);
+}
+
+.store-dashboard-heading h1 {
+  font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+.store-dashboard-metric {
+  box-shadow: 0 1px 3px rgb(35 33 28 / 5%);
+}
+
+.store-dashboard-filter {
+  box-shadow: none;
+}
+
+.store-workspace-main :is(article, section) {
+  border-color: #e9e7e2;
+}
+
+@media (max-width: 1023px) {
+  .store-workspace-main {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 639px) {
+  .store-workspace-layout {
+    gap: 14px;
+    padding: 14px 12px;
+  }
+
+  .store-workspace-main {
+    padding: 18px 14px;
+    border-radius: 18px;
+  }
+
+  .store-dashboard-heading {
+    align-items: flex-start;
+  }
+}
+
 @keyframes order-toast-enter {
   from {
     opacity: 0;

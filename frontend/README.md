@@ -22,7 +22,7 @@ Razorpay Checkout uses its hosted browser SDK. Its public key comes from the pay
 - Sign in or create a customer account with Firebase phone OTP and reCAPTCHA; the backend verifies Firebase ID tokens. First-time customers enter a name after phone verification (email is optional) using the backend registration-token flow.
 - Manage customer profile details and saved delivery addresses.
 - Refresh authoritative cart prices, add/select an address without leaving checkout, open Razorpay UPI checkout, and create a one-store order only after server-side payment verification confirms success. Failed or dismissed payments do not create an order and leave the cart intact.
-- Review order history and poll current order status while tracking; see store status changes in the in-app notification center.
+- Review order history and poll current order status while tracking; download saved PDF invoices directly from order cards; view order updates from the header notification popup.
 
 ## Checkout payment follow-up
 
@@ -39,15 +39,15 @@ When COD is implemented server-side, update the API contract and checkout flow t
 
 - Open the store portal at `/store/login`; authenticate with the username/password provisioned by the backend. Store credentials and JWT are kept separate from customer authentication.
 - Dashboard overview, orders, inventory, and transaction screens use the `/store/*` APIs and are isolated in `src/features/storeAdmin`.
+- Download a saved PDF invoice directly from each order card in the order-management screen.
 - Use the shared date selector on the overview, orders, or transactions screen to review a specific local calendar day; the same selection filters daily metrics, orders, and transactions. Daily order and transaction metrics use server-side aggregates bounded by local midnight timestamps from the browser, so counts and totals are not limited to the first page. Store inventory, selected-day orders, and selected-day transactions provide next/previous pagination. The dashboard refreshes live order data periodically. Accepting an order moves it to `packing`, which the API permits only after payment is marked paid; decline requests the API's `cancelled` transition.
 - Download the selected day's orders or payment transactions as a store-scoped CSV. The API also accepts longer date ranges and streams exports without including customer contact details or delivery addresses.
 - Request a full refund for a paid order while it is `placed` or `packing`. Fulfillment pauses during provider confirmation; processed refunds cancel the order and notify the customer, while failed refunds leave the paid order eligible to continue.
-- Inventory supports the product types currently accepted by the API (`meat`, `vegetable`, `fruit`, `oil`, `rice`), adding/editing weight-priced or pack-priced products, stock toggles, and deletion. Arbitrary new categories are not supported by the current product schema.
+- Inventory supports the built-in categories plus store-specific custom categories. Add categories while creating products, choose per-kilogram or fixed-pack pricing for every product, and filter inventory by category, stock state, pricing mode, or name.
 
 Backend follow-ups before completing store operations:
 
 1. Add a store open/close endpoint and availability field; the dashboard currently shows the control as unavailable rather than pretending it changed store state.
-2. Expand product category validation and product/customer filtering if stores need custom categories beyond the five current enum values.
 Catalog errors and API validation errors are shown in the interface. The API remains authoritative for availability, prices, checkout totals, order state and payment state.
 For endpoint payloads and data relationships, see [backend-api-endpoints.md](./backend-api-endpoints.md) and [database-design.md](./database-design.md).
 

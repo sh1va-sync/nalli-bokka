@@ -5,6 +5,7 @@ import Transaction from '../models/Transaction.js';
 import User from '../models/User.js';
 import AppError from '../utils/AppError.js';
 import { recordStoreAudit } from '../services/audit.js';
+import { createInvoicePdf } from '../services/invoicePdf.js';
 
 const ORDER_TRANSITIONS = {
   placed: new Set(['packing', 'cancelled']),
@@ -68,6 +69,69 @@ export async function getUserOrder(req, res) {
       } : null
     }
   });
+}
+
+export async function downloadUserOrderInvoice(req, res) {
+  const order = await Order.findOne({
+    _id: req.validated.params.orderId,
+    userId: req.auth.id
+  })
+    .populate('storeId', 'storeName location storePhone storeNumber')
+    .populate('userId', 'name phone')
+    .select('+invoicePdf +invoiceGeneratedAt');
+  if (!order) {
+    throw new AppError(404, 'Order not found');
+  }
+  return sendOrderInvoice(order, res);
+}
+
+export async function downloadStoreOrderInvoice(req, res) {
+  const order = await Order.findOne({
+    _id: req.validated.params.orderId,
+    storeId: req.auth.id
+  })
+    .populate('storeId', 'storeName location storePhone storeNumber')
+    .populate('userId', 'name phone')
+    .select('+invoicePdf +invoiceGeneratedAt');
+  if (!order) {
+    throw new AppError(404, 'Order not found');
+  }
+  return sendOrderInvoice(order, res);
+}
+
+async function sendOrderInvoice(order, res) {
+  const pdf = await getOrCreateInvoicePdf(order);
+  const filename = `invoice-NB-${String(order._id).toUpperCase()}.pdf`;
+  res.set({
+    'Cache-Control': 'private, no-store',
+    'Content-Disposition': `attachment; filename="${filename}"`,
+    'Content-Length': pdf.length,
+    'Content-Type': 'application/pdf'
+  });
+  return res.send(pdf);
+}
+
+async function getOrCreateInvoicePdf(order) {
+  if (order.invoicePdf) {
+    return Buffer.from(order.invoicePdf);
+  }
+
+  const invoiceGeneratedAt = new Date();
+  const pdf = await createInvoicePdf({ ...order.toObject(), invoiceGeneratedAt });
+  const result = await Order.updateOne(
+    { _id: order._id, invoicePdf: { $exists: false } },
+    { $set: { invoicePdf: pdf, invoiceGeneratedAt } },
+    { timestamps: false }
+  );
+  if (result.modifiedCount > 0) {
+    return pdf;
+  }
+
+  const savedOrder = await Order.findById(order._id).select('+invoicePdf');
+  if (!savedOrder?.invoicePdf) {
+    throw new AppError(500, 'Invoice PDF could not be saved');
+  }
+  return Buffer.from(savedOrder.invoicePdf);
 }
 
 export async function cancelUserOrder(req, res) {

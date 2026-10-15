@@ -12,6 +12,7 @@ import IdempotencyKey from '../src/models/IdempotencyKey.js';
 import Notification from '../src/models/Notification.js';
 import Order from '../src/models/Order.js';
 import Product from '../src/models/Product.js';
+import ProductCategory from '../src/models/ProductCategory.js';
 import Store from '../src/models/Store.js';
 import Transaction from '../src/models/Transaction.js';
 import User from '../src/models/User.js';
@@ -41,7 +42,7 @@ before(async () => {
   });
   await mongoose.connect(replicaSet.getUri(), { dbName: 'purchase_integration' });
   await Promise.all([
-    AuditEvent, Cart, CheckoutAttempt, IdempotencyKey, Notification, Order, Product, Store,
+    AuditEvent, Cart, CheckoutAttempt, IdempotencyKey, Notification, Order, Product, ProductCategory, Store,
     Transaction, User, WebhookEvent
   ].map(model => model.init()));
 
@@ -79,6 +80,79 @@ after(async () => {
     if (originalValue === undefined) delete process.env[key];
     else process.env[key] = originalValue;
   }
+});
+
+test('store-created categories persist and support custom product pricing and inventory filters', async () => {
+  const store = await Store.create({
+    storeName: 'Category Integration Store',
+    username: 'category-integration-store',
+    password: 'test-password-long-enough',
+    location: 'Hyderabad'
+  });
+  const storeToken = jwt.sign(
+    { role: 'store' },
+    process.env.JWT_SECRET,
+    { subject: String(store._id), expiresIn: '5m', issuer: 'nalli-bokka-api' }
+  );
+  const headers = {
+    authorization: `Bearer ${storeToken}`,
+    'content-type': 'application/json'
+  };
+
+  const categoryResponse = await fetch(`${baseUrl}/store/product-categories`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ name: 'Pet Supplies' })
+  });
+  assert.equal(categoryResponse.status, 201);
+  assert.deepEqual((await categoryResponse.json()).data, { name: 'pet supplies' });
+
+  const productResponse = await fetch(`${baseUrl}/store/products`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      productType: 'pet supplies',
+      pricingMode: 'pack',
+      productName: 'Dog Food',
+      imageUrl: 'https://example.test/dog-food.jpg',
+      packs: [{ label: '2 kg', price: 500 }]
+    })
+  });
+  assert.equal(productResponse.status, 201);
+  const product = (await productResponse.json()).data;
+  assert.equal(product.productType, 'pet supplies');
+  assert.equal(product.pricingMode, 'pack');
+
+  const existingCategoryProductResponse = await fetch(`${baseUrl}/store/products`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      productType: 'meat',
+      pricingMode: 'pack',
+      productName: 'Packaged Mutton',
+      imageUrl: 'https://example.test/packaged-mutton.jpg',
+      packs: [{ label: '500 g', price: 450 }]
+    })
+  });
+  assert.equal(existingCategoryProductResponse.status, 201);
+  assert.equal((await existingCategoryProductResponse.json()).data.pricingMode, 'pack');
+
+  const inventoryResponse = await fetch(`${baseUrl}/store/products?productType=pet%20supplies&inStock=true&pricingMode=pack`, {
+    headers: { authorization: headers.authorization }
+  });
+  assert.equal(inventoryResponse.status, 200);
+  assert.equal((await inventoryResponse.json()).data[0]._id, product._id);
+
+  const publicCategoriesResponse = await fetch(`${baseUrl}/products/categories`);
+  assert.equal(publicCategoriesResponse.status, 200);
+  assert.ok((await publicCategoriesResponse.json()).data.includes('pet supplies'));
+
+  const duplicateResponse = await fetch(`${baseUrl}/store/product-categories`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ name: 'PET SUPPLIES' })
+  });
+  assert.equal(duplicateResponse.status, 409);
 });
 
 test('customer purchase, payment, and store status notification flow works end to end', async () => {

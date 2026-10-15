@@ -33,16 +33,45 @@ export function formatPrice(value) {
   }).format(Number(value || 0))
 }
 
-export function formatSelection(item) {
-  if (item.selectionType === 'weight') {
-    const quantity = Number(item.selectedQuantity)
-    if (quantity < 1) {
-      return `${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(quantity * 1000)} grams`
-    }
-    return `${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(quantity)} kg`
+export function formatItemQuantity({ selectionType, quantity, packLabel }) {
+  const amount = Number(quantity)
+  if (!Number.isFinite(amount) || amount <= 0) return 'Quantity unavailable'
+
+  const formattedAmount = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(amount)
+  if (selectionType === 'weight') {
+    return amount < 1
+      ? `${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(amount * 1000)} grams`
+      : `${formattedAmount} kg`
   }
-  if (item.selectionType === 'pieces') return `${item.selectedQuantity} pc`
-  return `${item.selectedQuantity} × ${item.selectedPackLabel}`
+  if (selectionType === 'pieces') {
+    return `${formattedAmount} ${amount === 1 ? 'piece' : 'pieces'}`
+  }
+  if (selectionType === 'pack' && packLabel) {
+    return `${formattedAmount} × ${packLabel}`
+  }
+  return 'Quantity unavailable'
+}
+
+export function formatSelection(item) {
+  return formatItemQuantity({
+    selectionType: item.selectionType,
+    quantity: item.selectedQuantity,
+    packLabel: item.selectedPackLabel
+  })
+}
+
+export function saveInvoicePdf(blob, orderId) {
+  if (!(blob instanceof Blob)) {
+    throw new Error('The invoice download did not return a PDF. Please try again.')
+  }
+  const objectUrl = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = objectUrl
+  link.download = `invoice-NB-${String(orderId).slice(-8).toUpperCase()}.pdf`
+  document.body.append(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
 }
 
 export function loadRazorpaySdk() {

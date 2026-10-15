@@ -176,7 +176,8 @@ Represents a store's catalog item. The same collection supports weight-priced go
 | --- | --- | --- | --- |
 | `_id` | ObjectId | Generated | Product identifier used by catalog, cart, and order lines. |
 | `storeId` | ObjectId → Store | Yes | Owning store. Indexed. |
-| `productType` | String enum | Yes | `meat`, `vegetable`, `fruit`, `oil`, or `rice`. |
+| `productType` | String | Yes | Built-in or store-created category name, stored lowercase. |
+| `pricingMode` | String enum | No | `weight` or `pack`; explicit for new products and optional on legacy records. |
 | `productName` | String | Yes | Display name; trimmed. |
 | `imageUrl` | String | Yes | Product image URL. API validation only permits HTTP/HTTPS URLs. |
 | `inStock` | Boolean | No | Whether the item is currently purchasable; defaults to `true`. |
@@ -207,6 +208,11 @@ Pack subdocuments do not have their own `_id`.
 | `rice` (packaged) | Packs and no `pricePerKg` | Each pack has an independent price. |
 
 `pieceWeightGrams` does not turn a product into a piece-priced-only item; it adds the option to select whole pieces using the corresponding `pricePerKg`.
+Custom-category products set `pricingMode` to `weight` or `pack`; the category is independent of the product's chosen pricing mode. Legacy built-in products without `pricingMode` continue to use their prior category-based rules.
+
+### ProductCategory collection
+
+Stores can create custom category names, stored lowercase and scoped to the owning store. A unique `{ storeId: 1, normalizedName: 1 }` index prevents duplicate categories for one store. Built-in categories remain available without category documents.
 
 ### Price examples
 

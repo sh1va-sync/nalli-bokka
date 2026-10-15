@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   cancelUserOrder,
+  downloadUserOrderInvoice,
   getUserOrder,
   listUserOrders
 } from '../controllers/orderController.js';
@@ -12,6 +13,7 @@ import { schemas } from '../validation/schemas.js';
 const router = Router();
 router.use(authenticate('user'));
 router.get('/', validate(schemas.orderList), listUserOrders);
+router.get('/:orderId/invoice', validate(schemas.orderParams), downloadUserOrderInvoice);
 router.get('/:orderId', validate(schemas.orderParams), getUserOrder);
 router.post('/:orderId/payment', validate(schemas.paymentCreate), createPaymentOrder);
 router.post('/:orderId/cancel', validate(schemas.orderParams), cancelUserOrder);

@@ -6,6 +6,7 @@ import app from '../src/app.js';
 import { verifyUserOtp } from '../src/controllers/authController.js';
 import firebaseAuth from '../src/services/firebaseAuth.js';
 import User from '../src/models/User.js';
+import Order from '../src/models/Order.js';
 import { schemas } from '../src/validation/schemas.js';
 
 process.env.JWT_SECRET = 'test-secret-that-is-long-enough-for-api-tests';
@@ -88,6 +89,127 @@ test('authentication is required and roles are enforced', async () => {
 test('customer notification endpoints require a customer token', async () => {
   const response = await fetch(`${baseUrl}/users/me/notifications`);
   assert.equal(response.status, 401);
+});
+
+test('invoice downloads require an authenticated customer or store', async () => {
+  const customerResponse = await fetch(`${baseUrl}/orders/507f1f77bcf86cd799439011/invoice`);
+  const storeResponse = await fetch(`${baseUrl}/store/orders/507f1f77bcf86cd799439011/invoice`);
+  assert.equal(customerResponse.status, 401);
+  assert.equal(storeResponse.status, 401);
+});
+
+test('product category management endpoints require a store token', async () => {
+  const listResponse = await fetch(`${baseUrl}/store/product-categories`);
+  const createResponse = await fetch(`${baseUrl}/store/product-categories`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'dry fruits' })
+  });
+  assert.equal(listResponse.status, 401);
+  assert.equal(createResponse.status, 401);
+});
+
+test('customer invoice download is scoped to the authenticated user', async () => {
+  const originalFindOne = Order.findOne;
+  const userId = '507f1f77bcf86cd799439012';
+  const orderId = '507f1f77bcf86cd799439011';
+  const order = {
+    _id: orderId,
+    createdAt: new Date('2026-10-15T10:00:00.000Z'),
+    paymentStatus: 'paid',
+    totalAmount: 180,
+    storeId: { storeName: 'Gajwel Store', location: 'Gajwel' },
+    userId: { name: 'Shiva', phone: '+919999999999' },
+    deliveryAddress: { label: 'Home', fullAddress: '12 Market Road', pincode: '500001' },
+    items: [{ productName: 'Sunflower Oil', selectionType: 'pack', quantity: 1, packLabel: '1 L', price: 180 }],
+    toObject() { return this; }
+  };
+  let queryFilter;
+  let updateFilter;
+  let updateDocument;
+  Order.findOne = filter => {
+    queryFilter = filter;
+    return {
+      populate() { return this; },
+      select() { return this; },
+      then(resolve, reject) { return Promise.resolve(order).then(resolve, reject); }
+    };
+  };
+  const originalUpdateOne = Order.updateOne;
+  Order.updateOne = async (filter, update, options) => {
+    updateFilter = filter;
+    updateDocument = { update, options };
+    return { modifiedCount: 1 };
+  };
+
+  try {
+    const token = jwt.sign({ role: 'user' }, process.env.JWT_SECRET, {
+      subject: userId,
+      expiresIn: '5m',
+      issuer: 'nalli-bokka-api'
+    });
+    const response = await fetch(`${baseUrl}/orders/${orderId}/invoice`, {
+      headers: { authorization: `Bearer ${token}` }
+    });
+    const pdf = Buffer.from(await response.arrayBuffer());
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'application/pdf');
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.match(response.headers.get('content-disposition'), /invoice-NB-507F1F77BCF86CD799439011\.pdf/);
+    assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
+    assert.deepEqual(queryFilter, { _id: orderId, userId });
+    assert.deepEqual(updateFilter, { _id: orderId, invoicePdf: { $exists: false } });
+    assert.equal(updateDocument.update.$set.invoicePdf.subarray(0, 5).toString(), '%PDF-');
+    assert.equal(updateDocument.options.timestamps, false);
+  } finally {
+    Order.findOne = originalFindOne;
+    Order.updateOne = originalUpdateOne;
+  }
+});
+
+test('store invoice download is scoped to the authenticated store', async () => {
+  const originalFindOne = Order.findOne;
+  const storeId = '507f1f77bcf86cd799439013';
+  const orderId = '507f1f77bcf86cd799439011';
+  let queryFilter;
+  const storedPdf = Buffer.from('%PDF-stored-invoice');
+  Order.findOne = filter => {
+    queryFilter = filter;
+    return {
+      populate() { return this; },
+      select() { return this; },
+      then(resolve, reject) {
+        return Promise.resolve({
+          _id: orderId,
+          createdAt: new Date('2026-10-15T10:00:00.000Z'),
+          paymentStatus: 'paid',
+          totalAmount: 180,
+          storeId: { storeName: 'Gajwel Store', location: 'Gajwel' },
+          userId: { name: 'Shiva', phone: '+919999999999' },
+          deliveryAddress: { label: 'Home', fullAddress: '12 Market Road', pincode: '500001' },
+          items: [{ productName: 'Sunflower Oil', selectionType: 'pack', quantity: 1, packLabel: '1 L', price: 180 }],
+          invoicePdf: storedPdf
+        }).then(resolve, reject);
+      }
+    };
+  };
+
+  try {
+    const token = jwt.sign({ role: 'store' }, process.env.JWT_SECRET, {
+      subject: storeId,
+      expiresIn: '5m',
+      issuer: 'nalli-bokka-api'
+    });
+    const response = await fetch(`${baseUrl}/store/orders/${orderId}/invoice`, {
+      headers: { authorization: `Bearer ${token}` }
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'application/pdf');
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), storedPdf);
+    assert.deepEqual(queryFilter, { _id: orderId, storeId });
+  } finally {
+    Order.findOne = originalFindOne;
+  }
 });
 
 test('Firebase phone sign-in token is required before auth verification', async () => {
@@ -253,18 +375,51 @@ test('Razorpay webhook requires its event ID after signature verification', asyn
 test('product image URLs must use a browser-safe HTTP scheme', () => {
   const valid = schemas.productCreate.body.safeParse({
     productType: 'meat',
+    pricingMode: 'weight',
     productName: 'Mutton',
     imageUrl: 'https://example.test/mutton.jpg',
     pricePerKg: 800
   });
   const invalid = schemas.productCreate.body.safeParse({
     productType: 'meat',
+    pricingMode: 'weight',
     productName: 'Mutton',
     imageUrl: 'javascript:alert(1)',
     pricePerKg: 800
   });
   assert.equal(valid.success, true);
   assert.equal(invalid.success, false);
+  assert.equal(schemas.productCreate.body.safeParse({
+    productType: 'meat',
+    productName: 'Mutton',
+    imageUrl: 'https://example.test/mutton.jpg',
+    pricePerKg: 800
+  }).success, false);
+  assert.equal(schemas.productCreate.body.safeParse({
+    productType: 'meat',
+    pricingMode: 'pack',
+    productName: 'Mutton pack',
+    imageUrl: 'https://example.test/mutton.jpg',
+    packs: [{ label: '500 g', price: 450 }]
+  }).success, true);
+  assert.equal(schemas.productCreate.body.safeParse({
+    productType: 'dry fruits',
+    pricingMode: 'weight',
+    productName: 'Almonds',
+    imageUrl: 'https://example.test/almonds.jpg',
+    pricePerKg: 900
+  }).success, true);
+  assert.equal(schemas.productCreate.body.safeParse({
+    productType: 'dry fruits',
+    productName: 'Almonds',
+    imageUrl: 'https://example.test/almonds.jpg',
+    pricePerKg: 900
+  }).success, false);
+  assert.equal(schemas.storeProductList.query.parse({
+    productType: 'dry fruits',
+    inStock: 'false',
+    pricingMode: 'pack'
+  }).inStock, false);
 });
 
 test('unknown API paths return 404', async () => {

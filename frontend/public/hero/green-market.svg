@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 360" fill="none">
+  <defs>
+    <linearGradient id="basket" x1="111" y1="197" x2="419" y2="334" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E8AB62"/>
+      <stop offset="1" stop-color="#BB6845"/>
+    </linearGradient>
+    <linearGradient id="leaf" x1="176" y1="55" x2="333" y2="220" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8DBB62"/>
+      <stop offset="1" stop-color="#34764D"/>
+    </linearGradient>
+    <filter id="shadow" x="51" y="42" width="418" height="324" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+  </defs>
+  <ellipse cx="261" cy="323" fill="#314A34" fill-opacity=".16" rx="169" ry="20" filter="url(#shadow)"/>
+  <path d="M250 211c-53-67-31-122 29-157 29 70 17 123-29 157Z" fill="#72A754"/>
+  <path d="M256 215c-77-36-88-93-51-151 52 49 68 99 51 151Z" fill="url(#leaf)"/>
+  <path d="M266 211c-7-81 31-124 98-125-4 70-36 112-98 125Z" fill="#3D8051"/>
+  <path d="M247 213c-72-2-109-45-103-111 63 16 97 51 103 111Z" fill="#90B85E"/>
+  <path d="M266 216c24-71 74-95 132-68-28 57-71 81-132 68Z" fill="#6F9E4B"/>
+  <path d="M257 216c-44-57-35-107 17-148 28 59 22 109-17 148Z" fill="#A3C96A"/>
+  <path d="M257 219c-2-54-1-105 10-155" stroke="#E8E5A0" stroke-opacity=".7" stroke-width="4" stroke-linecap="round"/>
+  <path d="M110 215c10 69 70 112 151 112s141-43 151-112H110Z" fill="url(#basket)"/>
+  <path d="M108 217c0-20 68-36 153-36s153 16 153 36-68 36-153 36-153-16-153-36Z" fill="#F2C17D"/>
+  <path d="M137 228c16 56 65 86 124 86s108-30 124-86" stroke="#F9D497" stroke-width="9"/>
+  <path d="M154 263c26 24 64 37 107 37s81-13 107-37" stroke="#A45D43" stroke-opacity=".43" stroke-width="5" stroke-linecap="round"/>
+  <path d="M169 203c4-29 30-47 58-38 21 7 28 30 14 47-16 19-45 18-72-9Z" fill="#F35D48"/>
+  <path d="M204 177c3-14 12-20 25-19-4 12-12 19-25 19Z" fill="#447C48"/>
+  <path d="M320 188c7-28 35-40 61-26 19 10 22 33 5 47-19 16-47 10-66-21Z" fill="#EFA641"/>
+  <path d="M348 162c6-13 16-17 29-13-7 11-16 16-29 13Z" fill="#4F8749"/>
+  <circle cx="265" cy="194" r="26" fill="#D84042"/>
+  <path d="M261 169c2-10 8-15 17-16 0 9-6 15-17 16Z" fill="#477C44"/>
+</svg>

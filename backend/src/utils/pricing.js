@@ -1,6 +1,5 @@
 import AppError from './AppError.js';
-
-const WEIGHT_BASED_TYPES = new Set(['meat', 'vegetable', 'fruit']);
+import { getLegacyPricingMode } from './productTypes.js';
 
 function roundToPaise(amount) {
   return Math.round((amount + Number.EPSILON) * 100) / 100;
@@ -16,16 +15,15 @@ function priceSelection(product, selectionType, quantity, packLabel) {
 
   let lineTotal;
   let normalizedPackLabel;
+  const pricingMode = product.pricingMode || getLegacyPricingMode(product);
 
   if (selectionType === 'weight') {
-    const supportsWeight = WEIGHT_BASED_TYPES.has(product.productType)
-      || (product.productType === 'rice' && product.pricePerKg !== undefined);
-    if (!supportsWeight) {
+    if (pricingMode !== 'weight') {
       throw new AppError(400, `${product.productName} is not sold by weight`);
     }
     lineTotal = product.pricePerKg * quantity;
   } else if (selectionType === 'pieces') {
-    if (!WEIGHT_BASED_TYPES.has(product.productType) || !product.pieceWeightGrams) {
+    if (pricingMode !== 'weight' || !product.pieceWeightGrams) {
       throw new AppError(400, `${product.productName} is not configured for piece-based sales`);
     }
     if (!Number.isInteger(quantity)) {

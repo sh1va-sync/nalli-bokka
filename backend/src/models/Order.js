@@ -134,6 +134,14 @@ const orderSchema = new mongoose.Schema({
     required: true,
     min: 0
   },
+  invoicePdf: {
+    type: Buffer,
+    select: false
+  },
+  invoiceGeneratedAt: {
+    type: Date,
+    select: false
+  },
   orderStatus: {
     type: String,
     enum: ['placed', 'packing', 'out for delivery', 'delivered', 'cancelled'],

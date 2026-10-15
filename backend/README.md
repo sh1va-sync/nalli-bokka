@@ -44,6 +44,7 @@ The script accepts an optional store phone number. Existing store records need `
 ## Authentication
 
 - Customer OTP: Firebase sends/verifies SMS codes in the browser; the API verifies the Firebase ID token. Existing customers sign in immediately; first-time customers complete registration with the short-lived verification token and a required name.
+- Order invoices: customers and store admins can download a PDF for their own order. The PDF is generated once from the saved order details and stored with that order for consistent future downloads.
 - Store login: use the provisioned store `username` and password.
 - Authenticated endpoints take `Authorization: Bearer <token>`. Tokens are role-scoped (`user` or `store`) and expire after `JWT_EXPIRES_IN` (default `7d`).
 - Firebase enforces phone-SMS quotas; API ID-token verification/registration and store login are rate-limited.
@@ -80,6 +81,7 @@ All endpoints are under `/api`. Protected endpoints require a bearer token of th
 | PATCH | `/users/me/notifications/:notificationId/read` | User | Mark one notification as read |
 | PATCH | `/users/me/notifications/read-all` | User | Mark all notifications as read |
 | GET | `/products` | Public | Browse in-stock products; filters: `storeId`, `productType`, `search` |
+| GET | `/products/categories` | Public | List built-in and store-created product categories |
 | GET | `/products/:id` | Public | Get an in-stock product |
 | GET | `/stores` | Public | Browse stores; optional `search` |
 | GET | `/stores/:id` | Public | Get public store details |
@@ -97,6 +99,7 @@ Weight-based quantities use kilograms (`0.25` means 250 g). Piece selections use
 | POST | `/orders` | User | Place one store's cart items; body `{ "addressId": "<saved address id>", "storeId": "<store id>" }`; omit `storeId` if the cart contains a single store |
 | GET | `/orders` | User | List own orders; optional `orderStatus` and paired `from`/`to` date bounds |
 | GET | `/orders/:orderId` | User | Get own order |
+| GET | `/orders/:orderId/invoice` | User | Download a PDF invoice for own order |
 | POST | `/orders/:orderId/cancel` | User | Cancel a placed or packing unpaid order |
 | POST | `/orders/:orderId/payment` | User | Create/reuse Razorpay order for payment |
 | POST | `/payments/razorpay/verify` | User | Verify captured payment; body `{ "razorpayOrderId", "paymentId", "signature" }` |
@@ -118,13 +121,16 @@ Order statuses follow `placed -> packing -> out for delivery -> delivered`; unpa
 | Method | Path | Access | Description |
 | --- | --- | --- | --- |
 | GET | `/store/dashboard` | Store | Inventory counts, order counts by status, rolling paid revenue, optional bounded-period metrics, and latest 10 orders |
-| GET | `/store/products` | Store | List this store's products; optional `productType`, `search` |
+| GET | `/store/product-categories` | Store | List built-in and store-created product categories |
+| POST | `/store/product-categories` | Store | Create a store-specific product category |
+| GET | `/store/products` | Store | List this store's products; optional category, search, stock, and pricing filters |
 | POST | `/store/products` | Store | Create product; `storeId` is taken from the authenticated store |
 | PATCH | `/store/products/:productId` | Store | Update own product; schema enforces product pricing rules |
 | PATCH | `/store/products/:productId/stock` | Store | Mark own product in/out of stock; body `{ "inStock": false }` |
 | DELETE | `/store/products/:productId` | Store | Delete own product |
 | GET | `/store/orders` | Store | List only this store's orders; optional `orderStatus` and paired `from`/`to` date bounds |
 | GET | `/store/orders/:orderId` | Store | Get only this store's order |
+| GET | `/store/orders/:orderId/invoice` | Store | Download a PDF invoice for an order belonging to this store |
 | PATCH | `/store/orders/:orderId/status` | Store | Advance/cancel order; body `{ "orderStatus": "packing" }` |
 | POST | `/store/orders/:orderId/refund` | Store | Request a full refund for an eligible paid order |
 | POST | `/store/orders/:orderId/refund` | Store | Request a full refund for an eligible paid order |
