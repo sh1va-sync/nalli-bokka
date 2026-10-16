@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { Bell, CheckCheck, ChevronDown, ShoppingBasket, UserRound } from 'lucide-react'
+import { Bell, CheckCheck, ChevronDown, MapPin, ShoppingBasket, UserRound } from 'lucide-react'
 import {
   useGetUserNotificationsQuery,
   useMarkAllUserNotificationsReadMutation,
@@ -70,17 +70,20 @@ export default function Header({ cartCount, onOpenCart, onChooseStore, onLogin, 
         <Link to="/" className="col-start-1 row-start-1 flex min-w-0 shrink-0 items-center gap-2 sm:col-auto sm:row-auto sm:gap-2.5" aria-label="NalliBokka home">
           <img src="/nallibokka-logo.png" alt="" className="h-10 w-10 object-contain" />
           <span className="leading-tight">
-            <span className="block font-display text-[17px] font-semibold tracking-[-.045em] text-[var(--text-primary)]">NalliBokka</span>
-            <span className="mt-0.5 hidden text-[9px] font-medium uppercase tracking-[.2em] text-[var(--text-secondary)] sm:block">Everyday, thoughtfully fresh</span>
+            <span className="block text-[16px] font-bold tracking-[-.045em] text-[var(--text-primary)] sm:text-[18px]">NalliBokka</span>
+            <span className="mt-0.5 hidden text-[9px] font-medium uppercase tracking-[.16em] text-[var(--text-secondary)] sm:block">Everyday, thoughtfully fresh</span>
           </span>
         </Link>
         <span className="mx-1 hidden h-8 w-px bg-[#e7e3d9] sm:block" />
-        <button onClick={onChooseStore} className="col-span-3 row-start-2 flex min-w-0 items-center justify-between gap-3 rounded-xl border border-[#eee5dc] bg-white/70 px-3 py-2 text-left sm:col-span-1 sm:row-auto sm:flex-col sm:items-start sm:justify-start sm:gap-0 sm:rounded-none sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
-          <span className="min-w-0">
-            <span className="block text-[9px] font-semibold uppercase tracking-[.16em] text-[var(--text-secondary)]">Delivering to</span>
-            <span className="mt-0.5 flex items-center gap-1 truncate text-xs font-semibold text-[var(--text-secondary)] sm:text-sm">{selectedStore?.location || 'Choose your store'} <ChevronDown size={13} className="shrink-0 text-[var(--text-secondary)]" /></span>
+        <button onClick={onChooseStore} className="col-span-3 row-start-2 flex min-h-12 min-w-0 items-center justify-between gap-3 rounded-2xl border border-[var(--border-default)] bg-white px-3 py-2 text-left shadow-[0_3px_12px_-10px_rgba(18,49,37,.35)] transition hover:border-[var(--brand-secondary)] sm:col-span-1 sm:row-auto sm:min-h-0 sm:rounded-none sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:shadow-none">
+          <span className="flex min-w-0 items-center gap-2.5">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]"><MapPin size={17} strokeWidth={2.1} /></span>
+            <span className="min-w-0">
+              <span className="block text-[9px] font-semibold text-[var(--text-secondary)]">Delivering to</span>
+              <span className="mt-0.5 flex items-center gap-1 truncate text-xs font-bold text-[var(--text-primary)] sm:text-sm">{selectedStore?.location || 'Choose your store'} <ChevronDown size={13} className="shrink-0 text-[var(--text-secondary)]" /></span>
+            </span>
           </span>
-          {selectedStore && <span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold ${selectedStore.isOpen === false ? 'bg-[#f7eae8] text-[var(--status-danger)]' : 'bg-[var(--status-success-soft)] text-[var(--text-secondary)]'}`}>{selectedStore.isOpen === false ? 'Currently closed' : 'Open for orders'}</span>}
+          {selectedStore && <span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold ${selectedStore.isOpen === false ? 'bg-[#f7eae8] text-[var(--status-danger)]' : 'bg-[var(--status-success-soft)] text-[var(--brand-primary)]'}`}>{selectedStore.isOpen === false ? 'Currently closed' : 'Open'}</span>}
         </button>
         <nav className="ml-auto hidden items-center gap-7 text-[13px] font-medium md:flex">
           {user && <NavLink to="/orders" className={({ isActive }) => isActive ? 'text-[var(--brand-primary)]' : 'text-[var(--text-secondary)] transition hover:text-[var(--text-secondary)]'}>Orders</NavLink>}
@@ -116,7 +119,7 @@ export default function Header({ cartCount, onOpenCart, onChooseStore, onLogin, 
                   : <p className="px-4 py-8 text-center text-xs text-[var(--text-secondary)]">You’re all caught up. Order updates will appear here.</p>}
           </section>}
         </div>}
-        <button disabled={selectedStore?.isOpen === false} onClick={onOpenCart} aria-label="Open basket" className="col-start-3 row-start-1 ml-0 flex h-10 shrink-0 items-center gap-2 rounded-full border border-[#e7d7ce] bg-transparent px-3 text-xs font-semibold text-[var(--text-primary)] transition hover:border-[var(--brand-primary)] hover:bg-[var(--status-danger-soft)] disabled:cursor-not-allowed disabled:opacity-40 sm:px-3.5 md:ml-0">
+        <button disabled={selectedStore?.isOpen === false} onClick={onOpenCart} aria-label="Open basket" className="col-start-3 row-start-1 ml-0 hidden h-10 shrink-0 items-center gap-2 rounded-full border border-[var(--border-default)] bg-white px-3 text-xs font-semibold text-[var(--text-primary)] transition hover:border-[var(--brand-primary)] hover:bg-[var(--brand-primary-soft)] disabled:cursor-not-allowed disabled:opacity-40 sm:flex sm:px-3.5 md:ml-0">
           <ShoppingBasket size={17} strokeWidth={1.7} />
           <span className="hidden sm:inline">Basket</span>
           <span className="grid min-w-5 place-items-center rounded-full bg-[#f2e0dc] px-1 text-[10px] font-semibold text-[var(--brand-primary)]">{cartCount}</span>

@@ -4,8 +4,8 @@ import { Minus, Plus, Trash2, X } from 'lucide-react'
 import { addGuestItem } from '../../cart/cartSlice.js'
 import { useAddCartItemMutation } from '../../api/api.js'
 import { formatPrice, getErrorMessage } from '../utils.js'
+import { getCategoryPhoto } from './categoryAssets.js'
 
-const categoryEmoji = { meat: '🍗', vegetable: '🥬', fruit: '🍊', oil: '🫒', rice: '🌾' }
 const weightOptions = [
   { label: '1 kg', quantity: 1 },
   { label: '750 grams', quantity: 0.75 },
@@ -53,7 +53,7 @@ function SelectionOption({ option, count, setCount }) {
       <p className="text-sm font-semibold text-[var(--text-primary)]">{formatPrice(option.price)}</p>
     </div>
     {count === 0
-      ?       <button onClick={() => setCount(1)} className="mt-2.5 h-10 w-full rounded-[8px] bg-[var(--brand-primary)] text-[13px] font-semibold transition hover:bg-[var(--brand-primary-hover)]">Add</button>
+      ?       <button onClick={() => setCount(1)} className="button-strong mt-2.5 h-11 w-full rounded-xl text-sm font-bold shadow-sm transition hover:-translate-y-px hover:shadow-md">Add</button>
       : <div className="mt-2.5 flex h-11 items-center justify-around rounded-full border border-[var(--border-default)] bg-[var(--bg-app)] shadow-sm">
         <button onClick={() => setCount(Math.max(0, count - 1))} aria-label={`Remove one ${option.label}`} className="grid h-9 w-12 place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--surface-subtle)]">{count === 1 ? <Trash2 size={17} /> : <Minus size={17} />}</button>
         <span className="min-w-8 text-center text-sm font-semibold text-[var(--text-primary)]">{count}</span>
@@ -142,7 +142,7 @@ export default function ProductCard({ product }) {
         <div className="relative aspect-[1.08/1] overflow-hidden rounded-t-[12px] bg-[#f0efe8] sm:rounded-t-[14px]">
           {product.imageUrl && !imageFailed
             ? <img src={product.imageUrl} alt={product.productName} loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" onError={() => setImageFailed(true)} />
-            : <div className="grid h-full place-items-center text-6xl" aria-hidden="true">{categoryEmoji[product.productType] || '🛍️'}</div>}
+            : <img src={getCategoryPhoto(product.productType)} alt="" loading="lazy" className="h-full w-full object-cover" />}
           {!product.inStock && <span className="absolute inset-x-2 bottom-2 rounded-md bg-white/90 px-2 py-1 text-center text-[10px] font-semibold text-[var(--text-secondary)]">Currently unavailable</span>}
         </div>
         <div className="px-2 pb-2 pt-2.5 sm:px-2.5 sm:pb-2.5">
@@ -182,7 +182,7 @@ export default function ProductCard({ product }) {
           </div>
           <div className="border-t border-[var(--surface-subtle)] bg-white px-4 pb-4 pt-3">
             <p className="mb-3 text-center text-sm text-[var(--text-secondary)]">{itemCount} {itemCount === 1 ? 'item' : 'items'} · {formatPrice(subtotal)}</p>
-            <button disabled={isLoading} onClick={addSelection} className="h-11 w-full rounded-[9px] bg-[var(--brand-primary)] text-sm font-semibold transition disabled:opacity-60">{isLoading ? 'Adding…' : 'Done'}</button>
+            <button disabled={isLoading} onClick={addSelection} className="button-strong h-12 w-full rounded-xl text-sm font-bold shadow-sm transition hover:-translate-y-px hover:shadow-md disabled:opacity-60">{isLoading ? 'Adding…' : 'Done'}</button>
           </div>
         </section>
       </div>}

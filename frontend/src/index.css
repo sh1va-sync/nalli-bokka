@@ -2,16 +2,15 @@
 @import "tailwindcss";
 
 :root {
-  /* Adjust these tokens to try another soft green palette. */
-  --brand-primary: #166534;
-  --brand-primary-hover: #14532D;
-  --brand-primary-soft: #E8F3E9;
-  --brand-secondary: #CDE5C8;
-  --bg-app: #F6FBF6;
-  --bg-surface: #FCFFFC;
-  --text-primary: #28563A;
-  --text-secondary: #52705A;
-  --border-default: #C5D9C7;
+  --brand-primary: #176149;
+  --brand-primary-hover: #124c39;
+  --brand-primary-soft: #e9f3ec;
+  --brand-secondary: #c8dfce;
+  --bg-app: #f7f8f5;
+  --bg-surface: #ffffff;
+  --text-primary: #1d3028;
+  --text-secondary: #687970;
+  --border-default: #e2e9e3;
   --surface-subtle: var(--brand-primary-soft);
   --text-tertiary: color-mix(in srgb, var(--text-secondary) 75%, var(--bg-surface));
   --status-danger: #B42332;
@@ -103,6 +102,75 @@ select:focus-visible {
 
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+.customer-home {
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+}
+
+.customer-search {
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.customer-search:focus-within {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-primary) 10%, transparent);
+}
+
+.customer-hero {
+  isolation: isolate;
+}
+
+.customer-hero::after {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background:
+    radial-gradient(circle at 88% 30%, rgb(255 255 255 / 12%), transparent 28%),
+    linear-gradient(100deg, rgb(0 0 0 / 12%), transparent 72%);
+  content: "";
+}
+
+.category-tile:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand-primary) 40%, white);
+  outline-offset: 3px;
+}
+
+.customer-bottom-nav {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  box-shadow: 0 -8px 24px -22px rgb(21 54 38 / 50%);
+}
+
+.customer-bottom-nav-item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  transition: color 150ms ease;
+}
+
+.customer-bottom-nav-icon {
+  display: grid;
+  width: 40px;
+  height: 31px;
+  place-items: center;
+  border-radius: 12px;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+
+.customer-bottom-nav-item.is-active {
+  color: var(--brand-primary);
+}
+
+.customer-bottom-nav-item.is-active .customer-bottom-nav-icon {
+  color: #fff;
+  background: var(--brand-primary);
+  box-shadow: 0 4px 10px -5px color-mix(in srgb, var(--brand-primary) 80%, transparent);
 }
 
 @keyframes dashboard-enter {

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Apple, ArrowDownWideNarrow, ArrowRight, Leaf, RotateCw, Search, Wheat } from 'lucide-react'
 import { useSelector } from 'react-redux'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useGetProductCategoriesQuery, useGetProductsQuery } from '../../api/api.js'
 import ProductCard from '../components/ProductCard.jsx'
 import CookingLoader from '../components/CookingLoader.jsx'
+import CategoryPhoto from '../components/CategoryPhoto.jsx'
 import { getErrorMessage, getProductStoreId } from '../utils.js'
 
 const builtInCategories = [
@@ -14,6 +16,7 @@ const builtInCategories = [
   { id: 'oil', label: 'Oils' },
 ]
 const builtInCategoryIds = new Set(builtInCategories.map(({ id }) => id))
+const categoryTints = ['#edf5e9', '#fff2e3', '#fcebea', '#eaf3f8', '#f5f0e7']
 function formatCategoryLabel(name) {
   return name.split(/\s+/).map((word) => word[0]?.toUpperCase() + word.slice(1)).join(' ')
 }
@@ -27,8 +30,9 @@ const heroSlides = [
     icon: Apple,
     action: 'Shop fresh picks',
     category: '',
-    theme: 'from-[var(--brand-primary-soft)] via-[var(--bg-app)] to-[var(--brand-primary-soft)]',
-    accent: 'text-[var(--brand-primary)]',
+    description: 'Handpicked for the way you cook.',
+    theme: 'from-[#103f32] via-[#155642] to-[#216a4d]',
+    accent: 'text-[#d1f5a8]',
   },
   {
     eyebrow: 'Straight from the market',
@@ -38,8 +42,9 @@ const heroSlides = [
     icon: Leaf,
     action: 'Shop vegetables',
     category: 'vegetable',
-    theme: 'from-[var(--brand-primary-soft)] via-[var(--bg-app)] to-[var(--brand-secondary)]',
-    accent: 'text-[var(--brand-primary)]',
+    description: 'Crisp, vibrant greens from nearby.',
+    theme: 'from-[#123f33] via-[#175b46] to-[#2f7952]',
+    accent: 'text-[#d1f5a8]',
   },
   {
     eyebrow: 'Good food, close to home',
@@ -49,17 +54,20 @@ const heroSlides = [
     icon: Wheat,
     action: 'Shop pantry picks',
     category: 'rice',
-    theme: 'from-[var(--bg-app)] via-[var(--brand-primary-soft)] to-[var(--brand-secondary)]',
-    accent: 'text-[var(--brand-primary)]',
+    description: 'Everyday staples, chosen with care.',
+    theme: 'from-[#293e2d] via-[#385b3d] to-[#64814b]',
+    accent: 'text-[#e1f4b2]',
   },
 ]
 
-export default function HomePage() {
+export default function HomePage({ categoryScreen = false }) {
+  const navigate = useNavigate()
+  const { categoryId = '' } = useParams()
   const selectedStore = useSelector((state) => state.selectedStore)
   const { data: categoriesResponse } = useGetProductCategoriesQuery()
   const [heroSlideIndex, setHeroSlideIndex] = useState(0)
   const [heroInteractionPaused, setHeroInteractionPaused] = useState(false)
-  const [category, setCategory] = useState('')
+  const category = categoryScreen ? categoryId : ''
   const [search, setSearch] = useState('')
   const [querySearch, setQuerySearch] = useState('')
   const [sort, setSort] = useState('recommended')
@@ -97,6 +105,7 @@ export default function HomePage() {
   const isFetching = storeProductsFetching || (storeFilterReturnedNoProducts && catalogFetching)
   const activeHeroSlide = heroSlides[heroSlideIndex]
   const HeroIcon = activeHeroSlide.icon
+  const browseCategories = categories.filter(({ id }) => id)
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setQuerySearch(search), 250)
@@ -119,11 +128,17 @@ export default function HomePage() {
   }), [usingCatalogFallback, fallbackProducts, data?.data, sort])
 
   return (
-    <div className="mx-auto max-w-7xl px-3 pb-4 pt-2.5 sm:px-6 sm:pt-8 lg:px-8">
-      <section
+    <div className="customer-home mx-auto max-w-7xl px-4 pb-5 pt-4 sm:px-6 sm:pt-8 lg:px-8">
+      <label className="customer-search mx-auto flex h-12 max-w-3xl items-center gap-3 rounded-2xl border border-[var(--border-default)] bg-white px-4 text-[var(--text-secondary)] shadow-[0_3px_14px_-10px_rgba(18,49,37,.35)] focus-within:border-[var(--brand-primary)] sm:h-14 sm:rounded-[18px]">
+        <Search size={19} strokeWidth={1.9} />
+        <input aria-label="Search products" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search fresh products or brands" className="w-full bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] sm:text-[15px]" />
+        {search && <button type="button" aria-label="Clear search" onClick={() => setSearch('')} className="shrink-0 text-xs font-semibold text-[var(--brand-primary)]">Clear</button>}
+      </label>
+
+      {!categoryScreen && <section
         aria-label="Store highlights"
         aria-roledescription="carousel"
-        className={`relative min-h-[218px] overflow-hidden rounded-[20px] border border-white/70 bg-gradient-to-br px-4 py-4 shadow-[0_12px_34px_-26px_rgba(73,43,30,.4)] transition-colors duration-700 sm:min-h-[270px] sm:rounded-[24px] sm:px-8 sm:py-7 ${activeHeroSlide.theme}`}
+        className={`customer-hero relative mt-5 min-h-[218px] overflow-hidden rounded-[24px] border border-white/10 bg-gradient-to-br px-5 py-5 shadow-[0_18px_42px_-24px_rgba(10,45,31,.6)] transition-colors duration-700 sm:mt-7 sm:min-h-[310px] sm:rounded-[30px] sm:px-10 sm:py-9 ${activeHeroSlide.theme}`}
         onMouseEnter={() => setHeroInteractionPaused(true)}
         onMouseLeave={() => setHeroInteractionPaused(false)}
         onFocusCapture={() => setHeroInteractionPaused(true)}
@@ -131,50 +146,71 @@ export default function HomePage() {
           if (!event.currentTarget.contains(event.relatedTarget)) setHeroInteractionPaused(false)
         }}
       >
-        <div className="pointer-events-none absolute -right-12 -top-20 h-56 w-56 rounded-full border border-white/65 sm:right-16 sm:h-72 sm:w-72" />
-        <div className="pointer-events-none absolute -right-5 -top-12 h-40 w-40 rounded-full border border-white/55 sm:right-24 sm:h-56 sm:w-56" />
+        <div className="pointer-events-none absolute -right-12 -top-20 h-56 w-56 rounded-full border border-white/15 sm:right-16 sm:h-72 sm:w-72" />
+        <div className="pointer-events-none absolute -right-5 -top-12 h-40 w-40 rounded-full border border-white/15 sm:right-24 sm:h-56 sm:w-56" />
         <img
           key={activeHeroSlide.image}
           src={activeHeroSlide.image}
           alt={activeHeroSlide.imageAlt}
-          className="pointer-events-none absolute -right-3 top-1/2 h-[88%] w-[59%] -translate-y-1/2 object-contain drop-shadow-[0_18px_18px_rgba(74,47,32,.16)] transition-transform duration-500 sm:right-7 sm:h-[94%] sm:w-[48%]"
+          className="pointer-events-none absolute -right-3 top-1/2 h-[88%] w-[59%] -translate-y-1/2 object-contain drop-shadow-[0_18px_18px_rgba(0,0,0,.24)] transition-transform duration-500 sm:right-7 sm:h-[94%] sm:w-[48%]"
         />
-        <div key={heroSlideIndex} role="group" aria-roledescription="slide" aria-label={`${heroSlideIndex + 1} of ${heroSlides.length}`} className="relative z-10 max-w-[62%] pb-4 sm:max-w-[52%]">
+        <div key={heroSlideIndex} role="group" aria-roledescription="slide" aria-label={`${heroSlideIndex + 1} of ${heroSlides.length}`} className="relative z-10 max-w-[62%] pb-4 text-white sm:max-w-[52%]">
           <span className={`inline-flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-[.14em] sm:gap-2 sm:text-[10px] ${activeHeroSlide.accent}`}><HeroIcon size={13} strokeWidth={2.2} /> {activeHeroSlide.eyebrow}</span>
-          <h1 className="mt-2 font-display text-[1.55rem] font-semibold leading-[1.03] tracking-[-.045em] text-[var(--text-primary)] sm:mt-3 sm:text-[2.7rem]">{activeHeroSlide.title}</h1>
-          <a
-            href="#products"
-            onClick={() => setCategory(activeHeroSlide.category)}
-            className="mt-3 inline-flex h-9 items-center gap-2 rounded-full bg-[var(--brand-primary)] px-4 text-[10px] font-bold shadow-sm transition hover:-translate-y-0.5 sm:mt-5 sm:h-10 sm:px-5 sm:text-xs"
+          <h1 className="mt-2 font-display text-[1.55rem] font-semibold leading-[1.03] tracking-[-.045em] text-white sm:mt-3 sm:text-[2.7rem]">{activeHeroSlide.title}</h1>
+          <p className="mt-2 max-w-[19rem] text-[10px] leading-relaxed text-white/75 sm:mt-3 sm:text-sm">{activeHeroSlide.description}</p>
+          <button
+            type="button"
+            onClick={() => navigate(activeHeroSlide.category ? `/categories/${encodeURIComponent(activeHeroSlide.category)}` : '/categories')}
+            className="mt-3 inline-flex h-9 items-center gap-2 rounded-full bg-white px-4 text-[10px] font-bold text-[#174b39] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#e9f4e9] sm:mt-5 sm:h-11 sm:px-5 sm:text-xs"
           >
             {activeHeroSlide.action} <ArrowRight size={13} />
-          </a>
+          </button>
+        </div>
+        <div className="absolute bottom-4 right-5 z-10 flex items-center gap-1.5 sm:bottom-6 sm:right-8" aria-label="Choose highlight">
+          {heroSlides.map((slide, index) => <button key={slide.title} type="button" aria-label={`Show ${slide.title}`} aria-current={index === heroSlideIndex} onClick={() => setHeroSlideIndex(index)} className={`h-1.5 rounded-full transition-all ${index === heroSlideIndex ? 'w-6 bg-white' : 'w-1.5 bg-white/45 hover:bg-white/75'}`} />)}
+        </div>
+      </section>}
+
+      {!categoryScreen && <section id="browse-categories" className="scroll-mt-24 pt-7 sm:scroll-mt-28 sm:pt-10">
+        <div className="mb-4 flex items-end justify-between gap-3 sm:mb-5">
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-[.16em] text-[var(--brand-primary)] sm:text-[10px]">A market in a few taps</p>
+            <h2 className="mt-1 text-lg font-bold tracking-[-.035em] text-[var(--text-primary)] sm:text-2xl">Shop by category</h2>
+          </div>
+          <Link to="/categories" className="inline-flex items-center gap-1 pb-1 text-[11px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--brand-primary)] sm:text-xs">See all <ArrowRight size={13} /></Link>
+        </div>
+        <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-5 sm:gap-4">
+          {browseCategories.slice(0, 5).map((item, index) => <Link key={item.id} to={`/categories/${encodeURIComponent(item.id)}`} className="category-tile group min-w-0 rounded-2xl border border-transparent bg-white p-2.5 text-center shadow-[0_4px_16px_-12px_rgba(17,44,31,.35)] transition duration-200 hover:-translate-y-0.5 hover:border-[var(--brand-secondary)] hover:shadow-md sm:rounded-[20px] sm:p-4">
+            <span className="mx-auto grid aspect-square max-h-[88px] place-items-center overflow-hidden rounded-xl sm:rounded-2xl" style={{ backgroundColor: categoryTints[index % categoryTints.length] }}>
+              <CategoryPhoto category={item.id} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.06]" />
+            </span>
+            <span className="mt-2 block truncate text-[10px] font-semibold text-[var(--text-primary)] sm:mt-3 sm:text-sm">{item.label}</span>
+          </Link>)}
         </div>
       </section>
+      }
 
-      <section id="products" className="scroll-mt-20 pt-5 sm:scroll-mt-24 sm:pt-12">
+      <section id="products" className={`scroll-mt-20 ${categoryScreen ? 'pt-2 sm:pt-5' : 'pt-8 sm:scroll-mt-24 sm:pt-12'}`}>
         <div className="flex flex-wrap items-end justify-between gap-2 sm:gap-4">
           <div>
-            <p className="text-[8px] font-semibold uppercase tracking-[.15em] text-[var(--text-secondary)] sm:text-[10px] sm:tracking-[.19em]">From your neighbourhood store</p>
-            <h2 className="mt-0.5 font-display text-[1.45rem] font-medium tracking-[-.035em] text-[var(--text-primary)] sm:mt-1 sm:text-[2rem]">The fresh edit</h2>
+            {categoryScreen
+              ? <Link to="/categories" className="mb-3 inline-flex items-center gap-2 text-xs font-semibold text-[var(--brand-primary)]"><ArrowRight className="rotate-180" size={15} /> All categories</Link>
+              : <p className="text-[9px] font-bold uppercase tracking-[.15em] text-[var(--brand-primary)] sm:text-[10px] sm:tracking-[.19em]">From your neighbourhood store</p>}
+            <h1 className="mt-1 text-xl font-bold tracking-[-.035em] text-[var(--text-primary)] sm:text-[2rem]">{categoryScreen ? formatCategoryLabel(category) : 'The fresh edit'}</h1>
           </div>
-          <label className="flex h-9 min-w-full items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--bg-app)] px-3 text-[var(--text-secondary)] focus-within:border-[#9c9e8b] sm:ml-auto sm:h-10 sm:min-w-[210px] sm:flex-1 sm:gap-2.5 sm:px-3.5 sm:max-w-xs">
-            <Search size={15} strokeWidth={1.8} />
-            <input aria-label="Search products" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search products" className="w-full bg-transparent text-[11px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)] sm:text-xs" />
-            {search && <button type="button" aria-label="Clear search" onClick={() => setSearch('')} className="text-xs text-[var(--text-secondary)]">Clear</button>}
-          </label>
+          <p className="text-[10px] text-[var(--text-secondary)] sm:text-xs">{selectedStore?.storeName || 'Choose your nearby store'}</p>
         </div>
 
         <div className="mt-4 grid gap-3 sm:mt-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:gap-4">
-          <div className="min-w-0">
+          {!categoryScreen && <div className="min-w-0">
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[var(--text-secondary)]">Shop by category</p>
               <span className="text-[10px] text-[var(--text-secondary)] sm:hidden">Swipe to explore</span>
             </div>
             <div aria-label="Product categories" className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto pb-1 sm:gap-1.5">
-              {categories.map((item) => <button key={item.id} onClick={() => setCategory(item.id)} className={`shrink-0 rounded-full border px-4 py-2 text-xs font-semibold transition sm:px-3.5 sm:py-2 sm:text-[11px] ${category === item.id ? 'border-[var(--brand-primary)] bg-[var(--brand-primary)] text-white shadow-sm' : 'border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--brand-primary)] hover:bg-[var(--brand-primary-soft)] hover:text-[var(--text-primary)]'}`}>{item.label}</button>)}
+              {categories.map((item) => <Link key={item.id} to={item.id ? `/categories/${encodeURIComponent(item.id)}` : '/'} className="shrink-0 rounded-full border border-[var(--border-default)] bg-[var(--bg-surface)] px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] transition hover:border-[var(--brand-primary)] hover:bg-[var(--brand-primary-soft)] hover:text-[var(--text-primary)] sm:px-3.5 sm:py-2 sm:text-[11px]">{item.label}</Link>)}
             </div>
-          </div>
+          </div>}
           <label className="flex h-11 min-w-0 items-center gap-3 rounded-xl border border-[var(--border-default)] bg-white px-3.5 text-[var(--text-secondary)] sm:h-10 sm:min-w-[190px]">
             <ArrowDownWideNarrow size={16} strokeWidth={1.8} />
             <span className="shrink-0 text-xs font-semibold text-[var(--text-secondary)]">Sort by</span>

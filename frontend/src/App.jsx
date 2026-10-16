@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
-import { PackageCheck, ShoppingBasket, Store, UserRound } from 'lucide-react'
+import { Grid2X2, House, PackageCheck, ShoppingBasket, UserRound } from 'lucide-react'
 import { removeGuestItem } from './features/cart/cartSlice.js'
 import { setSelectedStore } from './features/store/storeSlice.js'
 import { api, useAddCartItemMutation, useGetCartQuery, useGetMeQuery, useGetOrdersQuery, useGetStoresQuery, useGetUserNotificationsQuery } from './features/api/api.js'
@@ -19,6 +19,7 @@ import { createUuid, getErrorMessage } from './features/customer/utils.js'
 const CheckoutPage = lazy(() => import('./features/customer/pages/CheckoutPage.jsx'))
 const ProfilePage = lazy(() => import('./features/customer/pages/ProfilePage.jsx'))
 const OrdersPage = lazy(() => import('./features/customer/pages/OrdersPage.jsx'))
+const CategoriesPage = lazy(() => import('./features/customer/pages/CategoriesPage.jsx'))
 const StoreLoginPage = lazy(() => import('./features/storeAdmin/pages/StoreLoginPage.jsx'))
 const StoreDashboardPage = lazy(() => import('./features/storeAdmin/pages/StoreDashboardPage.jsx'))
 
@@ -201,6 +202,17 @@ function App() {
             <button type="button" onClick={() => setStoreOpen(true)} className="mt-6 rounded-xl bg-[var(--brand-primary)] px-5 py-3 text-sm font-bold text-white transition hover:bg-[var(--brand-primary-hover)]">Choose an open store</button>
           </section> : <Routes>
             <Route path="/" element={<HomePage />} />
+            <Route path="/categories" element={<CategoriesPage />} />
+            <Route path="/categories/:categoryId" element={<HomePage categoryScreen />} />
+            <Route path="/cart" element={<CartDrawer
+              open
+              pageMode
+              onClose={() => navigate('/')}
+              items={cartItems}
+              isGuest={!token}
+              onLogin={() => openLogin('Sign in to sync your basket and check out.', '/checkout')}
+              onSyncGuest={handleSignedIn}
+            />} />
             <Route path="/checkout" element={<CheckoutPage onLogin={openLogin} onOpenCart={() => setCartOpen(true)} onToast={showToast} />} />
             <Route path="/profile" element={token ? <ProfilePage /> : <Navigate to="/" replace />} />
             <Route path="/orders" element={token ? <OrdersPage /> : <Navigate to="/" replace />} />
@@ -213,18 +225,25 @@ function App() {
         Fresh from your neighbourhood. <span className="font-semibold text-[var(--brand-primary)]">NalliBokka.</span>
       </footer>
       {!isStoreRoute && <PwaInstallPrompt />}
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-[var(--border-default)] bg-[var(--bg-app)]/95 py-2 text-[11px] font-medium text-[var(--text-secondary)] backdrop-blur md:hidden" aria-label="Main navigation">
-        <NavLink className={({ isActive }) => `flex flex-col items-center gap-1 py-1 ${isActive ? 'text-[var(--brand-primary)]' : ''}`} to="/" aria-label="Shop">
-          <Store size={18} strokeWidth={1.8} />
-          <span>Shop</span>
+      <nav className="customer-bottom-nav fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-[var(--border-default)] bg-white/95 pt-2 text-[10px] font-medium text-[var(--text-secondary)] backdrop-blur md:hidden" aria-label="Main navigation">
+        <NavLink className={({ isActive }) => `customer-bottom-nav-item py-1 ${isActive ? 'is-active' : ''}`} to="/" aria-label="Home">
+          <span className="customer-bottom-nav-icon"><House size={19} strokeWidth={1.9} /></span>
+          <span>Home</span>
         </NavLink>
-        <button disabled={selectedStoreIsClosed} className="flex flex-col items-center gap-1 py-1 disabled:opacity-40" onClick={() => setCartOpen(true)}><ShoppingBasket size={18} /><span>Basket</span></button>
+        <NavLink className={({ isActive }) => `customer-bottom-nav-item py-1 ${isActive ? 'is-active' : ''}`} to="/categories" aria-label="Categories">
+          <span className="customer-bottom-nav-icon"><Grid2X2 size={19} strokeWidth={1.9} /></span>
+          <span>Categories</span>
+        </NavLink>
+        <NavLink to="/cart" aria-label={`Cart${cartCount ? `, ${cartCount} items` : ''}`} className={({ isActive }) => `customer-bottom-nav-item relative py-1 ${isActive ? 'is-active' : ''} ${selectedStoreIsClosed ? 'pointer-events-none opacity-40' : ''}`}>
+          <span className="customer-bottom-nav-icon"><ShoppingBasket size={19} strokeWidth={1.9} />{cartCount > 0 && <span className="absolute right-[calc(50%-18px)] top-0 grid h-4 min-w-4 place-items-center rounded-full bg-[#8cc61f] px-1 text-[9px] font-bold text-white">{cartCount > 99 ? '99+' : cartCount}</span>}</span>
+          <span>Cart</span>
+        </NavLink>
         {token
-          ? <NavLink className={({ isActive }) => `flex flex-col items-center gap-1 py-1 ${isActive ? 'text-[var(--brand-primary)]' : ''}`} to="/orders" aria-label="Orders"><PackageCheck size={18} strokeWidth={1.8} /><span>Orders</span></NavLink>
-          : <button className="flex flex-col items-center gap-1 py-1" onClick={() => openLogin('Sign in to view your orders.', '/orders')} aria-label="Orders"><PackageCheck size={18} strokeWidth={1.8} /><span>Orders</span></button>}
+          ? <NavLink className={({ isActive }) => `customer-bottom-nav-item py-1 ${isActive ? 'is-active' : ''}`} to="/orders" aria-label="Orders"><span className="customer-bottom-nav-icon"><PackageCheck size={19} strokeWidth={1.9} /></span><span>Orders</span></NavLink>
+          : <button className="customer-bottom-nav-item py-1" onClick={() => openLogin('Sign in to view your orders.', '/orders')} aria-label="Orders"><span className="customer-bottom-nav-icon"><PackageCheck size={19} strokeWidth={1.9} /></span><span>Orders</span></button>}
         {token
-          ? <NavLink className={({ isActive }) => `flex flex-col items-center gap-1 py-1 ${isActive ? 'text-[var(--brand-primary)]' : ''}`} to="/profile" aria-label="Account"><UserRound size={18} strokeWidth={1.8} /><span>Account</span></NavLink>
-          : <button className="flex flex-col items-center gap-1 py-1" onClick={() => openLogin()} aria-label="Account"><UserRound size={18} strokeWidth={1.8} /><span>Account</span></button>}
+          ? <NavLink className={({ isActive }) => `customer-bottom-nav-item py-1 ${isActive ? 'is-active' : ''}`} to="/profile" aria-label="Profile"><span className="customer-bottom-nav-icon"><UserRound size={19} strokeWidth={1.9} /></span><span>Profile</span></NavLink>
+          : <button className="customer-bottom-nav-item py-1" onClick={() => openLogin()} aria-label="Profile"><span className="customer-bottom-nav-icon"><UserRound size={19} strokeWidth={1.9} /></span><span>Profile</span></button>}
       </nav>
       {token && meError && ![401, 403].includes(meError.status) && <p role="status" className="fixed inset-x-3 bottom-20 z-40 mx-auto max-w-lg rounded-xl bg-amber-50 px-4 py-3 text-xs text-amber-900 shadow sm:bottom-4">We couldn’t verify your saved session. Some account features may be unavailable.</p>}
       {storesError && !selectedStore && (
@@ -238,7 +257,7 @@ function App() {
       <StorePicker open={storeOpen || selectedStoreIsClosed} onClose={() => setStoreOpen(false)} />
       <LoginDialog open={loginOpen || Boolean(sessionNotice)} reason={sessionNotice || loginReason} onClose={() => { setLoginOpen(false); dispatch(clearSessionNotice()); if (!token) setLoginReturnTo('') }} onSignedIn={handleSignedIn} />
       <CartDrawer
-        open={cartOpen && !selectedStoreIsClosed}
+        open={cartOpen && !selectedStoreIsClosed && location.pathname !== '/cart'}
         onClose={() => setCartOpen(false)}
         items={cartItems}
         isGuest={!token}
