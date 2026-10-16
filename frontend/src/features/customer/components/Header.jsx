@@ -75,15 +75,15 @@ export default function Header({ cartCount, onOpenCart, onChooseStore, onLogin, 
           </span>
         </Link>
         <span className="mx-1 hidden h-8 w-px bg-[#e7e3d9] sm:block" />
-        <button onClick={onChooseStore} className="col-span-3 row-start-2 flex min-h-12 min-w-0 items-center justify-between gap-3 rounded-2xl border border-[var(--border-default)] bg-white px-3 py-2 text-left shadow-[0_3px_12px_-10px_rgba(18,49,37,.35)] transition hover:border-[var(--brand-secondary)] sm:col-span-1 sm:row-auto sm:min-h-0 sm:rounded-none sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:shadow-none">
+        <button onClick={onChooseStore} className="store-selector-button col-span-3 row-start-2 flex min-h-12 min-w-0 items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-left shadow-[0_3px_12px_-10px_rgba(18,49,37,.35)] sm:col-span-1 sm:row-auto sm:min-h-0 sm:rounded-xl sm:px-3 sm:py-2 sm:shadow-sm">
           <span className="flex min-w-0 items-center gap-2.5">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]"><MapPin size={17} strokeWidth={2.1} /></span>
+            <span className="store-selector-icon grid h-8 w-8 shrink-0 place-items-center rounded-xl"><MapPin size={17} strokeWidth={2.1} /></span>
             <span className="min-w-0">
-              <span className="block text-[9px] font-semibold text-[var(--text-secondary)]">Delivering to</span>
-              <span className="mt-0.5 flex items-center gap-1 truncate text-xs font-bold text-[var(--text-primary)] sm:text-sm">{selectedStore?.location || 'Choose your store'} <ChevronDown size={13} className="shrink-0 text-[var(--text-secondary)]" /></span>
+              <span className="block text-[9px] font-semibold text-white/75">Delivering to</span>
+              <span className="mt-0.5 flex items-center gap-1 truncate text-xs font-bold text-white sm:text-sm">{selectedStore?.location || 'Choose your store'} <ChevronDown size={13} className="shrink-0 text-white/75" /></span>
             </span>
           </span>
-          {selectedStore && <span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold ${selectedStore.isOpen === false ? 'bg-[#f7eae8] text-[var(--status-danger)]' : 'bg-[var(--status-success-soft)] text-[var(--brand-primary)]'}`}>{selectedStore.isOpen === false ? 'Currently closed' : 'Open'}</span>}
+          {selectedStore && <span className={`store-selector-status shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold ${selectedStore.isOpen === false ? '!bg-[#fff2f0] !text-[var(--status-danger)]' : ''}`}>{selectedStore.isOpen === false ? 'Currently closed' : 'Open'}</span>}
         </button>
         <nav className="ml-auto hidden items-center gap-7 text-[13px] font-medium md:flex">
           {user && <NavLink to="/orders" className={({ isActive }) => isActive ? 'text-[var(--brand-primary)]' : 'text-[var(--text-secondary)] transition hover:text-[var(--text-secondary)]'}>Orders</NavLink>}

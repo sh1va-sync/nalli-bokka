@@ -182,7 +182,7 @@ function App() {
   </div>
 
   return (
-    <div className="min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
+    <div id="customer-app" className="min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
       <Header
         cartCount={cartCount}
         onOpenCart={() => { if (!selectedStoreIsClosed) setCartOpen(true) }}
