@@ -18,6 +18,7 @@ const auditEventSchema = new mongoose.Schema({
       'order.status_updated',
       'order.refund_requested',
       'product.category.created',
+      'product.category.deleted',
       'product.created',
       'product.updated',
       'product.deleted',

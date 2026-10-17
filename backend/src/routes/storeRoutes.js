@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   createProduct,
   createStoreProductCategory,
+  deleteStoreProductCategory,
   deleteProduct,
   exportStoreReport,
   getDashboard,
@@ -36,6 +37,7 @@ router.get('/dashboard', validate(schemas.dashboard), getDashboard);
 router.get('/audit-events', validate(schemas.storeAuditEventList), listStoreAuditEvents);
 router.get('/product-categories', validate(schemas.storeProductCategoryList), listStoreProductCategories);
 router.post('/product-categories', validate(schemas.storeProductCategoryCreate), createStoreProductCategory);
+router.delete('/product-categories/:categoryName', validate(schemas.storeProductCategoryDelete), deleteStoreProductCategory);
 router.get('/products', validate(schemas.storeProductList), listStoreProducts);
 router.post('/products', receiveProductImage, parseProductMultipartData, requireProductImage, validate(schemas.productCreate), createProduct);
 router.patch('/products/:productId', receiveProductImage, parseProductMultipartData, validate(schemas.productUpdate), updateProduct);

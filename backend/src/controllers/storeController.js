@@ -28,34 +28,51 @@ const PRODUCT_FIELDS = [
 
 async function assertStoreProductType(productType, storeId, session) {
   const normalizedType = productType.toLowerCase();
-  if (BUILT_IN_PRODUCT_TYPES.includes(normalizedType)) return normalizedType;
-  const category = await ProductCategory.exists({ storeId, normalizedName: normalizedType }).session(session);
-  if (!category) {
+  const category = await ProductCategory.findOne({ storeId, normalizedName: normalizedType })
+    .select('isDeleted')
+    .session(session);
+  if (category?.isDeleted || (!category && !BUILT_IN_PRODUCT_TYPES.includes(normalizedType))) {
     throw new AppError(400, 'Create this category before adding products to it');
   }
   return normalizedType;
 }
 
 export async function listStoreProductCategories(req, res) {
-  const categories = await ProductCategory.find({ storeId: req.auth.id }).select('name -_id').sort({ name: 1 }).lean();
-  res.json({ data: [...BUILT_IN_PRODUCT_TYPES, ...categories.map(category => category.name)] });
+  const [categories, deletedCategories] = await Promise.all([
+    ProductCategory.find({ storeId: req.auth.id, isDeleted: { $ne: true } }).select('name -_id').sort({ name: 1 }).lean(),
+    ProductCategory.find({ storeId: req.auth.id, isDeleted: true }).distinct('normalizedName')
+  ]);
+  const deletedNames = new Set(deletedCategories);
+  res.json({
+    data: [...BUILT_IN_PRODUCT_TYPES.filter(name => !deletedNames.has(name)), ...categories.map(category => category.name)]
+  });
 }
 
 export async function createStoreProductCategory(req, res) {
   const name = req.validated.body.name.trim().toLowerCase();
-  if (BUILT_IN_PRODUCT_TYPES.includes(name)) {
-    throw new AppError(409, 'That category already exists');
-  }
 
   const session = await ProductCategory.db.startSession();
   let category;
   try {
     await session.withTransaction(async () => {
-      const exists = await ProductCategory.exists({
+      const existingCategory = await ProductCategory.findOne({
         storeId: req.auth.id,
         normalizedName: name
       }).session(session);
-      if (exists) {
+      if (existingCategory?.isDeleted) {
+        existingCategory.isDeleted = false;
+        category = await existingCategory.save({ session });
+        await recordStoreAudit({
+          session,
+          req,
+          action: 'product.category.created',
+          entityType: 'productCategory',
+          entityId: category._id,
+          changedFields: ['name']
+        });
+        return;
+      }
+      if (existingCategory || BUILT_IN_PRODUCT_TYPES.includes(name)) {
         throw new AppError(409, 'That category already exists');
       }
       [category] = await ProductCategory.create([{
@@ -81,6 +98,60 @@ export async function createStoreProductCategory(req, res) {
     await session.endSession();
   }
   res.status(201).json({ data: { name: category.name } });
+}
+
+export async function deleteStoreProductCategory(req, res) {
+  const name = req.validated.params.categoryName.trim().toLowerCase();
+
+  const session = await ProductCategory.db.startSession();
+  let deletedCategory;
+  try {
+    await session.withTransaction(async () => {
+      let category = await ProductCategory.findOne({
+        storeId: req.auth.id,
+        normalizedName: name
+      }).session(session);
+      if (!category && !BUILT_IN_PRODUCT_TYPES.includes(name)) {
+        throw new AppError(404, 'Category not found');
+      }
+      if (category?.isDeleted) {
+        throw new AppError(404, 'Category not found');
+      }
+
+      const inUse = await Product.exists({
+        storeId: req.auth.id,
+        productType: name
+      }).session(session);
+      if (inUse) {
+        throw new AppError(409, 'Remove or reassign products in this category before deleting it');
+      }
+
+      if (category) {
+        category.isDeleted = true;
+        deletedCategory = await category.save({ session });
+      } else {
+        [deletedCategory] = await ProductCategory.create([{
+          storeId: req.auth.id,
+          name,
+          normalizedName: name,
+          isDeleted: true
+        }], { session });
+      }
+      await recordStoreAudit({
+        session,
+        req,
+        action: 'product.category.deleted',
+        entityType: 'productCategory',
+        entityId: deletedCategory._id,
+        previousState: category?.name || name,
+        changedFields: ['deleted']
+      });
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  res.json({ data: { name: deletedCategory.name } });
 }
 
 export async function listStoreAuditEvents(req, res) {

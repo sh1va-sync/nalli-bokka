@@ -96,6 +96,9 @@ const schemas = {
   storeProductCategoryList: {
     query: z.object({}).strict()
   },
+  storeProductCategoryDelete: {
+    params: z.object({ categoryName: z.string().trim().min(1).max(40) }).strict()
+  },
   idParams: { params: z.object({ id: objectId }) },
   productCreate: {
     body: z.object({

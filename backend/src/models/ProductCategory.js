@@ -18,6 +18,10 @@ const productCategorySchema = new mongoose.Schema({
     lowercase: true,
     trim: true,
     maxlength: 40
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false
   }
 }, { timestamps: true });
 

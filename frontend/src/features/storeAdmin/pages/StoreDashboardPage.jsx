@@ -10,7 +10,7 @@ import {
   useCreateStoreProductMutation, useDeleteStoreProductMutation, useExportStoreReportMutation,
   useGetStoreDashboardQuery,
   useGetStoreMeQuery, useGetStoreOrdersQuery, useGetStoreProductsQuery, useGetStoreProductCategoriesQuery,
-  useCreateStoreProductCategoryMutation,
+  useCreateStoreProductCategoryMutation, useDeleteStoreProductCategoryMutation,
   useGetStoreAuditEventsQuery, useGetStoreTransactionsQuery, useSetStoreProductStockMutation, useToggleStoreStatusMutation,
   useUpdateStoreHoursMutation,
   useDownloadStoreOrderInvoiceMutation, useUpdateStoreOrderStatusMutation,
@@ -18,7 +18,7 @@ import {
 } from '../../api/api.js'
 import { api } from '../../api/api.js'
 import { getErrorMessage, formatItemQuantity, formatPrice, saveInvoicePdf } from '../../customer/utils.js'
-import MeatCuttingLoader from '../components/MeatCuttingLoader.jsx'
+import StoreLoader from '../components/StoreLoader.jsx'
 import { storeSignedOut } from '../storeAuthSlice.js'
 
 const navItems = [
@@ -115,6 +115,7 @@ function ProductForm({ product, categories = [], onCancel, onSaved }) {
   const [createProduct, createState] = useCreateStoreProductMutation()
   const [updateProduct, updateState] = useUpdateStoreProductMutation()
   const [createCategory, createCategoryState] = useCreateStoreProductCategoryMutation()
+  const [deleteCategory, deleteCategoryState] = useDeleteStoreProductCategoryMutation()
   const [form, setForm] = useState(() => ({
     productType: product?.productType || 'meat',
     pricingMode: product?.pricingMode || getDefaultPricingMode(product?.productType || 'meat', product?.packs),
@@ -193,6 +194,17 @@ function ProductForm({ product, categories = [], onCancel, onSaved }) {
     }
   }
 
+  async function removeCategory(name) {
+    if (!window.confirm(`Delete "${formatCategoryLabel(name)}"? Categories with products cannot be deleted.`)) return
+    setCategoryError('')
+    try {
+      await deleteCategory(name).unwrap()
+      if (form.productType === name) changeType(productTypes[0])
+    } catch (requestError) {
+      setCategoryError(getErrorMessage(requestError))
+    }
+  }
+
   return <form onSubmit={submit} className="mt-4 rounded-[18px] border border-[var(--border-default)] bg-[var(--bg-app)] p-4 sm:p-5">
     <div className="flex items-start justify-between gap-3"><div><h3 className="text-sm font-semibold text-[var(--text-primary)]">{product ? `Edit ${product.productName}` : 'Add product to inventory'}</h3><p className="mt-1 text-xs text-[var(--text-secondary)]">Add a category for your store, then choose pricing for each product.</p></div><button type="button" onClick={onCancel} className="text-xs font-semibold text-[var(--brand-primary)]">Cancel</button></div>
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -206,6 +218,16 @@ function ProductForm({ product, categories = [], onCancel, onSaved }) {
             {categoryError && <p role="alert" className="mt-2 text-xs text-rose-700">{categoryError}</p>}
           </div>
           : <button type="button" onClick={() => setShowCategoryInput(true)} className="mt-2 text-xs font-semibold text-[var(--brand-primary)]">+ Add category</button>)}
+        {!product && categories.length > 0 && <details className="mt-3 rounded-lg border border-[var(--border-default)] bg-white">
+          <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-[var(--text-secondary)]">Manage categories ({categories.length})</summary>
+          <ul className="divide-y divide-[var(--border-default)] px-3">
+            {categories.map((name) => <li key={name} className="flex items-center justify-between gap-3 py-2">
+              <span className="text-xs text-[var(--text-primary)]">{formatCategoryLabel(name)}</span>
+              <button type="button" disabled={deleteCategoryState.isLoading} onClick={() => removeCategory(name)} aria-label={`Delete ${formatCategoryLabel(name)} category`} className="rounded-md p-1.5 text-[var(--status-danger)] transition hover:bg-[var(--status-danger-soft)] disabled:opacity-50"><Trash2 size={14} /></button>
+            </li>)}
+          </ul>
+        </details>}
+        {categoryError && !showCategoryInput && <p role="alert" className="mt-2 text-xs text-rose-700">{categoryError}</p>}
       </div>
       <label className="text-xs font-semibold text-[var(--text-secondary)]">PRODUCT NAME
         <input required maxLength={120} value={form.productName} onChange={(event) => setForm({ ...form, productName: event.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-[var(--border-default)] bg-white px-3 text-sm font-normal text-[var(--text-primary)] outline-none focus:border-[var(--brand-primary)]" placeholder="Product name" />
@@ -581,7 +603,7 @@ export default function StoreDashboardPage() {
           <SectionTitle eyebrow={selectedDate === today ? 'Today at a glance' : 'Daily snapshot'} title="Store overview"><button onClick={() => refetchDashboard()} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#e2e0d9] bg-white px-3 text-xs font-semibold text-[var(--text-secondary)] transition hover:bg-[var(--bg-app)]"><RefreshCw size={14} />Refresh</button></SectionTitle>
           {dashboardError && <p role="alert" className="mb-4 rounded-xl bg-[var(--status-danger-soft)] p-3 text-sm text-[var(--status-danger)]">{getErrorMessage(dashboardError)}</p>}
           {(ordersError || transactionsError) && <p role="alert" className="mb-4 rounded-xl bg-[var(--status-danger-soft)] p-3 text-sm text-[var(--status-danger)]">{ordersError && `Orders: ${getErrorMessage(ordersError)} `}{transactionsError && `Transactions: ${getErrorMessage(transactionsError)}`}</p>}
-          {dashboardLoading || ordersLoading || transactionsLoading ? <MeatCuttingLoader label="Preparing your store overview…" compact /> : <div className="dashboard-stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {dashboardLoading || ordersLoading || transactionsLoading ? <StoreLoader label="Preparing your store overview…" compact /> : <div className="dashboard-stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard label={selectedDate === today ? 'Orders today' : 'Orders'} value={periodMetrics?.orders ?? '—'} detail="Placed on the selected day" icon={ClipboardList} />
             <MetricCard label={selectedDate === today ? 'Paid revenue today' : 'Paid revenue'} value={periodMetrics ? formatPrice(periodMetrics.paidRevenue) : '—'} detail={`${periodMetrics?.paidTransactions ?? '—'} paid transactions on this day`} icon={ArrowUpRight} tone="green" />
             <MetricCard label="In stock" value={dashboard?.inventory?.inStock ?? '—'} detail="Active inventory products" icon={Boxes} tone="coral" />
@@ -613,7 +635,7 @@ export default function StoreDashboardPage() {
           {ordersFetching && !ordersLoading && <p role="status" className="mb-3 flex items-center gap-2 text-[10px] font-medium text-[var(--text-secondary)]"><span className="h-3 w-3 rounded-full border-2 border-[var(--border-default)] border-t-[var(--brand-primary)] motion-safe:animate-spin" />Refreshing orders</p>}
           {ordersError && <p role="alert" className="mb-3 rounded-xl bg-[var(--status-danger-soft)] p-3 text-sm text-[var(--status-danger)]">{getErrorMessage(ordersError)}</p>}
           {invoiceError && <p role="alert" className="mb-3 rounded-xl bg-[var(--status-danger-soft)] p-3 text-sm text-[var(--status-danger)]">{invoiceError}</p>}
-          {ordersLoading ? <MeatCuttingLoader label="Fetching today’s orders…" compact /> : orders.length ? <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">{orders.map((order) => {
+          {ordersLoading ? <StoreLoader label="Fetching today’s orders…" compact /> : orders.length ? <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">{orders.map((order) => {
             const customer = typeof order.userId === 'object' ? order.userId : {}
             const next = order.orderStatus === 'packing'
               ? order.orderType === 'pickup' ? 'ready for pickup' : 'out for delivery'
@@ -647,7 +669,7 @@ export default function StoreDashboardPage() {
             <label className="flex h-10 items-center rounded-lg border border-[var(--border-default)] bg-white px-3 text-xs text-[var(--text-secondary)]"><select aria-label="Filter inventory by pricing" value={inventoryPricingFilter} onChange={(event) => { setInventoryPricingFilter(event.target.value); setProductPage(1) }} className="w-full bg-transparent text-sm text-[var(--text-primary)] outline-none"><option value="">All pricing types</option><option value="weight">Per kilogram</option><option value="pack">Fixed-price packs</option></select></label>
           </div>
           {productsError && <p role="alert" className="mb-3 rounded-xl bg-[var(--status-danger-soft)] p-3 text-sm text-[var(--status-danger)]">{getErrorMessage(productsError)}</p>}
-          {productsLoading ? <MeatCuttingLoader label="Preparing your inventory…" compact /> : products.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{products.map((product) => <article key={product._id} className="overflow-hidden rounded-[16px] border border-[var(--border-default)] bg-white">
+          {productsLoading ? <StoreLoader label="Preparing your inventory…" compact /> : products.length ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{products.map((product) => <article key={product._id} className="overflow-hidden rounded-[16px] border border-[var(--border-default)] bg-white">
             <div className="flex gap-3 p-3"><img src={product.imageUrl} alt="" className="h-16 w-16 rounded-xl bg-[var(--surface-subtle)] object-cover" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{product.productName}</p><span className="mt-1 inline-flex rounded-full bg-[var(--brand-primary-soft)] px-2 py-0.5 text-[9px] font-semibold text-[var(--brand-primary)]">{formatCategoryLabel(product.productType)}</span><p className="mt-1 text-xs font-semibold text-[var(--text-secondary)]">{product.packs?.length ? product.packs.map(({ label, price }) => `${label} ${formatPrice(price)}`).join(' · ') : `${formatPrice(product.pricePerKg)} / kg`}</p></div></div>
             <div className="flex items-center justify-between border-t border-[var(--surface-subtle)] px-3 py-2.5"><button onClick={() => runAction(product._id, 'stock', () => setStock({ productId: product._id, inStock: !product.inStock }).unwrap())} className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${product.inStock ? 'bg-[var(--status-success-soft)] text-[var(--status-success)]' : 'bg-[var(--status-danger-soft)] text-[var(--brand-primary)]'}`}>{product.inStock ? 'In stock' : 'Sold out'} · toggle</button><div className="flex items-center"><button onClick={() => { setEditingProduct(product); setShowProductForm(true); setActionError(''); setActionSuccess('') }} aria-label={`Edit ${product.productName}`} className="rounded-lg px-2 py-1.5 text-[10px] font-semibold text-[var(--brand-primary)] hover:bg-[var(--status-danger-soft)]">Edit</button><button onClick={() => { if (window.confirm(`Delete ${product.productName} from inventory?`)) runAction(product._id, 'delete', () => deleteProduct(product._id).unwrap()) }} aria-label={`Delete ${product.productName}`} className="rounded-lg p-2 text-[var(--text-secondary)] hover:bg-[var(--status-danger-soft)] hover:text-[var(--brand-primary)]"><Trash2 size={15} /></button></div></div>
           </article>)}</div> : <div className="rounded-[18px] border border-[var(--border-default)] bg-white p-10 text-center"><Boxes className="mx-auto text-[var(--brand-primary)]" size={26} /><h3 className="mt-3 text-sm font-semibold">No products found</h3><p className="mt-1 text-xs text-[var(--text-secondary)]">Add your first product or adjust search.</p></div>}
@@ -657,7 +679,7 @@ export default function StoreDashboardPage() {
         {tab === 'transactions' && <>
           <SectionTitle eyebrow="Payments" title={selectedDate === today ? 'Transactions today' : 'Transactions'}><span className="text-xs text-[var(--text-secondary)]">{new Date(`${selectedDate}T12:00:00`).toLocaleDateString('en-IN', { dateStyle: 'medium' })}</span></SectionTitle>
           {transactionsError && <p role="alert" className="mb-3 rounded-xl bg-[var(--status-danger-soft)] p-3 text-sm text-[var(--status-danger)]">{getErrorMessage(transactionsError)}</p>}
-          {transactionsLoading ? <MeatCuttingLoader label="Loading transactions…" compact /> : <>
+          {transactionsLoading ? <StoreLoader label="Loading transactions…" compact /> : <>
             <div className="dashboard-stagger mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><MetricCard label={selectedDate === today ? 'Paid today' : 'Paid revenue'} value={periodMetrics ? formatPrice(periodMetrics.paidRevenue) : '—'} detail={`${periodMetrics?.paidTransactions ?? '—'} captured payments on this day`} icon={ArrowUpRight} tone="green" /><MetricCard label={selectedDate === today ? 'Transactions today' : 'Transactions'} value={periodMetrics ? Object.values(periodMetrics.transactions).reduce((sum, count) => sum + count, 0) : '—'} detail="All payment statuses" icon={CreditCard} /><MetricCard label={selectedDate === today ? 'Failed today' : 'Failed transactions'} value={periodMetrics?.transactions?.failed ?? '—'} detail="Payment attempts" icon={ArrowDownRight} tone="coral" /></div>
             {selectedDayTransactions.length ? <div className="dashboard-stagger overflow-hidden rounded-[18px] border border-[var(--border-default)] bg-white"><div className="hidden grid-cols-[1.4fr_1fr_1fr_1fr] gap-3 border-b border-[var(--surface-subtle)] bg-[var(--bg-app)] px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)] sm:grid"><span>Order</span><span>Time</span><span>Status</span><span className="text-right">Amount</span></div>{selectedDayTransactions.map((transaction) => <div key={transaction._id} className="grid gap-1 border-b border-[#f4eeea] px-4 py-3 last:border-0 transition-colors hover:bg-[var(--bg-app)] sm:grid-cols-[1.4fr_1fr_1fr_1fr] sm:items-center sm:gap-3"><span className="text-xs font-semibold">#{String(transaction.orderId?._id || transaction.orderId).slice(-8).toUpperCase()}</span><span className="text-[11px] text-[var(--text-secondary)]">{new Date(transaction.timestamp).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</span><span className={`w-fit rounded-full px-2 py-1 text-[10px] font-semibold capitalize ${transaction.refundStatus === 'pending' || transaction.refundStatus === 'failed' ? 'bg-[var(--status-danger-soft)] text-[var(--brand-primary)]' : transaction.refundStatus === 'processed' ? 'bg-[var(--status-success-soft)] text-[var(--status-success)]' : transaction.status === 'paid' ? 'bg-[var(--status-success-soft)] text-[var(--status-success)]' : transaction.status === 'failed' ? 'bg-[var(--status-danger-soft)] text-[var(--brand-primary)]' : 'bg-[var(--surface-subtle)] text-[var(--text-secondary)]'}`}>{transaction.refundStatus && transaction.refundStatus !== 'none' ? `refund ${transaction.refundStatus}` : transaction.status}</span><span className="text-xs font-semibold sm:text-right">{formatPrice(transaction.amount)}</span></div>)}</div> : <div className="rounded-[18px] border border-[var(--border-default)] bg-white p-10 text-center"><CreditCard className="mx-auto text-[var(--brand-primary)]" size={26} /><h3 className="mt-3 text-sm font-semibold">No transactions on this day</h3><p className="mt-1 text-xs text-[var(--text-secondary)]">Payment activity for the selected day will appear here.</p></div>}
           </>}
@@ -668,7 +690,7 @@ export default function StoreDashboardPage() {
           <SectionTitle eyebrow="Store history" title="Activity log" />
           <p className="mb-4 rounded-xl border border-[var(--border-default)] bg-white p-3 text-xs leading-5 text-[var(--text-secondary)]">Recent operational changes made by this store account. Audit entries are retained for one year and do not include customer contact or address details.</p>
           {auditError && <p role="alert" className="mb-3 rounded-xl bg-[var(--status-danger-soft)] p-3 text-sm text-[var(--status-danger)]">{getErrorMessage(auditError)}</p>}
-          {auditLoading ? <MeatCuttingLoader label="Loading activity…" compact /> : auditEvents.length ? <div className="space-y-2">
+          {auditLoading ? <StoreLoader label="Loading activity…" compact /> : auditEvents.length ? <div className="space-y-2">
             {auditEvents.map((event) => <article key={event._id} className="rounded-[16px] border border-[var(--border-default)] bg-white p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div><p className="text-sm font-semibold text-[var(--text-primary)]">{event.action.replaceAll('.', ' ').replaceAll('_', ' ')}</p><p className="mt-1 text-xs capitalize text-[var(--text-secondary)]">{event.entityType} · {event.entityId.slice(-8).toUpperCase()}</p></div>

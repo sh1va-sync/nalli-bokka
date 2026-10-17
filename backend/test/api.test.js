@@ -105,8 +105,12 @@ test('product category management endpoints require a store token', async () => 
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ name: 'dry fruits' })
   });
+  const deleteResponse = await fetch(`${baseUrl}/store/product-categories/dry%20fruits`, {
+    method: 'DELETE'
+  });
   assert.equal(listResponse.status, 401);
   assert.equal(createResponse.status, 401);
+  assert.equal(deleteResponse.status, 401);
 });
 
 test('customer invoice download is scoped to the authenticated user', async () => {

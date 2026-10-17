@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { LottieLight } from 'lottie-react'
-import animationData from '../../../assets/meat-cutting-loader.json'
 
-export default function MeatCuttingLoader({ label = 'Loading store workspace…', compact = false }) {
+export default function StoreLoader({ label = 'Loading store workspace…', compact = false }) {
   const [reducedMotion, setReducedMotion] = useState(false)
 
   useEffect(() => {
@@ -16,7 +15,7 @@ export default function MeatCuttingLoader({ label = 'Loading store workspace…'
   return (
     <div className={`flex flex-col items-center justify-center text-center ${compact ? 'py-4' : 'min-h-56 rounded-[20px] border border-[var(--border-default)] bg-white px-5 py-8'}`} role="status" aria-live="polite">
       <LottieLight
-        src={animationData}
+        src="/animations/grocery-delivery-loader.json"
         autoplay={!reducedMotion}
         loop={!reducedMotion}
         aria-hidden="true"
@@ -24,7 +23,7 @@ export default function MeatCuttingLoader({ label = 'Loading store workspace…'
         rendererSettings={{ preserveAspectRatio: 'xMidYMid meet' }}
       />
       <p className="mt-1 text-xs font-semibold text-[var(--text-secondary)]">{label}</p>
-      <span className="sr-only">A cleaver is slicing through a cut of meat.</span>
+      <a href="https://lottiefiles.com/free-animation/grocery-shopping-bag-pickup-and-delivery-Wolnzed6M2" target="_blank" rel="noreferrer" className="mt-1 text-[9px] text-[var(--text-tertiary)] underline-offset-2 hover:underline">Animation by MD Abdur Rahim · LottieFiles</a>
     </div>
   )
 }

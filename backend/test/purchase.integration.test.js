@@ -161,6 +161,30 @@ test('store-created categories persist and support custom product pricing and in
   assert.match(product.imageUrl, /^https:\/\/res\.cloudinary\.com\//);
   assert.match(product.imagePublicId, /^[a-f\d]{24}\//);
 
+  const inUseDeleteResponse = await fetch(`${baseUrl}/store/product-categories/pet%20supplies`, {
+    method: 'DELETE',
+    headers
+  });
+  assert.equal(inUseDeleteResponse.status, 409);
+  assert.match((await inUseDeleteResponse.json()).error, /products in this category/i);
+
+  const otherStore = await Store.create({
+    storeName: 'Other Category Store',
+    username: 'other-category-store',
+    password: 'test-password-long-enough',
+    location: 'Hyderabad'
+  });
+  const otherStoreToken = jwt.sign(
+    { role: 'store' },
+    process.env.JWT_SECRET,
+    { subject: String(otherStore._id), expiresIn: '5m', issuer: 'nalli-bokka-api' }
+  );
+  const wrongOwnerDeleteResponse = await fetch(`${baseUrl}/store/product-categories/pet%20supplies`, {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${otherStoreToken}` }
+  });
+  assert.equal(wrongOwnerDeleteResponse.status, 404);
+
   const existingCategoryProductResponse = await fetch(`${baseUrl}/store/products`, {
     method: 'POST',
     headers: { authorization: headers.authorization },
@@ -173,6 +197,11 @@ test('store-created categories persist and support custom product pricing and in
   });
   assert.equal(existingCategoryProductResponse.status, 201);
   assert.equal((await existingCategoryProductResponse.json()).data.pricingMode, 'pack');
+  const inUseBuiltInDeleteResponse = await fetch(`${baseUrl}/store/product-categories/meat`, {
+    method: 'DELETE',
+    headers
+  });
+  assert.equal(inUseBuiltInDeleteResponse.status, 409);
 
   const inventoryResponse = await fetch(`${baseUrl}/store/products?productType=pet%20supplies&inStock=true&pricingMode=pack`, {
     headers: { authorization: headers.authorization }
@@ -184,12 +213,45 @@ test('store-created categories persist and support custom product pricing and in
   assert.equal(publicCategoriesResponse.status, 200);
   assert.ok((await publicCategoriesResponse.json()).data.includes('pet supplies'));
 
+  const fruitDeleteResponse = await fetch(`${baseUrl}/store/product-categories/fruit`, {
+    method: 'DELETE',
+    headers
+  });
+  assert.equal(fruitDeleteResponse.status, 200);
+  const storeCategoriesAfterDelete = await fetch(`${baseUrl}/store/product-categories`, { headers });
+  assert.equal(storeCategoriesAfterDelete.status, 200);
+  assert.equal((await storeCategoriesAfterDelete.json()).data.includes('fruit'), false);
+  const publicCategoriesAfterDelete = await fetch(`${baseUrl}/products/categories`);
+  assert.ok((await publicCategoriesAfterDelete.json()).data.includes('fruit'));
+  const restoreBuiltInResponse = await fetch(`${baseUrl}/store/product-categories`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ name: 'Fruit' })
+  });
+  assert.equal(restoreBuiltInResponse.status, 201);
+  assert.deepEqual((await restoreBuiltInResponse.json()).data, { name: 'fruit' });
+
   const duplicateResponse = await fetch(`${baseUrl}/store/product-categories`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ name: 'PET SUPPLIES' })
   });
   assert.equal(duplicateResponse.status, 409);
+
+  const productDeleteResponse = await fetch(`${baseUrl}/store/products/${product._id}`, {
+    method: 'DELETE',
+    headers: { authorization: headers.authorization }
+  });
+  assert.equal(productDeleteResponse.status, 204);
+  const categoryDeleteResponse = await fetch(`${baseUrl}/store/product-categories/pet%20supplies`, {
+    method: 'DELETE',
+    headers
+  });
+  assert.equal(categoryDeleteResponse.status, 200);
+  assert.deepEqual((await categoryDeleteResponse.json()).data, { name: 'pet supplies' });
+  const deletedCategory = await ProductCategory.findOne({ storeId: store._id, normalizedName: 'pet supplies' });
+  assert.equal(deletedCategory.isDeleted, true);
+  assert.ok(await AuditEvent.findOne({ actorId: store._id, action: 'product.category.deleted' }));
 });
 
 test('customer purchase, payment, and store status notification flow works end to end', async () => {

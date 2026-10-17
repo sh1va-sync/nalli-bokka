@@ -176,6 +176,10 @@ export const api = createApi({
       query: (body) => ({ url: '/store/product-categories', method: 'POST', body }),
       invalidatesTags: ['StoreProductCategories', 'ProductCategories', 'StoreAudit'],
     }),
+    deleteStoreProductCategory: builder.mutation({
+      query: (name) => ({ url: `/store/product-categories/${encodeURIComponent(name)}`, method: 'DELETE' }),
+      invalidatesTags: ['StoreProductCategories', 'ProductCategories', 'StoreAudit'],
+    }),
     getStoreProducts: builder.query({
       query: (params = {}) => ({ url: '/store/products', params }),
       providesTags: ['StoreProducts'],
@@ -274,6 +278,7 @@ export const {
   useGetStoreAuditEventsQuery,
   useGetStoreProductCategoriesQuery,
   useCreateStoreProductCategoryMutation,
+  useDeleteStoreProductCategoryMutation,
   useGetStoreProductsQuery,
   useCreateStoreProductMutation,
   useUpdateStoreProductMutation,
