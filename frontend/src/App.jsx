@@ -43,17 +43,17 @@ function App() {
   const { data: meResponse, error: meError } = useGetMeQuery(undefined, { skip: !token || isStoreRoute })
   const { data: storesResponse, error: storesError } = useGetStoresQuery(
     { limit: 100 },
-    { skip: isStoreRoute, pollingInterval: isStoreRoute ? 0 : 15000 }
+    { skip: isStoreRoute, pollingInterval: isStoreRoute ? 0 : 60000 }
   )
   const { data: cartResponse, error: cartError } = useGetCartQuery(undefined, { skip: !token || isStoreRoute })
   const { data: notificationResponse } = useGetUserNotificationsQuery(
     { page: 1, limit: 8 },
-    { skip: !token || isStoreRoute, pollingInterval: token && !isStoreRoute ? 30000 : 0 }
+    { skip: !token || isStoreRoute, pollingInterval: token && !isStoreRoute ? 60000 : 0 }
   )
   const isHomeRoute = location.pathname === '/'
   const activeOrdersQueryOptions = {
     skip: !token || isStoreRoute || !isHomeRoute,
-    pollingInterval: token && !isStoreRoute && isHomeRoute ? 15000 : 0,
+    pollingInterval: token && !isStoreRoute && isHomeRoute ? 60000 : 0,
   }
   const { data: placedOrdersResponse, error: placedOrdersError } = useGetOrdersQuery(
     { page: 1, limit: 5, orderStatus: 'placed' },

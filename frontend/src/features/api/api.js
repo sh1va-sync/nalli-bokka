@@ -22,6 +22,7 @@ export const api = createApi({
     getStores: builder.query({
       query: (params = {}) => ({ url: '/stores', params }),
       providesTags: ['Stores'],
+      keepUnusedDataFor: 300,
     }),
     getPickupSlots: builder.query({
       query: ({ storeId, date }) => ({
@@ -35,10 +36,12 @@ export const api = createApi({
         'Products',
         ...(result?.data || []).map(({ _id }) => ({ type: 'Products', id: _id })),
       ],
+      keepUnusedDataFor: 300,
     }),
     getProductCategories: builder.query({
       query: () => '/products/categories',
       providesTags: ['ProductCategories'],
+      keepUnusedDataFor: 300,
     }),
     verifyFirebasePhoneToken: builder.mutation({
       query: (body) => ({ url: '/auth/users/verify', method: 'POST', body }),
@@ -79,6 +82,7 @@ export const api = createApi({
     getUserNotifications: builder.query({
       query: (params = {}) => ({ url: '/users/me/notifications', params }),
       providesTags: ['Notifications'],
+      keepUnusedDataFor: 300,
     }),
     markUserNotificationRead: builder.mutation({
       query: (notificationId) => ({
@@ -178,19 +182,19 @@ export const api = createApi({
     }),
     createStoreProduct: builder.mutation({
       query: (body) => ({ url: '/store/products', method: 'POST', body }),
-      invalidatesTags: ['StoreProducts', 'StoreDashboard', 'StoreAudit'],
+      invalidatesTags: ['StoreProducts', 'Products', 'StoreDashboard', 'StoreAudit'],
     }),
     updateStoreProduct: builder.mutation({
       query: ({ productId, body }) => ({ url: `/store/products/${productId}`, method: 'PATCH', body }),
-      invalidatesTags: ['StoreProducts', 'StoreDashboard', 'StoreAudit'],
+      invalidatesTags: ['StoreProducts', 'Products', 'StoreDashboard', 'StoreAudit'],
     }),
     setStoreProductStock: builder.mutation({
       query: ({ productId, inStock }) => ({ url: `/store/products/${productId}/stock`, method: 'PATCH', body: { inStock } }),
-      invalidatesTags: ['StoreProducts', 'StoreDashboard', 'StoreAudit'],
+      invalidatesTags: ['StoreProducts', 'Products', 'StoreDashboard', 'StoreAudit'],
     }),
     deleteStoreProduct: builder.mutation({
       query: (productId) => ({ url: `/store/products/${productId}`, method: 'DELETE' }),
-      invalidatesTags: ['StoreProducts', 'StoreDashboard', 'StoreAudit'],
+      invalidatesTags: ['StoreProducts', 'Products', 'StoreDashboard', 'StoreAudit'],
     }),
     getStoreOrders: builder.query({
       query: (params = {}) => ({ url: '/store/orders', params }),
@@ -220,7 +224,7 @@ export const api = createApi({
         method: 'PATCH',
         body: { isOpen },
       }),
-      invalidatesTags: ['StoreMe', 'StoreDashboard', 'StoreAudit'],
+      invalidatesTags: ['StoreMe', 'Stores', 'StoreDashboard', 'StoreAudit'],
     }),
     updateStoreHours: builder.mutation({
       query: (body) => ({ url: '/store/hours', method: 'PATCH', body }),
