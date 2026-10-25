@@ -144,13 +144,13 @@ export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
             <label className="block text-xs font-bold text-[var(--text-secondary)]">PHONE NUMBER
               <div className="mt-2 flex h-12 items-center gap-2 rounded-xl border border-[var(--border-default)] bg-white px-3 focus-within:border-[var(--brand-primary)]"><span className="text-sm font-semibold text-[var(--brand-primary)]">+91</span><input autoFocus required inputMode="tel" maxLength={10} pattern="[0-9]{10}" value={phone.replace(/^\+91/, '')} onChange={(event) => setPhone(event.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="98765 43210" className="w-full bg-transparent text-sm outline-none" /></div>
             </label>
-            <button disabled={busy || phone.replace(/\D/g, '').length !== 10} className="flex h-12 w-full items-center justify-center rounded-xl bg-[var(--brand-primary)] text-sm font-medium text-white transition hover:bg-[var(--brand-primary-hover)] disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'Sending code…' : 'Send verification code'}</button>
+            <button disabled={busy || phone.replace(/\D/g, '').length !== 10} className="button-strong flex h-12 w-full items-center justify-center rounded-xl bg-[var(--brand-primary)] text-sm font-medium text-white transition hover:bg-[var(--brand-primary-hover)] disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'Sending code…' : 'Send verification code'}</button>
           </form>
         ) : step === 'code' ? (
           <form className="mt-6 space-y-3" onSubmit={submitCode}>
             <button type="button" onClick={changePhone} className="mb-1 flex items-center gap-1 text-xs font-semibold text-[var(--brand-primary)]"><ArrowLeft size={14} /> Change phone number</button>
             <input autoFocus required inputMode="numeric" minLength={4} maxLength={10} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="Enter OTP" className="h-12 w-full rounded-xl border border-[var(--border-default)] bg-white px-4 text-center text-lg tracking-[.35em] outline-none focus:border-[var(--brand-primary)]" />
-            <button disabled={busy || code.length < 4} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand-primary)] text-sm font-medium text-white transition hover:bg-[var(--brand-primary-hover)] disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'Verifying…' : <><CheckCircle2 size={17} /> Verify & continue</>}</button>
+            <button disabled={busy || code.length < 4} className="button-strong flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand-primary)] text-sm font-medium text-white transition hover:bg-[var(--brand-primary-hover)] disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'Verifying…' : <><CheckCircle2 size={17} /> Verify & continue</>}</button>
           </form>
         ) : (
           <form className="mt-6 space-y-3" onSubmit={submitRegistration}>

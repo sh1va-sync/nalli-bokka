@@ -23,7 +23,6 @@ export default function StoreLoader({ label = 'Loading store workspace…', comp
         rendererSettings={{ preserveAspectRatio: 'xMidYMid meet' }}
       />
       <p className="mt-1 text-xs font-semibold text-[var(--text-secondary)]">{label}</p>
-      <a href="https://lottiefiles.com/free-animation/grocery-shopping-bag-pickup-and-delivery-Wolnzed6M2" target="_blank" rel="noreferrer" className="mt-1 text-[9px] text-[var(--text-tertiary)] underline-offset-2 hover:underline">Animation by MD Abdur Rahim · LottieFiles</a>
     </div>
   )
 }
