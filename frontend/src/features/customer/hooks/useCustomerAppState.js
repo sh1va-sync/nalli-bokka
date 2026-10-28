@@ -34,13 +34,13 @@ export function useCustomerAppState() {
   const notificationBaseline = useRef({ token: null, initialized: false, fingerprints: new Set() })
   const [addCartItem] = useAddCartItemMutation()
 
-  const { data: meResponse, error: meError } = useGetMeQuery(undefined, { skip: !token || isStoreRoute })
-  const { data: storesResponse, error: storesError } = useGetStoresQuery(
+  const { data: meResponse, error: meError, isLoading: meLoading } = useGetMeQuery(undefined, { skip: !token || isStoreRoute })
+  const { data: storesResponse, error: storesError, isLoading: storesLoading } = useGetStoresQuery(
     { limit: 100 },
     { skip: isStoreRoute, pollingInterval: isStoreRoute ? 0 : 60000 }
   )
-  const { data: cartResponse, error: cartError } = useGetCartQuery(undefined, { skip: !token || isStoreRoute })
-  const { data: notificationResponse } = useGetUserNotificationsQuery(
+  const { data: cartResponse, error: cartError, isLoading: cartLoading } = useGetCartQuery(undefined, { skip: !token || isStoreRoute })
+  const { data: notificationResponse, isLoading: notificationsLoading } = useGetUserNotificationsQuery(
     { page: 1, limit: 8 },
     { skip: !token || isStoreRoute, pollingInterval: token && !isStoreRoute ? 60000 : 0 }
   )
@@ -51,19 +51,19 @@ export function useCustomerAppState() {
     pollingInterval: token && !isStoreRoute && isHomeRoute ? 60000 : 0,
   }
 
-  const { data: placedOrdersResponse, error: placedOrdersError } = useGetOrdersQuery(
+  const { data: placedOrdersResponse, error: placedOrdersError, isLoading: placedOrdersLoading } = useGetOrdersQuery(
     { page: 1, limit: 5, orderStatus: 'placed' },
     activeOrdersQueryOptions
   )
-  const { data: packingOrdersResponse, error: packingOrdersError } = useGetOrdersQuery(
+  const { data: packingOrdersResponse, error: packingOrdersError, isLoading: packingOrdersLoading } = useGetOrdersQuery(
     { page: 1, limit: 5, orderStatus: 'packing' },
     activeOrdersQueryOptions
   )
-  const { data: deliveryOrdersResponse, error: deliveryOrdersError } = useGetOrdersQuery(
+  const { data: deliveryOrdersResponse, error: deliveryOrdersError, isLoading: deliveryOrdersLoading } = useGetOrdersQuery(
     { page: 1, limit: 5, orderStatus: 'out for delivery' },
     activeOrdersQueryOptions
   )
-  const { data: pickupOrdersResponse, error: pickupOrdersError } = useGetOrdersQuery(
+  const { data: pickupOrdersResponse, error: pickupOrdersError, isLoading: pickupOrdersLoading } = useGetOrdersQuery(
     { page: 1, limit: 5, orderStatus: 'ready for pickup' },
     activeOrdersQueryOptions
   )
@@ -192,6 +192,14 @@ export function useCustomerAppState() {
     selectedStoreIsClosed,
     activeOrder,
     activeOrdersError,
+    startupRequestsLoading: storesLoading
+      || meLoading
+      || cartLoading
+      || notificationsLoading
+      || placedOrdersLoading
+      || packingOrdersLoading
+      || deliveryOrdersLoading
+      || pickupOrdersLoading,
     cartError,
     storesError,
     meError,

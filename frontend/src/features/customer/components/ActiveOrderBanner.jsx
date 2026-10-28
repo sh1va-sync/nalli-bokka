@@ -86,8 +86,6 @@ export default function ActiveOrderBanner({ order }) {
 
   const currentStage = stages.indexOf(order.orderStatus)
   const safeStage = Math.max(0, currentStage)
-  const progress = ((safeStage + 1) / stages.length) * 100
-
   const config = orderConfig[order.orderStatus] ?? {
     title: order.orderStatus,
     message: 'Tap to view your order details.',

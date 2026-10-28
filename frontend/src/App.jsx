@@ -1,11 +1,13 @@
 import { lazy, Suspense } from 'react'
-import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
+import { Navigate, NavLink, Route, Routes, useMatch } from 'react-router-dom'
 import { Grid2X2, House, PackageCheck, ShoppingBasket, UserRound } from 'lucide-react'
+import { useGetProductCategoriesQuery, useGetProductsQuery } from './features/api/api.js'
 import { clearSessionNotice } from './features/auth/authSlice.js'
 import Header from './features/customer/components/Header.jsx'
 import StorePicker from './features/customer/components/StorePicker.jsx'
 import LoginDialog from './features/customer/components/LoginDialog.jsx'
 import CartDrawer from './features/customer/components/CartDrawer.jsx'
+import StartupLoader from './features/customer/components/StartupLoader.jsx'
 import Toast from './features/customer/components/Toast.jsx'
 import HomePage from './features/customer/pages/HomePage.jsx'
 import ActiveOrderBanner from './features/customer/components/ActiveOrderBanner.jsx'
@@ -21,12 +23,14 @@ const StoreLoginPage = lazy(() => import('./features/storeAdmin/pages/StoreLogin
 const StoreDashboardPage = lazy(() => import('./features/storeAdmin/pages/StoreDashboardPage.jsx'))
 
 function App() {
+  const categoryMatch = useMatch('/categories/:categoryId')
   const {
     dispatch,
     token,
     cartItems,
     cartCount,
     selectedStore,
+    startupRequestsLoading,
     selectedStoreIsClosed,
     storeOpen,
     setStoreOpen,
@@ -53,6 +57,24 @@ function App() {
     setCartOpen,
     location,
   } = useCustomerAppState()
+  const isCatalogRoute = location.pathname === '/' || location.pathname === '/categories' || Boolean(categoryMatch)
+  const catalogQueryOptions = {
+    skip: isStoreRoute || !isCatalogRoute || !selectedStore?._id,
+  }
+  const { isLoading: categoriesLoading } = useGetProductCategoriesQuery(
+    { storeId: selectedStore?._id },
+    catalogQueryOptions,
+  )
+  const { isLoading: productsLoading } = useGetProductsQuery(
+    {
+      storeId: selectedStore?._id,
+      productType: categoryMatch?.params.categoryId,
+      page: 1,
+      limit: 24,
+    },
+    catalogQueryOptions,
+  )
+  const showStartupLoader = !isStoreRoute && (startupRequestsLoading || categoriesLoading || productsLoading)
 
   if (isStoreRoute) return <div className="min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
     <Suspense fallback={<div className="grid min-h-screen place-items-center text-sm text-[var(--text-secondary)]"><span className="mr-2 inline-block h-4 w-4 rounded-full border-2 border-[var(--border-default)] border-t-[var(--brand-primary)] motion-safe:animate-spin" />Loading store workspace…</div>}>
@@ -73,6 +95,7 @@ function App() {
         onLogin={() => openLogin()}
         onCartError={cartError ? getErrorMessage(cartError) : ''}
       />
+      {showStartupLoader && <StartupLoader />}
       {isHomeRoute && activeOrder && <ActiveOrderBanner order={activeOrder} />}
       {isHomeRoute && activeOrdersError && <p role="status" className="mx-auto max-w-7xl px-4 py-2 text-xs text-[var(--status-danger)] sm:px-6 lg:px-8">{activeOrder ? 'Some order status updates could not be refreshed.' : 'Couldn’t refresh your active order status.'} {getErrorMessage(activeOrdersError)}</p>}
       <main className="pb-24 md:pb-12">
