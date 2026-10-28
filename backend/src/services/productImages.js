@@ -5,7 +5,7 @@ import AppError from '../utils/AppError.js';
 function configureCloudinary() {
   const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = process.env;
   if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
-    throw new AppError(503, 'Product image storage is not configured. Set the Cloudinary environment variables.');
+    throw new AppError(503, 'Image storage is not configured. Set the Cloudinary environment variables.');
   }
   cloudinaryApi.config({
     cloud_name: CLOUDINARY_CLOUD_NAME,
@@ -15,21 +15,21 @@ function configureCloudinary() {
   });
 }
 
-function logCloudinaryFailure(action, error) {
+function logCloudinaryFailure(action, error, imageType = 'product') {
   console.error(JSON.stringify({
     timestamp: new Date().toISOString(),
     level: 'error',
-    event: `cloudinary.product_image.${action}.failed`,
+    event: `cloudinary.${imageType}_image.${action}.failed`,
     errorType: error?.name || 'Error'
   }));
 }
 
-export async function uploadProductImage(file, storeId) {
+async function uploadImage(file, storeId, imageType) {
   configureCloudinary();
   try {
     const result = await new Promise((resolve, reject) => {
       cloudinaryApi.uploader.upload_stream({
-        folder: 'nalli-bokka/products',
+        folder: `nalli-bokka/${imageType === 'category' ? 'categories' : 'products'}`,
         public_id: `${storeId}/${randomUUID()}`,
         resource_type: 'image',
         allowed_formats: ['jpg', 'png', 'webp'],
@@ -41,12 +41,12 @@ export async function uploadProductImage(file, storeId) {
     }
     return { imageUrl: result.secure_url, imagePublicId: result.public_id };
   } catch (error) {
-    logCloudinaryFailure('upload', error);
-    throw new AppError(502, 'Could not store the product image. Please try again.');
+    logCloudinaryFailure('upload', error, imageType);
+    throw new AppError(502, `Could not store the ${imageType} image. Please try again.`);
   }
 }
 
-export async function deleteProductImage(imagePublicId) {
+async function deleteImage(imagePublicId, imageType) {
   if (!imagePublicId) return;
   configureCloudinary();
   try {
@@ -58,7 +58,12 @@ export async function deleteProductImage(imagePublicId) {
       throw new Error(`Unexpected Cloudinary deletion result: ${result?.result || 'empty response'}`);
     }
   } catch (error) {
-    logCloudinaryFailure('delete', error);
-    throw new AppError(502, 'Could not remove the previous product image from Cloudinary.');
+    logCloudinaryFailure('delete', error, imageType);
+    throw new AppError(502, `Could not remove the ${imageType} image from Cloudinary.`);
   }
 }
+
+export const uploadProductImage = (file, storeId) => uploadImage(file, storeId, 'product');
+export const uploadCategoryImage = (file, storeId) => uploadImage(file, storeId, 'category');
+export const deleteProductImage = imagePublicId => deleteImage(imagePublicId, 'product');
+export const deleteCategoryImage = imagePublicId => deleteImage(imagePublicId, 'category');

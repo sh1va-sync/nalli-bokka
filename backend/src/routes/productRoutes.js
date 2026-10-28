@@ -4,7 +4,7 @@ import validate from '../middleware/validate.js';
 import { schemas } from '../validation/schemas.js';
 
 const router = Router();
-router.get('/categories', listProductCategories);
+router.get('/categories', validate(schemas.productCategoryList), listProductCategories);
 router.get('/', validate(schemas.productList), listProducts);
 router.get('/:id', validate(schemas.idParams), getProduct);
 

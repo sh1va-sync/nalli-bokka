@@ -513,7 +513,18 @@ For a product type not using a field, such as `packs` for meat, the field may be
 
 ### `GET /products/categories`
 
-Public list of built-in categories and store-created categories, returned as `{ "data": ["meat", "vegetable", "..."] }`.
+Public list of built-in categories and store-created category names. Optionally pass `storeId` to return only that store's custom categories and their image URLs. The response preserves the category-name array and adds an `images` map keyed by category name:
+
+```json
+{
+  "data": ["fruit", "meat", "pet supplies", "rice", "vegetable"],
+  "images": {
+    "pet supplies": "https://res.cloudinary.com/..."
+  }
+}
+```
+
+Without `storeId`, all active custom category names are returned and `images` is empty.
 
 ### `GET /products/:id`
 
@@ -924,7 +935,7 @@ Lists built-in categories and categories created by this store.
 
 ### `POST /store/product-categories`
 
-Creates a lowercase, store-specific category with body `{ "name": "dry fruits" }`. Names are limited to 40 characters; duplicate and built-in names return `409`.
+Creates a lowercase, store-specific category using `multipart/form-data` fields `name` and `image`. The image is required for a new category and must be JPEG, PNG, or WebP up to 5 MB. Names are limited to 40 characters; duplicate and built-in names return `409`. The response includes the uploaded `imageUrl`.
 
 ### `POST /store/products`
 

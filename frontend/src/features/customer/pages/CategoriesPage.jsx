@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
+import { useSelector } from 'react-redux'
 import { Link } from 'react-router-dom'
 import { useGetProductCategoriesQuery } from '../../api/api.js'
 import CategoryPhoto from '../components/CategoryPhoto.jsx'
@@ -17,7 +18,11 @@ function formatCategoryLabel(name) {
 }
 
 export default function CategoriesPage() {
-  const { data: categoriesResponse, isLoading, error } = useGetProductCategoriesQuery()
+  const selectedStore = useSelector((state) => state.selectedStore)
+  const { data: categoriesResponse, isLoading, error } = useGetProductCategoriesQuery(
+    { storeId: selectedStore?._id },
+    { skip: !selectedStore?._id },
+  )
   const [search, setSearch] = useState('')
   const categories = useMemo(() => {
     const builtInIds = new Set(builtInCategories.map(({ id }) => id))
@@ -28,9 +33,16 @@ export default function CategoriesPage() {
         label: formatCategoryLabel(name),
         tint: '#f5f0e7',
         note: 'Explore the selection',
+        imageUrl: categoriesResponse?.images?.[name],
       }))
-    return [...builtInCategories, ...additional]
-  }, [categoriesResponse?.data])
+    return [
+      ...builtInCategories.map((category) => ({
+        ...category,
+        imageUrl: categoriesResponse?.images?.[category.id],
+      })),
+      ...additional,
+    ]
+  }, [categoriesResponse?.data, categoriesResponse?.images])
   const filteredCategories = categories.filter(({ label }) => label.toLowerCase().includes(search.trim().toLowerCase()))
 
   return (
@@ -51,7 +63,7 @@ export default function CategoriesPage() {
       {!isLoading && filteredCategories.length > 0 && <div className="mt-5 grid grid-cols-3 gap-2.5 sm:grid-cols-4 sm:gap-4 md:grid-cols-5">
         {filteredCategories.map((category) => <Link key={category.id} to={`/categories/${encodeURIComponent(category.id)}`} className="group min-w-0 overflow-hidden rounded-[19px] border border-[var(--border-default)] bg-white p-1.5 shadow-[0_5px_16px_-14px_rgba(17,44,31,.4)] transition hover:-translate-y-0.5 hover:border-[var(--brand-secondary)] hover:shadow-lg sm:rounded-[22px] sm:p-2">
           <span className="block aspect-square overflow-hidden rounded-[14px] sm:rounded-[17px]" style={{ backgroundColor: category.tint }}>
-            <CategoryPhoto category={category.id} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.05]" />
+            <CategoryPhoto category={category.id} imageUrl={category.imageUrl} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.05]" />
           </span>
           <span className="block min-h-10 px-1 pb-1 pt-2 text-center text-[11px] font-bold leading-4 text-[var(--text-primary)] sm:text-[13px]">{category.label}</span>
         </Link>)}

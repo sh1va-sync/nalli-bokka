@@ -213,7 +213,7 @@ Custom-category products set `pricingMode` to `weight` or `pack`; the category i
 
 ### ProductCategory collection
 
-Stores can create custom category names, stored lowercase and scoped to the owning store. A unique `{ storeId: 1, normalizedName: 1 }` index prevents duplicate categories for one store. Built-in categories remain available without category documents.
+Stores can create custom category names, stored lowercase and scoped to the owning store. New categories include a Cloudinary `imageUrl` and `imagePublicId` for storefront category tiles; legacy records may not have an image and use the storefront fallback. A unique `{ storeId: 1, normalizedName: 1 }` index prevents duplicate categories for one store. Built-in categories remain available without category documents.
 
 ### Price examples
 

@@ -274,7 +274,7 @@ Each product's `storeId` is populated with the store's `storeName` and `location
 
 #### `GET /products/categories`
 
-Public list of built-in categories and store-created category names.
+Public list of built-in categories and store-created category names. Pass an optional `storeId` query parameter to scope custom categories to a store. The response includes an `images` map of category names to uploaded image URLs for that store.
 
 #### `GET /products/:id`
 
@@ -535,7 +535,7 @@ Lists built-in categories and categories created by this store.
 
 #### `POST /store/product-categories`
 
-Creates a lowercase, store-specific category with a `{ "name": "dry fruits" }` request body. Duplicate or built-in names return `409`.
+Creates a lowercase, store-specific category using `multipart/form-data` with a `name` field and a required `image` file (JPEG, PNG, or WebP, up to 5 MB). Duplicate or built-in names return `409`.
 
 #### `POST /store/products`
 

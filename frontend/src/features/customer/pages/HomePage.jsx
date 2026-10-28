@@ -1,25 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Apple, ArrowDownWideNarrow, ArrowRight, Leaf, RotateCw, Search, Wheat } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ArrowDownWideNarrow, ArrowRight, Apple, Leaf, RotateCw, Search, Wheat } from 'lucide-react'
 import { useSelector } from 'react-redux'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useGetProductCategoriesQuery, useGetProductsQuery } from '../../api/api.js'
 import ProductCard from '../components/ProductCard.jsx'
 import CookingLoader from '../components/CookingLoader.jsx'
 import CategoryPhoto from '../components/CategoryPhoto.jsx'
-import { getErrorMessage, getProductStoreId } from '../utils.js'
-
-const builtInCategories = [
-  { id: 'vegetable', label: 'Vegetables' },
-  { id: 'fruit', label: 'Fruit' },
-  { id: 'meat', label: 'Meat & fish' },
-  { id: 'rice', label: 'Rice & grains' },
-  { id: 'oil', label: 'Oils' },
-]
-const builtInCategoryIds = new Set(builtInCategories.map(({ id }) => id))
-const categoryTints = ['#edf5e9', '#fff2e3', '#fcebea', '#eaf3f8', '#f5f0e7']
-function formatCategoryLabel(name) {
-  return name.split(/\s+/).map((word) => word[0]?.toUpperCase() + word.slice(1)).join(' ')
-}
+import { formatCategoryLabel, useProductCatalog } from '../hooks/useProductCatalog.js'
+import { getErrorMessage } from '../utils.js'
 
 const heroSlides = [
   {
@@ -64,53 +51,30 @@ export default function HomePage({ categoryScreen = false }) {
   const navigate = useNavigate()
   const { categoryId = '' } = useParams()
   const selectedStore = useSelector((state) => state.selectedStore)
-  const { data: categoriesResponse } = useGetProductCategoriesQuery()
+  const {
+    categories,
+    browseCategories,
+    categoryTints,
+    search,
+    setSearch,
+    sort,
+    setSort,
+    products,
+    error,
+    isLoading,
+    isFetching,
+    refetch,
+    usingCatalogFallback,
+    data,
+    page,
+    setPageState,
+    category,
+  } = useProductCatalog({ categoryScreen, categoryId })
+
   const [heroSlideIndex, setHeroSlideIndex] = useState(0)
   const [heroInteractionPaused, setHeroInteractionPaused] = useState(false)
-  const category = categoryScreen ? categoryId : ''
-  const [search, setSearch] = useState('')
-  const [querySearch, setQuerySearch] = useState('')
-  const [sort, setSort] = useState('recommended')
-  const [pageState, setPageState] = useState({ storeId: null, category: '', search: '', page: 1 })
-  const categories = useMemo(() => [
-    { id: '', label: 'All' },
-    ...builtInCategories,
-    ...(categoriesResponse?.data || [])
-      .filter((name) => !builtInCategoryIds.has(name))
-      .map((name) => ({ id: name, label: formatCategoryLabel(name) })),
-  ], [categoriesResponse?.data])
-  const pageKeyMatches = pageState.storeId === selectedStore?._id && pageState.category === category && pageState.search === querySearch
-  const page = pageKeyMatches ? pageState.page : 1
-  const { currentData: storeProducts, error: storeProductsError, isLoading: storeProductsLoading, isFetching: storeProductsFetching, refetch } = useGetProductsQuery({
-    storeId: selectedStore?._id,
-    productType: category || undefined,
-    search: querySearch.trim() || undefined,
-    page,
-    limit: 24,
-  }, { skip: !selectedStore })
-  const storeFilterReturnedNoProducts = storeProducts?.pagination?.total === 0
-  const { currentData: catalogProducts, error: catalogError, isLoading: catalogLoading, isFetching: catalogFetching } = useGetProductsQuery({
-    productType: category || undefined,
-    search: querySearch.trim() || undefined,
-    page,
-    limit: 100,
-  }, { skip: !selectedStore || !storeFilterReturnedNoProducts })
-  const usingCatalogFallback = Boolean(storeFilterReturnedNoProducts && catalogProducts)
-  const data = usingCatalogFallback ? catalogProducts : storeProducts
-  const fallbackProducts = useMemo(() => usingCatalogFallback
-    ? (catalogProducts?.data || []).filter((product) => getProductStoreId(product) === selectedStore?._id)
-    : null, [usingCatalogFallback, catalogProducts?.data, selectedStore?._id])
-  const error = catalogError || storeProductsError
-  const isLoading = storeProductsLoading || (storeFilterReturnedNoProducts && catalogLoading)
-  const isFetching = storeProductsFetching || (storeFilterReturnedNoProducts && catalogFetching)
   const activeHeroSlide = heroSlides[heroSlideIndex]
   const HeroIcon = activeHeroSlide.icon
-  const browseCategories = categories.filter(({ id }) => id)
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => setQuerySearch(search), 250)
-    return () => window.clearTimeout(timeout)
-  }, [search])
 
   useEffect(() => {
     if (heroInteractionPaused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined
@@ -118,14 +82,7 @@ export default function HomePage({ categoryScreen = false }) {
       setHeroSlideIndex((current) => (current + 1) % heroSlides.length)
     }, 6000)
     return () => window.clearInterval(interval)
-  }, [heroInteractionPaused, heroSlideIndex])
-
-  const products = useMemo(() => [...(usingCatalogFallback ? fallbackProducts || [] : data?.data || [])].sort((a, b) => {
-    if (sort === 'price-low') return (a.pricePerKg ?? a.packs?.[0]?.price ?? 0) - (b.pricePerKg ?? b.packs?.[0]?.price ?? 0)
-    if (sort === 'price-high') return (b.pricePerKg ?? b.packs?.[0]?.price ?? 0) - (a.pricePerKg ?? a.packs?.[0]?.price ?? 0)
-    if (sort === 'name') return a.productName.localeCompare(b.productName)
-    return 0
-  }), [usingCatalogFallback, fallbackProducts, data?.data, sort])
+  }, [heroInteractionPaused])
 
   return (
     <div className="customer-home mx-auto max-w-7xl px-4 pb-5 pt-4 sm:px-6 sm:pt-8 lg:px-8">
@@ -135,82 +92,74 @@ export default function HomePage({ categoryScreen = false }) {
         {search && <button type="button" aria-label="Clear search" onClick={() => setSearch('')} className="shrink-0 text-xs font-semibold text-[var(--brand-primary)]">Clear</button>}
       </label>
 
-      {!categoryScreen && <section
-        aria-label="Store highlights"
-        aria-roledescription="carousel"
-        className={`customer-hero relative mt-5 min-h-[218px] overflow-hidden rounded-[24px] border border-white/10 bg-gradient-to-br px-5 py-5 shadow-[0_18px_42px_-24px_rgba(10,45,31,.6)] transition-colors duration-700 sm:mt-7 sm:min-h-[310px] sm:rounded-[30px] sm:px-10 sm:py-9 ${activeHeroSlide.theme}`}
-        onMouseEnter={() => setHeroInteractionPaused(true)}
-        onMouseLeave={() => setHeroInteractionPaused(false)}
-        onFocusCapture={() => setHeroInteractionPaused(true)}
-        onBlurCapture={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget)) setHeroInteractionPaused(false)
-        }}
-      >
-        <div className="pointer-events-none absolute -right-12 -top-20 h-56 w-56 rounded-full border border-white/15 sm:right-16 sm:h-72 sm:w-72" />
-        <div className="pointer-events-none absolute -right-5 -top-12 h-40 w-40 rounded-full border border-white/15 sm:right-24 sm:h-56 sm:w-56" />
-        <img
-          key={activeHeroSlide.image}
-          src={activeHeroSlide.image}
-          alt={activeHeroSlide.imageAlt}
-          className="pointer-events-none absolute -right-3 top-1/2 h-[88%] w-[59%] -translate-y-1/2 object-contain drop-shadow-[0_18px_18px_rgba(0,0,0,.24)] transition-transform duration-500 sm:right-7 sm:h-[94%] sm:w-[48%]"
-        />
-        <div key={heroSlideIndex} role="group" aria-roledescription="slide" aria-label={`${heroSlideIndex + 1} of ${heroSlides.length}`} className="relative z-10 max-w-[62%] pb-4 text-white sm:max-w-[52%]">
-          <span className={`inline-flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-[.14em] sm:gap-2 sm:text-[10px] ${activeHeroSlide.accent}`}><HeroIcon size={13} strokeWidth={2.2} /> {activeHeroSlide.eyebrow}</span>
-          <h1 className="mt-2 font-display text-[1.55rem] font-semibold leading-[1.03] tracking-[-.045em] text-white sm:mt-3 sm:text-[2.7rem]">{activeHeroSlide.title}</h1>
-          <p className="mt-2 max-w-[19rem] text-[10px] leading-relaxed text-white/75 sm:mt-3 sm:text-sm">{activeHeroSlide.description}</p>
-          <button
-            type="button"
-            onClick={() => navigate(activeHeroSlide.category ? `/categories/${encodeURIComponent(activeHeroSlide.category)}` : '/categories')}
-            className="mt-3 inline-flex h-9 items-center gap-2 rounded-full bg-white px-4 text-[10px] font-bold text-[#174b39] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#e9f4e9] sm:mt-5 sm:h-11 sm:px-5 sm:text-xs"
-          >
-            {activeHeroSlide.action} <ArrowRight size={13} />
-          </button>
-        </div>
-        <div className="absolute bottom-4 right-5 z-10 flex items-center gap-1.5 sm:bottom-6 sm:right-8" aria-label="Choose highlight">
-          {heroSlides.map((slide, index) => <button key={slide.title} type="button" aria-label={`Show ${slide.title}`} aria-current={index === heroSlideIndex} onClick={() => setHeroSlideIndex(index)} className={`h-1.5 rounded-full transition-all ${index === heroSlideIndex ? 'w-6 bg-white' : 'w-1.5 bg-white/45 hover:bg-white/75'}`} />)}
-        </div>
-      </section>}
-
-      {!categoryScreen && <section id="browse-categories" className="scroll-mt-24 pt-7 sm:scroll-mt-28 sm:pt-10">
-        <div className="mb-4 flex items-end justify-between gap-3 sm:mb-5">
-          <div>
-            <p className="text-[9px] font-bold uppercase tracking-[.16em] text-[var(--brand-primary)] sm:text-[10px]">A market in a few taps</p>
-            <h2 className="mt-1 text-lg font-bold tracking-[-.035em] text-[var(--text-primary)] sm:text-2xl">Shop by category</h2>
+      {!categoryScreen && (
+        <section aria-label="Store highlights" aria-roledescription="carousel" className={`customer-hero relative mt-5 min-h-[218px] overflow-hidden rounded-[24px] border border-white/10 bg-gradient-to-br px-5 py-5 shadow-[0_18px_42px_-24px_rgba(10,45,31,.6)] transition-colors duration-700 sm:mt-7 sm:min-h-[310px] sm:rounded-[30px] sm:px-10 sm:py-9 ${activeHeroSlide.theme}`} onMouseEnter={() => setHeroInteractionPaused(true)} onMouseLeave={() => setHeroInteractionPaused(false)} onFocusCapture={() => setHeroInteractionPaused(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setHeroInteractionPaused(false) }}>
+          <div className="pointer-events-none absolute -right-12 -top-20 h-56 w-56 rounded-full border border-white/15 sm:right-16 sm:h-72 sm:w-72" />
+          <div className="pointer-events-none absolute -right-5 -top-12 h-40 w-40 rounded-full border border-white/15 sm:right-24 sm:h-56 sm:w-56" />
+          <img key={activeHeroSlide.image} src={activeHeroSlide.image} alt={activeHeroSlide.imageAlt} className="pointer-events-none absolute -right-3 top-1/2 h-[88%] w-[59%] -translate-y-1/2 object-contain drop-shadow-[0_18px_18px_rgba(0,0,0,.24)] transition-transform duration-500 sm:right-7 sm:h-[94%] sm:w-[48%]" />
+          <div key={heroSlideIndex} role="group" aria-roledescription="slide" aria-label={`${heroSlideIndex + 1} of ${heroSlides.length}`} className="relative z-10 max-w-[62%] pb-4 text-white sm:max-w-[52%]">
+            <span className={`inline-flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-[.14em] sm:gap-2 sm:text-[10px] ${activeHeroSlide.accent}`}><HeroIcon size={13} strokeWidth={2.2} /> {activeHeroSlide.eyebrow}</span>
+            <h1 className="mt-2 font-display text-[1.55rem] font-semibold leading-[1.03] tracking-[-.045em] text-white sm:mt-3 sm:text-[2.7rem]">{activeHeroSlide.title}</h1>
+            <p className="mt-2 max-w-[19rem] text-[10px] leading-relaxed text-white/75 sm:mt-3 sm:text-sm">{activeHeroSlide.description}</p>
+            <button type="button" onClick={() => navigate(activeHeroSlide.category ? `/categories/${encodeURIComponent(activeHeroSlide.category)}` : '/categories')} className="mt-3 inline-flex h-9 items-center gap-2 rounded-full bg-white px-4 text-[10px] font-bold text-[#174b39] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#e9f4e9] sm:mt-5 sm:h-11 sm:px-5 sm:text-xs">{activeHeroSlide.action} <ArrowRight size={13} /></button>
           </div>
-          <Link to="/categories" className="inline-flex items-center gap-1 pb-1 text-[11px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--brand-primary)] sm:text-xs">See all <ArrowRight size={13} /></Link>
-        </div>
-        <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-5 sm:gap-4">
-          {browseCategories.slice(0, 5).map((item, index) => <Link key={item.id} to={`/categories/${encodeURIComponent(item.id)}`} className="category-tile group min-w-0 rounded-2xl border border-transparent bg-white p-2.5 text-center shadow-[0_4px_16px_-12px_rgba(17,44,31,.35)] transition duration-200 hover:-translate-y-0.5 hover:border-[var(--brand-secondary)] hover:shadow-md sm:rounded-[20px] sm:p-4">
-            <span className="mx-auto grid aspect-square max-h-[88px] place-items-center overflow-hidden rounded-xl sm:rounded-2xl" style={{ backgroundColor: categoryTints[index % categoryTints.length] }}>
-              <CategoryPhoto category={item.id} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.06]" />
-            </span>
-            <span className="mt-2 block truncate text-[10px] font-semibold text-[var(--text-primary)] sm:mt-3 sm:text-sm">{item.label}</span>
-          </Link>)}
-        </div>
-      </section>
-      }
+          <div className="absolute bottom-4 right-5 z-10 flex items-center gap-1.5 sm:bottom-6 sm:right-8" aria-label="Choose highlight">
+            {heroSlides.map((slide, index) => (
+              <button key={slide.title} type="button" aria-label={`Show ${slide.title}`} aria-current={index === heroSlideIndex} onClick={() => setHeroSlideIndex(index)} className={`h-1.5 rounded-full transition-all ${index === heroSlideIndex ? 'w-6 bg-white' : 'w-1.5 bg-white/45 hover:bg-white/75'}`} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {!categoryScreen && (
+        <section id="browse-categories" className="scroll-mt-24 pt-7 sm:scroll-mt-28 sm:pt-10">
+          <div className="mb-4 flex items-end justify-between gap-3 sm:mb-5">
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-[.16em] text-[var(--brand-primary)] sm:text-[10px]">A market in a few taps</p>
+              <h2 className="mt-1 text-lg font-bold tracking-[-.035em] text-[var(--text-primary)] sm:text-2xl">Shop by category</h2>
+            </div>
+            <Link to="/categories" className="inline-flex items-center gap-1 pb-1 text-[11px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--brand-primary)] sm:text-xs">See all <ArrowRight size={13} /></Link>
+          </div>
+          <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-5 sm:gap-4">
+            {browseCategories.map((item, index) => (
+              <Link key={item.id} to={`/categories/${encodeURIComponent(item.id)}`} className="category-tile group min-w-0 rounded-2xl border border-transparent bg-white p-2.5 text-center shadow-[0_4px_16px_-12px_rgba(17,44,31,.35)] transition duration-200 hover:-translate-y-0.5 hover:border-[var(--brand-secondary)] hover:shadow-md sm:rounded-[20px] sm:p-4">
+                <span className="mx-auto grid aspect-square max-h-[88px] place-items-center overflow-hidden rounded-xl sm:rounded-2xl" style={{ backgroundColor: categoryTints[index % categoryTints.length] }}>
+                  <CategoryPhoto category={item.id} imageUrl={item.imageUrl} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.06]" />
+                </span>
+                <span className="mt-2 block truncate text-[10px] font-semibold text-[var(--text-primary)] sm:mt-3 sm:text-sm">{item.label}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section id="products" className={`scroll-mt-20 ${categoryScreen ? 'pt-2 sm:pt-5' : 'pt-8 sm:scroll-mt-24 sm:pt-12'}`}>
         <div className="flex flex-wrap items-end justify-between gap-2 sm:gap-4">
           <div>
-            {categoryScreen
-              ? <Link to="/categories" className="mb-3 inline-flex items-center gap-2 text-xs font-semibold text-[var(--brand-primary)]"><ArrowRight className="rotate-180" size={15} /> All categories</Link>
-              : <p className="text-[9px] font-bold uppercase tracking-[.15em] text-[var(--brand-primary)] sm:text-[10px] sm:tracking-[.19em]">From your neighbourhood store</p>}
+            {categoryScreen ? (
+              <Link to="/categories" className="mb-3 inline-flex items-center gap-2 text-xs font-semibold text-[var(--brand-primary)]"><ArrowRight className="rotate-180" size={15} /> All categories</Link>
+            ) : (
+              <p className="text-[9px] font-bold uppercase tracking-[.15em] text-[var(--brand-primary)] sm:text-[10px] sm:tracking-[.19em]">From your neighbourhood store</p>
+            )}
             <h1 className="mt-1 text-xl font-bold tracking-[-.035em] text-[var(--text-primary)] sm:text-[2rem]">{categoryScreen ? formatCategoryLabel(category) : 'The fresh edit'}</h1>
           </div>
           <p className="text-[10px] text-[var(--text-secondary)] sm:text-xs">{selectedStore?.storeName || 'Choose your nearby store'}</p>
         </div>
 
         <div className="mt-4 grid gap-3 sm:mt-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:gap-4">
-          {!categoryScreen && <div className="min-w-0">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[var(--text-secondary)]">Shop by category</p>
-              <span className="text-[10px] text-[var(--text-secondary)] sm:hidden">Swipe to explore</span>
+          {!categoryScreen && (
+            <div className="min-w-0">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[var(--text-secondary)]">Shop by category</p>
+                <span className="text-[10px] text-[var(--text-secondary)] sm:hidden">Swipe to explore</span>
+              </div>
+              <div aria-label="Product categories" className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto pb-1 sm:gap-1.5">
+                {categories.map((item) => (
+                  <Link key={item.id} to={item.id ? `/categories/${encodeURIComponent(item.id)}` : '/'} className="shrink-0 rounded-full border border-[var(--border-default)] bg-[var(--bg-surface)] px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] transition hover:border-[var(--brand-primary)] hover:bg-[var(--brand-primary-soft)] hover:text-[var(--text-primary)] sm:px-3.5 sm:py-2 sm:text-[11px]">{item.label}</Link>
+                ))}
+              </div>
             </div>
-            <div aria-label="Product categories" className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto pb-1 sm:gap-1.5">
-              {categories.map((item) => <Link key={item.id} to={item.id ? `/categories/${encodeURIComponent(item.id)}` : '/'} className="shrink-0 rounded-full border border-[var(--border-default)] bg-[var(--bg-surface)] px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] transition hover:border-[var(--brand-primary)] hover:bg-[var(--brand-primary-soft)] hover:text-[var(--text-primary)] sm:px-3.5 sm:py-2 sm:text-[11px]">{item.label}</Link>)}
-            </div>
-          </div>}
+          )}
           <label className="flex h-11 min-w-0 items-center gap-3 rounded-xl border border-[var(--border-default)] bg-white px-3.5 text-[var(--text-secondary)] sm:h-10 sm:min-w-[190px]">
             <ArrowDownWideNarrow size={16} strokeWidth={1.8} />
             <span className="shrink-0 text-xs font-semibold text-[var(--text-secondary)]">Sort by</span>
@@ -224,7 +173,7 @@ export default function HomePage({ categoryScreen = false }) {
         </div>
 
         <div className="mt-1.5 flex min-h-4 items-center justify-between sm:mt-4 sm:min-h-5">
-          <p className="text-[10px] text-[var(--text-secondary)] sm:text-[11px]">{selectedStore ? `${selectedStore.storeName}${data?.pagination ? ` · ${usingCatalogFallback ? fallbackProducts.length : data.pagination.total} items` : ''}` : 'Choose a store to see its selection'}</p>
+          <p className="text-[10px] text-[var(--text-secondary)] sm:text-[11px]">{selectedStore ? `${selectedStore.storeName}${data?.pagination ? ` · ${usingCatalogFallback ? products.length : data.pagination.total} items` : ''}` : 'Choose a store to see its selection'}</p>
           {isFetching && !isLoading && <span className="text-[11px] text-[var(--text-secondary)]">Updating selection…</span>}
         </div>
         {(isLoading || (isFetching && !data)) && <div className="mt-4 rounded-2xl border border-[var(--border-default)] bg-white"><CookingLoader compact label="Finding fresh picks for you…" /></div>}
@@ -233,7 +182,13 @@ export default function HomePage({ categoryScreen = false }) {
         {!selectedStore && !error && <div className="mt-5 rounded-2xl bg-white px-5 py-12 text-center text-sm text-[var(--text-secondary)]">Choose a store to browse its available products.</div>}
         {!isLoading && !isFetching && !error && selectedStore && products.length > 0 && <div className="product-grid mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">{products.map((product) => <ProductCard key={product._id} product={product} />)}</div>}
         {!isLoading && !isFetching && !error && selectedStore && products.length === 0 && <div className="mt-5 rounded-2xl bg-white px-6 py-14 text-center"><h3 className="font-display text-xl text-[var(--text-secondary)]">Nothing here just yet</h3><p className="mt-1 text-sm text-[var(--text-secondary)]">Try another category or search term.</p></div>}
-        {data?.pagination?.pages > 1 && <div className="mt-7 flex items-center justify-center gap-3"><button disabled={page <= 1 || isFetching} onClick={() => setPageState({ storeId: selectedStore._id, category, search: querySearch, page: page - 1 })} className="rounded-full border border-[var(--border-default)] px-4 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:bg-white disabled:opacity-40">Previous</button><span className="text-[11px] text-[var(--text-secondary)]">Page {page} of {data.pagination.pages}</span><button disabled={page >= data.pagination.pages || isFetching} onClick={() => setPageState({ storeId: selectedStore._id, category, search: querySearch, page: page + 1 })} className="rounded-full border border-[var(--border-default)] px-4 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:bg-white disabled:opacity-40">Next</button></div>}
+        {data?.pagination?.pages > 1 && (
+          <div className="mt-7 flex items-center justify-center gap-3">
+            <button disabled={page <= 1 || isFetching} onClick={() => setPageState({ storeId: selectedStore._id, category, search, page: page - 1 })} className="rounded-full border border-[var(--border-default)] px-4 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:bg-white disabled:opacity-40">Previous</button>
+            <span className="text-[11px] text-[var(--text-secondary)]">Page {page} of {data.pagination.pages}</span>
+            <button disabled={page >= data.pagination.pages || isFetching} onClick={() => setPageState({ storeId: selectedStore._id, category, search, page: page + 1 })} className="rounded-full border border-[var(--border-default)] px-4 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:bg-white disabled:opacity-40">Next</button>
+          </div>
+        )}
       </section>
     </div>
   )

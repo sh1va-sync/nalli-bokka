@@ -39,7 +39,7 @@ export const api = createApi({
       keepUnusedDataFor: 300,
     }),
     getProductCategories: builder.query({
-      query: () => '/products/categories',
+      query: (params = {}) => ({ url: '/products/categories', params }),
       providesTags: ['ProductCategories'],
       keepUnusedDataFor: 300,
     }),

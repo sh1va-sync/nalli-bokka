@@ -49,6 +49,15 @@ function productFormData(productData) {
   return formData;
 }
 
+function categoryFormData(name) {
+  const formData = new FormData();
+  formData.append('name', name);
+  formData.append('image', new Blob([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  ], { type: 'image/png' }), 'category.png');
+  return formData;
+}
+
 before(async () => {
   process.env.JWT_SECRET = 'test-secret-that-is-long-enough-for-integration-tests';
   process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
@@ -133,16 +142,25 @@ test('store-created categories persist and support custom product pricing and in
   );
   const headers = {
     authorization: `Bearer ${storeToken}`,
-    'content-type': 'application/json'
   };
+
+  const missingCategoryImageResponse = await fetch(`${baseUrl}/store/product-categories`, {
+    method: 'POST',
+    headers: { ...headers, 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'unillustrated category' })
+  });
+  assert.equal(missingCategoryImageResponse.status, 400);
+  assert.equal(await ProductCategory.exists({ storeId: store._id, normalizedName: 'unillustrated category' }), null);
 
   const categoryResponse = await fetch(`${baseUrl}/store/product-categories`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ name: 'Pet Supplies' })
+    body: categoryFormData('Pet Supplies')
   });
   assert.equal(categoryResponse.status, 201);
-  assert.deepEqual((await categoryResponse.json()).data, { name: 'pet supplies' });
+  const createdCategory = (await categoryResponse.json()).data;
+  assert.equal(createdCategory.name, 'pet supplies');
+  assert.match(createdCategory.imageUrl, /^https:\/\/res\.cloudinary\.com\//);
 
   const productResponse = await fetch(`${baseUrl}/store/products`, {
     method: 'POST',
@@ -209,9 +227,15 @@ test('store-created categories persist and support custom product pricing and in
   assert.equal(inventoryResponse.status, 200);
   assert.equal((await inventoryResponse.json()).data[0]._id, product._id);
 
-  const publicCategoriesResponse = await fetch(`${baseUrl}/products/categories`);
+  const publicCategoriesResponse = await fetch(`${baseUrl}/products/categories?storeId=${store._id}`);
   assert.equal(publicCategoriesResponse.status, 200);
-  assert.ok((await publicCategoriesResponse.json()).data.includes('pet supplies'));
+  const publicCategories = await publicCategoriesResponse.json();
+  assert.ok(publicCategories.data.includes('pet supplies'));
+  assert.equal(publicCategories.images['pet supplies'], createdCategory.imageUrl);
+  const otherStoreCategoriesResponse = await fetch(`${baseUrl}/products/categories?storeId=${otherStore._id}`);
+  const otherStoreCategories = await otherStoreCategoriesResponse.json();
+  assert.equal(otherStoreCategories.data.includes('pet supplies'), false);
+  assert.deepEqual(otherStoreCategories.images, {});
 
   const fruitDeleteResponse = await fetch(`${baseUrl}/store/product-categories/fruit`, {
     method: 'DELETE',
@@ -225,7 +249,7 @@ test('store-created categories persist and support custom product pricing and in
   assert.ok((await publicCategoriesAfterDelete.json()).data.includes('fruit'));
   const restoreBuiltInResponse = await fetch(`${baseUrl}/store/product-categories`, {
     method: 'POST',
-    headers,
+    headers: { ...headers, 'content-type': 'application/json' },
     body: JSON.stringify({ name: 'Fruit' })
   });
   assert.equal(restoreBuiltInResponse.status, 201);
@@ -233,7 +257,7 @@ test('store-created categories persist and support custom product pricing and in
 
   const duplicateResponse = await fetch(`${baseUrl}/store/product-categories`, {
     method: 'POST',
-    headers,
+    headers: { ...headers, 'content-type': 'application/json' },
     body: JSON.stringify({ name: 'PET SUPPLIES' })
   });
   assert.equal(duplicateResponse.status, 409);

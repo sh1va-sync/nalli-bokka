@@ -1,11 +1,7 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { useDispatch, useSelector } from 'react-redux'
+import { lazy, Suspense } from 'react'
+import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import { Grid2X2, House, PackageCheck, ShoppingBasket, UserRound } from 'lucide-react'
-import { removeGuestItem } from './features/cart/cartSlice.js'
-import { setSelectedStore } from './features/store/storeSlice.js'
-import { api, useAddCartItemMutation, useGetCartQuery, useGetMeQuery, useGetOrdersQuery, useGetStoresQuery, useGetUserNotificationsQuery } from './features/api/api.js'
-import { clearSessionNotice, setSessionNotice, signedOut } from './features/auth/authSlice.js'
+import { clearSessionNotice } from './features/auth/authSlice.js'
 import Header from './features/customer/components/Header.jsx'
 import StorePicker from './features/customer/components/StorePicker.jsx'
 import LoginDialog from './features/customer/components/LoginDialog.jsx'
@@ -14,7 +10,8 @@ import Toast from './features/customer/components/Toast.jsx'
 import HomePage from './features/customer/pages/HomePage.jsx'
 import ActiveOrderBanner from './features/customer/components/ActiveOrderBanner.jsx'
 import PwaInstallPrompt from './features/customer/components/PwaInstallPrompt.jsx'
-import { createUuid, getErrorMessage } from './features/customer/utils.js'
+import { getErrorMessage } from './features/customer/utils.js'
+import { useCustomerAppState } from './features/customer/hooks/useCustomerAppState.js'
 
 const CheckoutPage = lazy(() => import('./features/customer/pages/CheckoutPage.jsx'))
 const ProfilePage = lazy(() => import('./features/customer/pages/ProfilePage.jsx'))
@@ -24,152 +21,38 @@ const StoreLoginPage = lazy(() => import('./features/storeAdmin/pages/StoreLogin
 const StoreDashboardPage = lazy(() => import('./features/storeAdmin/pages/StoreDashboardPage.jsx'))
 
 function App() {
-  const dispatch = useDispatch()
-  const navigate = useNavigate()
-  const location = useLocation()
-  const isStoreRoute = location.pathname.startsWith('/store')
-  const token = useSelector((state) => state.auth.token)
-  const guestItems = useSelector((state) => state.cart.guestItems)
-  const selectedStore = useSelector((state) => state.selectedStore)
-  const sessionNotice = useSelector((state) => state.auth.sessionNotice)
-  const [storeOpen, setStoreOpen] = useState(!selectedStore)
-  const [loginOpen, setLoginOpen] = useState(false)
-  const [cartOpen, setCartOpen] = useState(false)
-  const [loginReason, setLoginReason] = useState('')
-  const [loginReturnTo, setLoginReturnTo] = useState('')
-  const [toasts, setToasts] = useState([])
-  const notificationBaseline = useRef({ token: null, initialized: false, fingerprints: new Set() })
-  const [addCartItem] = useAddCartItemMutation()
-  const { data: meResponse, error: meError } = useGetMeQuery(undefined, { skip: !token || isStoreRoute })
-  const { data: storesResponse, error: storesError } = useGetStoresQuery(
-    { limit: 100 },
-    { skip: isStoreRoute, pollingInterval: isStoreRoute ? 0 : 60000 }
-  )
-  const { data: cartResponse, error: cartError } = useGetCartQuery(undefined, { skip: !token || isStoreRoute })
-  const { data: notificationResponse } = useGetUserNotificationsQuery(
-    { page: 1, limit: 8 },
-    { skip: !token || isStoreRoute, pollingInterval: token && !isStoreRoute ? 60000 : 0 }
-  )
-  const isHomeRoute = location.pathname === '/'
-  const activeOrdersQueryOptions = {
-    skip: !token || isStoreRoute || !isHomeRoute,
-    pollingInterval: token && !isStoreRoute && isHomeRoute ? 60000 : 0,
-  }
-  const { data: placedOrdersResponse, error: placedOrdersError } = useGetOrdersQuery(
-    { page: 1, limit: 5, orderStatus: 'placed' },
-    activeOrdersQueryOptions
-  )
-  const { data: packingOrdersResponse, error: packingOrdersError } = useGetOrdersQuery(
-    { page: 1, limit: 5, orderStatus: 'packing' },
-    activeOrdersQueryOptions
-  )
-  const { data: deliveryOrdersResponse, error: deliveryOrdersError } = useGetOrdersQuery(
-    { page: 1, limit: 5, orderStatus: 'out for delivery' },
-    activeOrdersQueryOptions
-  )
-  const { data: pickupOrdersResponse, error: pickupOrdersError } = useGetOrdersQuery(
-    { page: 1, limit: 5, orderStatus: 'ready for pickup' },
-    activeOrdersQueryOptions
-  )
-
-  const cartItems = token
-    ? [...(cartResponse?.data?.items || []), ...guestItems.map((item) => ({ ...item, needsSync: true }))]
-    : guestItems
-  const cartCount = cartItems.length
-  const selectedStoreIsClosed = selectedStore?.isOpen === false
-  const activeOrder = [
-    ...(placedOrdersResponse?.data || []),
-    ...(packingOrdersResponse?.data || []),
-    ...(deliveryOrdersResponse?.data || []),
-    ...(pickupOrdersResponse?.data || []),
-  ].sort((first, second) => new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime())[0]
-  const activeOrdersError = placedOrdersError || packingOrdersError || deliveryOrdersError || pickupOrdersError
-
-  useEffect(() => {
-    const latestStore = storesResponse?.data?.find(({ _id }) => _id === selectedStore?._id)
-    if (!latestStore) return
-    if (
-      latestStore.isOpen !== selectedStore.isOpen
-      || latestStore.storePhone !== selectedStore.storePhone
-      || latestStore.storeNumber !== selectedStore.storeNumber
-    ) {
-      dispatch(setSelectedStore({ ...selectedStore, ...latestStore }))
-    }
-  }, [dispatch, selectedStore, storesResponse])
-
-  useEffect(() => {
-    if (isStoreRoute) return
-    const invalidToken = meError?.status === 401 || meError?.status === 403
-    const wrongRole = meResponse?.role && meResponse.role !== 'user'
-    if (token && (invalidToken || wrongRole)) {
-      dispatch(signedOut())
-      dispatch(api.util.resetApiState())
-      dispatch(setSessionNotice(wrongRole ? 'This storefront is for customer accounts. Please sign in with your customer phone number.' : 'Your session expired. Sign in again to continue.'))
-    }
-  }, [dispatch, isStoreRoute, meError, meResponse, token])
-
-  function openLogin(reason = '', returnTo = '') {
-    setLoginReason(reason)
-    setLoginReturnTo(returnTo)
-    setLoginOpen(true)
-  }
-
-  const showToast = useCallback((notice) => {
-    const id = createUuid()
-    setToasts((current) => [...current, { ...notice, id }])
-    return id
-  }, [])
-
-  const dismissToast = useCallback((toastId) => {
-    setToasts((current) => current.filter(({ id }) => id !== toastId))
-  }, [])
-
-  useEffect(() => {
-    if (!token || isStoreRoute) {
-      notificationBaseline.current = { token: null, initialized: false, fingerprints: new Set() }
-      return
-    }
-    if (!notificationResponse?.data) return
-    if (notificationBaseline.current.token !== token) {
-      notificationBaseline.current = { token, initialized: false, fingerprints: new Set() }
-    }
-
-    const fingerprints = notificationBaseline.current.fingerprints
-    const currentFingerprints = new Set()
-    for (const notification of notificationResponse.data) {
-      const fingerprint = `${notification._id}:${notification.title}:${notification.message}`
-      currentFingerprints.add(fingerprint)
-      if (notificationBaseline.current.initialized && !fingerprints.has(fingerprint)) {
-        showToast({
-          type: 'notification',
-          title: notification.title,
-          message: notification.message,
-          to: `/orders?order=${notification.orderId}`,
-          actionLabel: 'View order'
-        })
-      }
-    }
-    notificationBaseline.current = { token, initialized: true, fingerprints: currentFingerprints }
-  }, [isStoreRoute, notificationResponse, showToast, token])
-
-  async function handleSignedIn() {
-    for (const item of guestItems) {
-      try {
-        await addCartItem({
-          productId: item.product._id,
-          selectionType: item.selectionType,
-          selectedQuantity: item.selectedQuantity,
-          ...(item.selectedPackLabel ? { selectedPackLabel: item.selectedPackLabel } : {}),
-        }).unwrap()
-        dispatch(removeGuestItem(item.key))
-      } catch (error) {
-        return `Your account is ready, but ${item.product.productName} couldn’t sync: ${getErrorMessage(error)}`
-      }
-    }
-    if (loginReturnTo) navigate(loginReturnTo)
-    setLoginReturnTo('')
-    return ''
-  }
+  const {
+    dispatch,
+    token,
+    cartItems,
+    cartCount,
+    selectedStore,
+    selectedStoreIsClosed,
+    storeOpen,
+    setStoreOpen,
+    loginOpen,
+    sessionNotice,
+    loginReason,
+    cartError,
+    storesError,
+    meError,
+    isStoreRoute,
+    isHomeRoute,
+    activeOrder,
+    activeOrdersError,
+    toasts,
+    showToast,
+    dismissToast,
+    loginReturnTo,
+    setLoginOpen,
+    setLoginReturnTo,
+    openLogin,
+    handleSignedIn,
+    navigate,
+    cartOpen,
+    setCartOpen,
+    location,
+  } = useCustomerAppState()
 
   if (isStoreRoute) return <div className="min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
     <Suspense fallback={<div className="grid min-h-screen place-items-center text-sm text-[var(--text-secondary)]"><span className="mr-2 inline-block h-4 w-4 rounded-full border-2 border-[var(--border-default)] border-t-[var(--brand-primary)] motion-safe:animate-spin" />Loading store workspace…</div>}>

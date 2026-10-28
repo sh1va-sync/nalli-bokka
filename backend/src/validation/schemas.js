@@ -73,6 +73,11 @@ const schemas = {
       search: z.string().trim().max(100).optional()
     }).strict()
   },
+  productCategoryList: {
+    query: z.object({
+      storeId: objectId.optional()
+    }).strict()
+  },
   storeList: {
     query: z.object({
       ...pagination,

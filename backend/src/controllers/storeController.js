@@ -12,7 +12,12 @@ import escapeRegex from '../utils/escapeRegex.js';
 import { BUILT_IN_PRODUCT_TYPES } from '../utils/productTypes.js';
 import { roundToPaise } from '../utils/pricing.js';
 import { recordStoreAudit } from '../services/audit.js';
-import { deleteProductImage, uploadProductImage } from '../services/productImages.js';
+import {
+  deleteCategoryImage,
+  deleteProductImage,
+  uploadCategoryImage,
+  uploadProductImage
+} from '../services/productImages.js';
 
 const PRODUCT_FIELDS = [
   'productType',
@@ -53,7 +58,10 @@ export async function createStoreProductCategory(req, res) {
 
   const session = await ProductCategory.db.startSession();
   let category;
+  let image;
+  let previousImagePublicId;
   try {
+    image = req.file ? await uploadCategoryImage(req.file, req.auth.id) : null;
     await session.withTransaction(async () => {
       const existingCategory = await ProductCategory.findOne({
         storeId: req.auth.id,
@@ -61,6 +69,11 @@ export async function createStoreProductCategory(req, res) {
       }).session(session);
       if (existingCategory?.isDeleted) {
         existingCategory.isDeleted = false;
+        if (image) {
+          previousImagePublicId = existingCategory.imagePublicId;
+          existingCategory.imageUrl = image.imageUrl;
+          existingCategory.imagePublicId = image.imagePublicId;
+        }
         category = await existingCategory.save({ session });
         await recordStoreAudit({
           session,
@@ -68,17 +81,21 @@ export async function createStoreProductCategory(req, res) {
           action: 'product.category.created',
           entityType: 'productCategory',
           entityId: category._id,
-          changedFields: ['name']
+          changedFields: ['name', ...(image ? ['imageUrl', 'imagePublicId'] : [])]
         });
         return;
       }
       if (existingCategory || BUILT_IN_PRODUCT_TYPES.includes(name)) {
         throw new AppError(409, 'That category already exists');
       }
+      if (!image) {
+        throw new AppError(400, 'Choose a category image file');
+      }
       [category] = await ProductCategory.create([{
         storeId: req.auth.id,
         name,
-        normalizedName: name
+        normalizedName: name,
+        ...(image || {})
       }], { session });
       await recordStoreAudit({
         session,
@@ -86,10 +103,23 @@ export async function createStoreProductCategory(req, res) {
         action: 'product.category.created',
         entityType: 'productCategory',
         entityId: category._id,
-        changedFields: ['name']
+        changedFields: ['name', ...(image ? ['imageUrl', 'imagePublicId'] : [])]
       });
     });
   } catch (error) {
+    if (image) {
+      try {
+        await deleteCategoryImage(image.imagePublicId);
+      } catch (cleanupError) {
+        console.error(JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'error',
+          event: 'cloudinary.category_image.rollback_cleanup.failed',
+          publicId: image.imagePublicId,
+          message: cleanupError.message
+        }));
+      }
+    }
     if (error?.code === 11000) {
       throw new AppError(409, 'That category already exists');
     }
@@ -97,7 +127,25 @@ export async function createStoreProductCategory(req, res) {
   } finally {
     await session.endSession();
   }
-  res.status(201).json({ data: { name: category.name } });
+  if (previousImagePublicId && image && previousImagePublicId !== image.imagePublicId) {
+    try {
+      await deleteCategoryImage(previousImagePublicId);
+    } catch (cleanupError) {
+      console.error(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'error',
+        event: 'cloudinary.category_image.replacement_cleanup.failed',
+        publicId: previousImagePublicId,
+        message: cleanupError.message
+      }));
+    }
+  }
+  res.status(201).json({
+    data: {
+      name: category.name,
+      ...(category.imageUrl ? { imageUrl: category.imageUrl } : {})
+    }
+  });
 }
 
 export async function deleteStoreProductCategory(req, res) {

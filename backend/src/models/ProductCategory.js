@@ -19,6 +19,14 @@ const productCategorySchema = new mongoose.Schema({
     trim: true,
     maxlength: 40
   },
+  imageUrl: {
+    type: String,
+    trim: true
+  },
+  imagePublicId: {
+    type: String,
+    trim: true
+  },
   isDeleted: {
     type: Boolean,
     default: false

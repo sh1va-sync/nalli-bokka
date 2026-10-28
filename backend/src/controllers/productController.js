@@ -5,8 +5,18 @@ import escapeRegex from '../utils/escapeRegex.js';
 import { BUILT_IN_PRODUCT_TYPES } from '../utils/productTypes.js';
 
 export async function listProductCategories(req, res) {
-  const names = await ProductCategory.distinct('name');
-  res.json({ data: [...new Set([...BUILT_IN_PRODUCT_TYPES, ...names])].sort() });
+  const { storeId } = req.validated.query;
+  const filter = { isDeleted: { $ne: true } };
+  if (storeId) filter.storeId = storeId;
+  const categories = await ProductCategory.find(filter).select('name imageUrl -_id').sort({ name: 1 }).lean();
+  const customNames = categories.map(category => category.name);
+  const images = storeId
+    ? Object.fromEntries(categories.filter(category => category.imageUrl).map(({ name, imageUrl }) => [name, imageUrl]))
+    : {};
+  res.json({
+    data: [...new Set([...BUILT_IN_PRODUCT_TYPES, ...customNames])].sort(),
+    images
+  });
 }
 
 export async function listProducts(req, res) {

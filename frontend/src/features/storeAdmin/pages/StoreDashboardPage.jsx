@@ -127,6 +127,8 @@ function ProductForm({ product, categories = [], onCancel, onSaved }) {
   const [imagePreview, setImagePreview] = useState(product?.imageUrl || '')
   const [error, setError] = useState('')
   const [categoryName, setCategoryName] = useState('')
+  const [categoryImageFile, setCategoryImageFile] = useState(null)
+  const [categoryImagePreview, setCategoryImagePreview] = useState('')
   const [categoryError, setCategoryError] = useState('')
   const [showCategoryInput, setShowCategoryInput] = useState(false)
   const packPricing = form.pricingMode === 'pack'
@@ -137,6 +139,12 @@ function ProductForm({ product, categories = [], onCancel, onSaved }) {
       if (imagePreview.startsWith('blob:')) URL.revokeObjectURL(imagePreview)
     }
   }, [imagePreview])
+
+  useEffect(() => {
+    return () => {
+      if (categoryImagePreview.startsWith('blob:')) URL.revokeObjectURL(categoryImagePreview)
+    }
+  }, [categoryImagePreview])
 
   async function submit(event) {
     event.preventDefault()
@@ -184,10 +192,19 @@ function ProductForm({ product, categories = [], onCancel, onSaved }) {
 
   async function saveCategory() {
     setCategoryError('')
+    if (!categoryImageFile) {
+      setCategoryError('Choose an image for this category.')
+      return
+    }
+    const body = new FormData()
+    body.append('name', categoryName.trim())
+    body.append('image', categoryImageFile)
     try {
-      const response = await createCategory({ name: categoryName.trim() }).unwrap()
+      const response = await createCategory(body).unwrap()
       setForm((current) => ({ ...current, productType: response.data.name, pricingMode: 'weight' }))
       setCategoryName('')
+      setCategoryImageFile(null)
+      setCategoryImagePreview('')
       setShowCategoryInput(false)
     } catch (requestError) {
       setCategoryError(getErrorMessage(requestError))
@@ -214,7 +231,33 @@ function ProductForm({ product, categories = [], onCancel, onSaved }) {
         </label>
         {!product && (showCategoryInput
           ? <div className="mt-2">
-            <div className="flex gap-2"><input autoFocus maxLength={40} value={categoryName} onChange={(event) => setCategoryName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (categoryName.trim()) saveCategory() } }} aria-label="New category name" placeholder="New category name" className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--border-default)] bg-white px-3 text-xs outline-none focus:border-[var(--brand-primary)]" /><button type="button" disabled={!categoryName.trim() || createCategoryState.isLoading} onClick={saveCategory} className="rounded-lg bg-[var(--brand-primary)] px-3 text-xs font-semibold text-white disabled:opacity-50">{createCategoryState.isLoading ? 'Saving…' : 'Save'}</button><button type="button" onClick={() => { setShowCategoryInput(false); setCategoryError('') }} className="rounded-lg px-2 text-xs font-semibold text-[var(--brand-primary)]">Cancel</button></div>
+            <div className="space-y-2">
+              <input autoFocus maxLength={40} value={categoryName} onChange={(event) => setCategoryName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (categoryName.trim() && categoryImageFile) saveCategory() } }} aria-label="New category name" placeholder="New category name" className="h-9 w-full rounded-lg border border-[var(--border-default)] bg-white px-3 text-xs outline-none focus:border-[var(--brand-primary)]" />
+              <label className="block rounded-lg border border-dashed border-[var(--border-default)] bg-white p-2 text-[10px] font-semibold text-[var(--text-secondary)]">
+                CATEGORY IMAGE (JPEG, PNG, or WebP · max 5 MB)
+                <input required type="file" accept="image/jpeg,image/png,image/webp" aria-label="Category image" onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  setCategoryError('')
+                  if (file && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+                    setCategoryError('Choose a JPEG, PNG, or WebP image.')
+                    event.target.value = ''
+                    return
+                  }
+                  if (file && file.size > 5 * 1024 * 1024) {
+                    setCategoryError('Category images must be 5 MB or smaller.')
+                    event.target.value = ''
+                    return
+                  }
+                  setCategoryImageFile(file || null)
+                  setCategoryImagePreview(file ? URL.createObjectURL(file) : '')
+                }} className="mt-1.5 block w-full text-[10px] font-normal" />
+              </label>
+              {categoryImagePreview && <img src={categoryImagePreview} alt="Category preview" className="h-16 w-16 rounded-lg object-cover" />}
+              <div className="flex justify-end gap-2">
+                <button type="button" disabled={!categoryName.trim() || !categoryImageFile || createCategoryState.isLoading} onClick={saveCategory} className="rounded-lg bg-[var(--brand-primary)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{createCategoryState.isLoading ? 'Saving…' : 'Save'}</button>
+                <button type="button" onClick={() => { setShowCategoryInput(false); setCategoryName(''); setCategoryImageFile(null); setCategoryImagePreview(''); setCategoryError('') }} className="rounded-lg px-2 text-xs font-semibold text-[var(--brand-primary)]">Cancel</button>
+              </div>
+            </div>
             {categoryError && <p role="alert" className="mt-2 text-xs text-rose-700">{categoryError}</p>}
           </div>
           : <button type="button" onClick={() => setShowCategoryInput(true)} className="mt-2 text-xs font-semibold text-[var(--brand-primary)]">+ Add category</button>)}
