@@ -7,7 +7,7 @@ import {
   useMarkAllUserNotificationsReadMutation,
   useMarkUserNotificationReadMutation,
 } from '../../api/api.js'
-import { getErrorMessage } from '../utils.js'
+import { capitalizeFirstLetter, getErrorMessage } from '../utils.js'
 
 export default function Header({ cartCount, onOpenCart, onChooseStore, onLogin, onCartError }) {
   const navigate = useNavigate()
@@ -70,20 +70,18 @@ export default function Header({ cartCount, onOpenCart, onChooseStore, onLogin, 
         <Link to="/" className="col-start-1 row-start-1 flex min-w-0 shrink-0 items-center gap-2 sm:col-auto sm:row-auto sm:gap-2.5" aria-label="NalliBokka home">
           <img src="/nallibokka-logo.png" alt="" className="h-10 w-10 object-contain" />
           <span className="leading-tight">
-            <span className="block text-[16px] font-bold tracking-[-.045em] text-[var(--text-primary)] sm:text-[18px]">NalliBokka</span>
+            <span className="block text-[18px] font-bold tracking-[-.04em] text-[var(--text-primary)] sm:text-[20px]">NalliBokka</span>
             <span className="mt-0.5 hidden text-[9px] font-medium uppercase tracking-[.16em] text-[var(--text-secondary)] sm:block">Everyday, thoughtfully fresh</span>
           </span>
         </Link>
         <span className="mx-1 hidden h-8 w-px bg-[#e7e3d9] sm:block" />
-        <button onClick={onChooseStore} className="store-selector-button col-span-3 row-start-2 flex min-h-12 min-w-0 items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-left shadow-[0_3px_12px_-10px_rgba(18,49,37,.35)] sm:col-span-1 sm:row-auto sm:min-h-0 sm:rounded-xl sm:px-3 sm:py-2 sm:shadow-sm">
-          <span className="flex min-w-0 items-center gap-2.5">
-            <span className="store-selector-icon grid h-8 w-8 shrink-0 place-items-center rounded-xl"><MapPin size={17} strokeWidth={2.1} /></span>
-            <span className="min-w-0">
-              <span className="block text-[9px] font-semibold text-white/75">Delivering to</span>
-              <span className="mt-0.5 flex items-center gap-1 truncate text-xs font-bold text-white sm:text-sm">{selectedStore?.location || 'Choose your store'} <ChevronDown size={13} className="shrink-0 text-white/75" /></span>
-            </span>
+        <button onClick={onChooseStore} className={`store-selector-button ${user ? 'col-start-3' : 'col-start-2'} row-start-1 flex h-9 max-w-[118px] min-w-0 items-center gap-1.5 rounded-xl border px-2 text-left sm:col-span-1 sm:row-auto sm:h-auto sm:max-w-none sm:justify-between sm:gap-3 sm:px-3 sm:py-1.5`}>
+          <span className="store-selector-icon grid h-6 w-6 shrink-0 place-items-center rounded-lg sm:h-7 sm:w-7"><MapPin size={15} strokeWidth={2} /></span>
+          <span className="min-w-0 flex-1">
+            <span className="store-selector-caption hidden text-[9px] font-medium sm:block">Delivering to</span>
+            <span className="mt-0.5 flex min-w-0 items-center gap-0.5 truncate text-[11px] font-semibold sm:text-sm">{capitalizeFirstLetter(selectedStore?.location || 'Choose store')} <ChevronDown size={12} className="shrink-0 sm:h-[13px] sm:w-[13px]" /></span>
           </span>
-          {selectedStore && <span className={`store-selector-status shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold ${selectedStore.isOpen === false ? '!bg-[#fff2f0] !text-[var(--status-danger)]' : ''}`}>{selectedStore.isOpen === false ? 'Currently closed' : 'Open'}</span>}
+          {selectedStore && <span className={`store-selector-status hidden shrink-0 rounded-full px-2.5 py-1 text-[9px] font-semibold sm:inline-flex ${selectedStore.isOpen === false ? '!bg-[#fff2f0] !text-[var(--status-danger)]' : ''}`}>{selectedStore.isOpen === false ? 'Currently closed' : 'Open'}</span>}
         </button>
         <nav className="ml-auto hidden items-center gap-7 text-[13px] font-medium md:flex">
           {user && <NavLink to="/orders" className={({ isActive }) => isActive ? 'text-[var(--brand-primary)]' : 'text-[var(--text-secondary)] transition hover:text-[var(--text-secondary)]'}>Orders</NavLink>}

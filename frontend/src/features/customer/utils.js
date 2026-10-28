@@ -18,6 +18,11 @@ export function getErrorMessage(error) {
   return error?.data?.error || error?.data?.message || error?.message || error?.error || 'Something went wrong. Please try again.'
 }
 
+export function capitalizeFirstLetter(value = '') {
+  const [firstLetter, ...rest] = value.trim()
+  return firstLetter ? `${firstLetter.toLocaleUpperCase()}${rest.join('')}` : ''
+}
+
 export function getProductStoreId(product) {
   return typeof product?.storeId === 'string'
     ? product.storeId

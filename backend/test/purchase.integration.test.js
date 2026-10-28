@@ -278,6 +278,94 @@ test('store-created categories persist and support custom product pricing and in
   assert.ok(await AuditEvent.findOne({ actorId: store._id, action: 'product.category.deleted' }));
 });
 
+test('deleted inventory products retain their image on historical customer orders', async () => {
+  const store = await Store.create({
+    storeName: 'Order Image Store',
+    username: 'order-image-store',
+    password: 'test-password-long-enough',
+    location: 'Hyderabad'
+  });
+  const user = await User.create({ name: 'Order Image Customer', phone: '+15559990001' });
+  const product = await Product.create({
+    storeId: store._id,
+    productType: 'fruit',
+    productName: 'Apples',
+    imageUrl: 'https://example.test/apples.jpg',
+    imagePublicId: 'nalli-bokka/products/order-image-test',
+    inStock: true,
+    pricePerKg: 200
+  });
+  const order = await Order.create({
+    userId: user._id,
+    storeId: store._id,
+    orderType: 'pickup',
+    pickupAt: new Date(Date.now() + 60 * 60 * 1000),
+    items: [{
+      productId: product._id,
+      productName: product.productName,
+      selectionType: 'weight',
+      quantity: 1,
+      price: 200
+    }],
+    paymentStatus: 'paid'
+  });
+  const storeToken = jwt.sign(
+    { role: 'store' },
+    process.env.JWT_SECRET,
+    { subject: String(store._id), expiresIn: '5m', issuer: 'nalli-bokka-api' }
+  );
+  const customerToken = jwt.sign(
+    { role: 'user' },
+    process.env.JWT_SECRET,
+    { subject: String(user._id), expiresIn: '5m', issuer: 'nalli-bokka-api' }
+  );
+  const originalCloudinaryDestroy = cloudinary.uploader.destroy;
+  let cloudinaryDeleteCalled = false;
+  cloudinary.uploader.destroy = async () => {
+    cloudinaryDeleteCalled = true;
+    return { result: 'ok' };
+  };
+
+  try {
+    const detailBeforeDeleteResponse = await fetch(`${baseUrl}/orders/${order._id}`, {
+      headers: { authorization: `Bearer ${customerToken}` }
+    });
+    assert.equal(detailBeforeDeleteResponse.status, 200);
+    const detailBeforeDelete = await detailBeforeDeleteResponse.json();
+    assert.equal(detailBeforeDelete.data.items[0].productId.imageUrl, product.imageUrl);
+    assert.equal(detailBeforeDelete.data.items[0].productId.productType, product.productType);
+
+    const deleteResponse = await fetch(`${baseUrl}/store/products/${product._id}`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${storeToken}` }
+    });
+    assert.equal(deleteResponse.status, 204);
+    const savedOrder = await Order.findById(order._id).lean();
+    assert.equal(savedOrder.items[0].imageUrl, product.imageUrl);
+    assert.equal(savedOrder.items[0].imagePublicId, product.imagePublicId);
+    assert.equal(savedOrder.items[0].productType, product.productType);
+    assert.equal(cloudinaryDeleteCalled, false);
+
+    const customerOrdersResponse = await fetch(`${baseUrl}/orders`, {
+      headers: { authorization: `Bearer ${customerToken}` }
+    });
+    assert.equal(customerOrdersResponse.status, 200);
+    const customerOrders = await customerOrdersResponse.json();
+    assert.equal(customerOrders.data[0].items[0].imageUrl, product.imageUrl);
+    assert.equal(customerOrders.data[0].items[0].productId, null);
+
+    const detailAfterDeleteResponse = await fetch(`${baseUrl}/orders/${order._id}`, {
+      headers: { authorization: `Bearer ${customerToken}` }
+    });
+    assert.equal(detailAfterDeleteResponse.status, 200);
+    const detailAfterDelete = await detailAfterDeleteResponse.json();
+    assert.equal(detailAfterDelete.data.items[0].imageUrl, product.imageUrl);
+    assert.equal(detailAfterDelete.data.items[0].productId, null);
+  } finally {
+    cloudinary.uploader.destroy = originalCloudinaryDestroy;
+  }
+});
+
 test('customer purchase, payment, and store status notification flow works end to end', async () => {
   const readinessResponse = await fetch(`${baseUrl}/health/ready`);
   assert.equal(readinessResponse.status, 200);
@@ -440,6 +528,9 @@ test('customer purchase, payment, and store status notification flow works end t
   assert.ok(order);
   assert.equal(order.totalAmount, 400);
   assert.equal(order.items[0].price, 400);
+  assert.equal(order.items[0].imageUrl, product.imageUrl);
+  assert.equal(order.items[0].imagePublicId, product.imagePublicId);
+  assert.equal(order.items[0].productType, product.productType);
   assert.equal(order.paymentStatus, 'paid');
   assert.equal((await Cart.findOne({ userId: user._id })).items.length, 0);
   assert.equal((await Transaction.findOne({ orderId: order._id })).status, 'paid');

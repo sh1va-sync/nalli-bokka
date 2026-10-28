@@ -5,7 +5,7 @@ import { useGetCartQuery, useGetStoresQuery, useRemoveCartItemMutation } from '.
 import { clearGuestCart } from '../../cart/cartSlice.js'
 import { setSelectedStore } from '../../store/storeSlice.js'
 import CookingLoader from './CookingLoader.jsx'
-import { getErrorMessage } from '../utils.js'
+import { capitalizeFirstLetter, getErrorMessage } from '../utils.js'
 
 export default function StorePicker({ open, onClose }) {
   const dispatch = useDispatch()
@@ -49,7 +49,7 @@ export default function StorePicker({ open, onClose }) {
     <div className="fixed inset-0 z-50 grid items-end bg-[var(--text-primary)]/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="store-title">
       <section className="mx-auto max-h-[90vh] w-full max-w-lg overflow-hidden rounded-t-[24px] bg-[var(--bg-app)] shadow-2xl sm:rounded-[24px]">
         <div className="flex items-start justify-between border-b border-[var(--border-default)] px-6 py-5">
-          <div><span className="mb-2 inline-flex h-10 w-10 items-center justify-center rounded-full bg-[var(--status-danger-soft)] text-[var(--brand-primary)]"><Store size={18} strokeWidth={1.7} /></span><h2 id="store-title" className="font-display text-xl font-medium text-[var(--text-primary)]">Where should we deliver?</h2><p className="mt-1 text-sm text-[var(--text-secondary)]">Choose your neighbourhood store.</p></div>
+          <div><span className="mb-2 inline-flex h-10 w-10 items-center justify-center rounded-full bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]"><Store size={18} strokeWidth={1.7} /></span><h2 id="store-title" className="font-display text-xl font-medium text-[var(--text-primary)]">Where should we deliver?</h2><p className="mt-1 text-sm text-[var(--text-secondary)]">Choose your neighbourhood store.</p></div>
           {selectedStore?.isOpen !== false && selectedStore && <button className="rounded-full p-2 text-[var(--text-secondary)] hover:bg-[var(--surface-subtle)]" onClick={onClose} aria-label="Close store selection"><X size={19} /></button>}
         </div>
         <div className="p-5">
@@ -63,22 +63,24 @@ export default function StorePicker({ open, onClose }) {
             {stores.map((store) => {
               const storePhone = store.storePhone || store.storeNumber || '—'
               const mapsLink = store.googleMapsLink || store.googleMapLink || store.mapLink || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(store.location || store.storeName)}`
+              const storeName = capitalizeFirstLetter(store.storeName)
+              const storeLocation = capitalizeFirstLetter(store.location)
               const isClosed = store.isOpen === false
 
               return (
-                <article key={store._id} className={`rounded-[14px] border p-3.5 transition ${selectedStore?._id === store._id ? 'border-[var(--brand-primary)] bg-[var(--status-danger-soft)]' : 'border-[var(--border-default)] bg-white hover:border-[var(--border-default)]'}`}>
+                <article key={store._id} className={`rounded-[14px] border p-3.5 transition ${selectedStore?._id === store._id ? 'border-[var(--brand-primary)] bg-[var(--brand-primary-soft)] shadow-[0_3px_12px_-10px_rgba(23,97,73,.45)]' : 'border-[var(--border-default)] bg-white hover:border-[#c8d9ce]'}`}>
                   <div className="flex items-center gap-3">
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#f7eee8] text-[var(--brand-primary)]"><MapPin size={17} strokeWidth={1.7} /></span>
-                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-[var(--text-secondary)]">{store.storeName}</span><span className="mt-0.5 block truncate text-xs text-[var(--text-secondary)]">{store.location}</span></span>
-                    {selectedStore?._id === store._id && <span className="rounded-full bg-[#f2e0dc] px-2.5 py-1 text-[10px] font-medium text-[var(--brand-primary)]">Selected</span>}
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#f0f3ed] text-[var(--brand-primary)]"><MapPin size={17} strokeWidth={1.7} /></span>
+                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-[var(--text-secondary)]">{storeName}</span><span className="mt-0.5 block truncate text-xs text-[var(--text-secondary)]">{storeLocation}</span></span>
+                    {selectedStore?._id === store._id && <span className="rounded-full bg-[#d7eadc] px-2.5 py-1 text-[10px] font-semibold text-[var(--brand-primary)]">Selected</span>}
                   </div>
                   <div className="ml-[52px] mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-[var(--text-secondary)]">
                     <span className={`rounded-full px-2 py-1 font-medium ${isClosed ? 'bg-[#f7eae8] text-[var(--status-danger)]' : 'bg-[var(--status-success-soft)] text-[var(--status-success)]'}`}>{isClosed ? 'Closed now' : 'Open now'}</span>
-                    {storePhone !== '—' && <span className="rounded-full bg-[#f6f0ea] px-2 py-1">{storePhone}</span>}
+                    {storePhone !== '—' && <span className="rounded-full bg-[#f0f3ed] px-2 py-1">{storePhone}</span>}
                   </div>
                   {storePhone !== '—' && <p className="ml-[52px] mt-2 text-[10px] text-[var(--text-secondary)]">Call: {storePhone}</p>}
                   <div className="ml-[52px] mt-3 flex items-center gap-2">
-                    <a href={mapsLink} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center rounded-lg border border-[#e7d5cc] bg-[#fff9f6] px-2.5 py-2 text-[10px] font-semibold text-[var(--text-secondary)] hover:bg-[#f9f0ed]">Get directions</a>
+                    <a href={mapsLink} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center rounded-lg border border-[#dce6dc] bg-white px-2.5 py-2 text-[10px] font-semibold text-[var(--text-secondary)] hover:border-[#b8d7c2] hover:bg-[#f4f8f3]">Get directions</a>
                   </div>
                   <button
                     disabled={isClosed || Boolean(switchingStoreId) || Boolean(token && (cartFetching || cartError))}

@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { FileText } from 'lucide-react'
+import { ArrowDownToLine, ArrowLeft, ArrowRight, CalendarDays, Check, ChevronRight, Headset, House, MapPin } from 'lucide-react'
 import { useCancelOrderMutation, useCreatePaymentMutation, useDownloadOrderInvoiceMutation, useGetOrderQuery, useGetOrdersQuery, useVerifyPaymentMutation } from '../../api/api.js'
 import CookingLoader from '../components/CookingLoader.jsx'
+import { getCategoryPhoto } from '../components/categoryAssets.js'
 import { formatItemQuantity, formatPrice, getErrorMessage, loadRazorpaySdk, saveInvoicePdf } from '../utils.js'
 
-const statuses = ['all', 'placed', 'packing', 'out for delivery', 'ready for pickup', 'delivered', 'picked up', 'cancelled']
 const statusColors = {
   placed: 'bg-[var(--status-success-soft)] text-[var(--status-success)]',
   packing: 'bg-amber-50 text-amber-800',
@@ -17,22 +17,23 @@ const statusColors = {
 }
 
 function StatusPill({ status }) {
-  return <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold capitalize ${statusColors[status] || 'bg-slate-100 text-slate-600'}`}>{status}</span>
+  const isComplete = ['delivered', 'picked up'].includes(status)
+  return <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[10px] font-bold capitalize ${statusColors[status] || 'bg-slate-100 text-slate-600'}`}>{isComplete && <Check size={13} strokeWidth={2.5} />}{status}</span>
 }
 
 function OrderProgress({ status, orderType = 'delivery' }) {
-  if (status === 'cancelled') return <div className="mt-5 rounded-xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">This order was cancelled.</div>
+  if (status === 'cancelled') return <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm font-semibold text-rose-800">This order was cancelled.</div>
   const stages = orderType === 'pickup'
     ? ['placed', 'packing', 'ready for pickup', 'picked up']
     : ['placed', 'packing', 'out for delivery', 'delivered']
-  const activeIndex = stages.indexOf(status)
-  return <div className="mt-5 rounded-2xl border border-[var(--border-default)] bg-white p-4">
-    <p className="mb-4 text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">Order progress <span className="font-normal normal-case tracking-normal">· refreshes automatically</span></p>
+  const activeIndex = Math.max(0, stages.indexOf(status))
+  return <div className="rounded-[22px] border border-[var(--border-default)] bg-white px-4 py-5 sm:px-7 sm:py-6">
+    <h2 className="mb-5 text-lg font-extrabold tracking-tight text-[var(--text-primary)] sm:text-2xl">Order progress</h2>
     <div className="grid grid-cols-4">
       {stages.map((stage, index) => <div key={stage} className="relative flex flex-col items-center text-center">
-        {index < stages.length - 1 && <span className={`absolute left-1/2 top-2.5 h-0.5 w-full ${index < activeIndex ? 'bg-[#79a47a]' : 'bg-[var(--border-default)]'}`} />}
-        <span className={`relative z-10 h-5 w-5 rounded-full border-2 ${index <= activeIndex ? 'border-[#39744d] bg-[#39744d]' : 'border-[#dce5d8] bg-white'}`} />
-        <span className={`mt-2 px-1 text-[9px] leading-4 sm:text-[11px] ${index <= activeIndex ? 'font-bold text-[var(--text-secondary)]' : 'text-slate-400'}`}>{stage}</span>
+        {index < stages.length - 1 && <span className={`absolute left-1/2 top-[18px] h-[3px] w-full ${index < activeIndex ? 'bg-[#8bc5a2]' : 'bg-[var(--border-default)]'}`} />}
+        <span className={`relative z-10 grid h-9 w-9 place-items-center rounded-full border-2 sm:h-11 sm:w-11 ${index <= activeIndex ? 'border-[#176149] bg-[#176149] text-white' : 'border-[#c9dfce] bg-white text-transparent'}`}>{index <= activeIndex && <Check size={19} strokeWidth={2.5} />}</span>
+        <span className={`mt-2 px-0.5 text-[9px] leading-4 sm:text-sm ${index <= activeIndex ? 'font-bold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>{stage}</span>
       </div>)}
     </div>
   </div>
@@ -77,11 +78,9 @@ function RefundDetails({ refund, paymentStatus }) {
 
 export default function OrdersPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const [status, setStatus] = useState('all')
-  const [orderType, setOrderType] = useState('all')
   const [page, setPage] = useState(1)
   const selectedOrderId = searchParams.get('order')
-  const { data: listResponse, isLoading, error, refetch } = useGetOrdersQuery({ page, limit: 20, ...(status !== 'all' ? { orderStatus: status } : {}), ...(orderType !== 'all' ? { orderType } : {}) }, { skip: Boolean(selectedOrderId), pollingInterval: 30000 })
+  const { data: listResponse, isLoading, error, refetch } = useGetOrdersQuery({ page, limit: 20 }, { skip: Boolean(selectedOrderId), pollingInterval: 30000 })
   const { data: detailResponse, isLoading: detailLoading, error: detailError } = useGetOrderQuery(selectedOrderId, { skip: !selectedOrderId, pollingInterval: 30000 })
   const [cancelOrder, cancelState] = useCancelOrderMutation()
   const [createPayment, paymentState] = useCreatePaymentMutation()
@@ -100,6 +99,35 @@ export default function OrdersPage() {
   const paymentAllowed = order
     && order.orderStatus !== 'cancelled'
     && ['pending', 'failed'].includes(order.paymentStatus)
+  const orderIdLabel = order?._id.slice(-8).toUpperCase()
+  const orderDate = order
+    ? new Date(order.createdAt).toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }).replace(',', ' · ').replace(/\b(am|pm)\b/i, value => value.toUpperCase())
+    : ''
+  const orderHeadline = {
+    placed: 'Your order is placed',
+    packing: 'Your order is being packed',
+    'out for delivery': 'Your order is on its way',
+    'ready for pickup': 'Your order is ready for pickup',
+    delivered: 'Your order is delivered',
+    'picked up': 'Your order is picked up',
+    cancelled: 'Your order was cancelled',
+  }[order?.orderStatus] || 'Track your order'
+  const orderDescription = {
+    placed: 'We’ll update you as your store prepares it.',
+    packing: 'Your store is preparing your items.',
+    'out for delivery': 'Your order is on its way to you.',
+    'ready for pickup': 'Your order is ready at the store.',
+    delivered: 'Your order has been delivered. Enjoy!',
+    'picked up': 'Your order has been picked up. Enjoy!',
+    cancelled: 'If you have questions about this order, contact your store.',
+  }[order?.orderStatus] || 'Your store will keep this order status up to date.'
 
   async function downloadInvoice(invoiceOrder) {
     setInvoiceError('')
@@ -160,44 +188,153 @@ export default function OrdersPage() {
   }
 
   if (selectedOrderId) return <>
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10">
-    <button onClick={() => setSearchParams({})} className="text-sm font-semibold text-[var(--brand-primary)] hover:text-[var(--brand-primary)]">← Back to all orders</button>
-    {detailLoading ? <p className="mt-8 text-sm text-slate-500">Loading your order…</p> : detailError ? <p role="alert" className="mt-5 rounded-xl bg-rose-50 p-4 text-sm text-rose-800">{getErrorMessage(detailError)}</p> : order && <>
-      <div className="mt-5 flex flex-wrap items-end justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.18em] text-[var(--text-secondary)]">Order details</p><h1 className="mt-1 text-2xl font-black text-[var(--text-secondary)]">Order #{order._id.slice(-8).toUpperCase()}</h1><p className="mt-1 text-xs text-slate-500">{new Date(order.createdAt).toLocaleString('en-IN')}</p></div><StatusPill status={order.orderStatus} /></div>
-      <OrderProgress status={order.orderStatus} orderType={order.orderType} />
-      <div className="mt-5 grid gap-4 sm:grid-cols-2"><div className="rounded-2xl border border-[var(--border-default)] bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">Payment</p><p className="mt-2 text-sm font-bold capitalize text-[var(--status-success)]">{order.paymentStatus.replaceAll('_', ' ')}</p><p className="mt-1 text-xs text-slate-500">{['refund_pending', 'refunded', 'refund_failed'].includes(order.paymentStatus) ? 'See the refund details below for its status and reference.' : 'Order status is updated by your store.'}</p></div><div className="rounded-2xl border border-[var(--border-default)] bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">{order.orderType === 'pickup' ? 'Store pickup' : 'Delivery address'}</p>{order.orderType === 'pickup' ? <><p className="mt-2 text-sm font-bold text-[var(--status-success)]">{order.storeId?.storeName || 'Selected store'}</p><p className="mt-1 text-xs leading-5 text-slate-500">{new Date(order.pickupAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'full', timeStyle: 'short' })} IST</p><p className="mt-1 text-xs leading-5 text-slate-500">{order.storeId?.location}</p></> : <><p className="mt-2 text-sm font-bold text-[var(--status-success)]">{order.deliveryAddress?.label}</p><p className="mt-1 text-xs leading-5 text-slate-500">{order.deliveryAddress?.fullAddress} · {order.deliveryAddress?.pincode}</p></>}</div></div>
-      <section className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border-default)] bg-white p-4">
-        <div><p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">Need help with this order?</p><p className="mt-1 text-sm font-semibold text-[var(--text-primary)]">{order.storeId?.storeName || 'Your store'}</p><p className="mt-1 text-xs text-[var(--text-secondary)]">Share order #{order._id.slice(-8).toUpperCase()} when you call.</p></div>
-        {storePhoneLink
-          ? <a href={`tel:${storePhoneLink}`} className="inline-flex h-10 items-center rounded-xl bg-[var(--brand-primary)] px-4 text-xs font-bold text-white transition hover:bg-[var(--brand-primary-hover)]">Call store · {storePhone}</a>
-          : <p className="text-xs text-[var(--text-secondary)]">This store hasn’t added a contact number yet.</p>}
-      </section>
-      <RefundDetails refund={order.refund} paymentStatus={order.paymentStatus} />
-      <section className="mt-4 rounded-2xl border border-[var(--border-default)] bg-white p-5"><h2 className="font-extrabold text-[var(--text-secondary)]">What’s in the bag</h2><div className="mt-4 divide-y divide-[var(--surface-subtle)]">{order.items?.map((item, index) => <div key={`${item.productId}-${index}`} className="flex justify-between gap-3 py-3 first:pt-0 last:pb-0"><div><p className="text-sm font-semibold text-[var(--status-success)]">{item.productName}</p><p className="mt-1 text-xs text-slate-500">{formatItemQuantity(item)}</p></div><span className="text-sm font-bold text-[var(--text-secondary)]">{formatPrice(item.price)}</span></div>)}</div><div className="mt-4 flex justify-between border-t border-[var(--surface-subtle)] pt-4 text-sm"><span className="font-semibold text-slate-500">Total</span><span className="font-extrabold text-[var(--text-secondary)]">{formatPrice(order.totalAmount)}</span></div></section>
-      {actionMessage && <p role="status" className={`mt-4 rounded-xl p-3 text-sm ${actionMessage.toLowerCase().includes('failed') ? 'bg-rose-50 text-rose-800' : 'bg-[var(--status-success-soft)] text-[var(--text-secondary)]'}`}>{actionMessage}</p>}
-      {paymentAllowed && <button disabled={paymentState.isLoading} onClick={payForCurrentOrder} className="mt-4 rounded-xl bg-[var(--brand-primary)] px-4 py-2.5 text-sm font-bold text-white hover:bg-[var(--brand-primary-hover)] disabled:opacity-50">{paymentState.isLoading ? 'Connecting to Razorpay…' : 'Pay for this order'}</button>}
-      {cancelAllowed && <button disabled={cancelState.isLoading} onClick={cancelCurrent} className="mt-4 rounded-xl border border-rose-200 px-4 py-2.5 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50">{cancelState.isLoading ? 'Cancelling…' : 'Cancel order'}</button>}
-    </>}
+    <div className="mx-auto max-w-6xl px-3.5 py-4 sm:px-6 sm:py-8 lg:px-8">
+      <button type="button" onClick={() => setSearchParams({})} className="inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-bold text-[var(--brand-primary)] shadow-sm transition hover:bg-[var(--brand-primary-soft)]"><ArrowLeft size={17} />All orders</button>
+      {detailLoading ? <p className="mt-8 text-sm text-slate-500">Loading your order…</p> : detailError ? <p role="alert" className="mt-5 rounded-xl bg-rose-50 p-4 text-sm text-rose-800">{getErrorMessage(detailError)}</p> : order && <>
+        <section className="relative isolate mt-4 min-h-[205px] overflow-hidden rounded-[26px] border border-[#e2eee4] bg-gradient-to-r from-[#edf6ee] via-[#e9f4eb] to-[#e0efe2] px-5 py-5 sm:min-h-[260px] sm:rounded-[30px] sm:px-8 sm:py-7">
+          <img src="/hero/green-market.svg" alt="" className="pointer-events-none absolute -right-12 bottom-0 z-0 h-[92%] w-[60%] object-contain object-right-bottom opacity-70 sm:right-0 sm:h-full sm:w-[47%]" />
+          <div className="relative z-10 max-w-[66%] sm:max-w-[62%]">
+            <p className="inline-flex rounded-full border border-[#c7e0cc] bg-white/55 px-3 py-1 text-xs font-extrabold text-[var(--text-primary)] sm:text-base">Order #{orderIdLabel}</p>
+            <h1 className="mt-3 text-[26px] font-black leading-[1.08] tracking-tight text-[#103c30] sm:mt-4 sm:text-4xl">{orderHeadline}</h1>
+            <p className="mt-2 max-w-md text-sm leading-5 text-[var(--text-secondary)] sm:mt-3 sm:text-lg sm:leading-7">{orderDescription}</p>
+            <p className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-secondary)] sm:mt-6 sm:text-base"><CalendarDays size={17} className="shrink-0 text-[var(--brand-primary)]" />{orderDate}</p>
+          </div>
+          <div className="absolute right-3 top-3 z-10"><StatusPill status={order.orderStatus} /></div>
+        </section>
+
+        <section className="mt-4 sm:mt-5">
+          <OrderProgress status={order.orderStatus} orderType={order.orderType} />
+          {order.orderStatus !== 'cancelled' && <p className="mt-2 px-1 text-xs text-[var(--text-secondary)]">Status refreshes automatically.</p>}
+        </section>
+
+        <section className="mt-5">
+          <div className="mb-3 flex items-end justify-between px-1">
+            <h2 className="text-xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-2xl">Order summary</h2>
+            <span className="text-sm text-[var(--text-secondary)]">{order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'items'}</span>
+          </div>
+          <div className="rounded-[22px] border border-[var(--border-default)] bg-white p-4 shadow-[0_8px_24px_-22px_rgba(27,61,44,0.3)] sm:p-6">
+            <div className="divide-y divide-[var(--border-default)]">
+              {order.items?.map((item, index) => {
+                const product = typeof item.productId === 'object' ? item.productId : null
+                const imageUrl = item.imageUrl || product?.imageUrl || getCategoryPhoto(item.productType || product?.productType || item.productName)
+                return <div key={`${item.productId}-${index}`} className="flex items-center gap-3 py-3 first:pt-0 last:pb-3 sm:gap-5 sm:py-4">
+                  <img
+                    src={imageUrl}
+                    alt=""
+                    loading="lazy"
+                    onError={(event) => {
+                      event.currentTarget.onerror = null
+                      event.currentTarget.src = getCategoryPhoto(item.productType || product?.productType || item.productName)
+                    }}
+                    className="h-[58px] w-[58px] shrink-0 rounded-xl object-cover sm:h-[76px] sm:w-[76px]"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-[var(--text-primary)] sm:text-lg">{item.productName}</p>
+                    <p className="mt-1 text-xs text-[var(--text-secondary)] sm:text-base">{formatItemQuantity(item)}</p>
+                  </div>
+                  <span className="shrink-0 text-sm font-extrabold text-[var(--text-primary)] sm:min-w-20 sm:text-right sm:text-lg">{formatPrice(item.price)}</span>
+                </div>
+              })}
+            </div>
+            <div className="space-y-2 border-t border-[var(--border-default)] pt-3 text-sm sm:pt-4 sm:text-base">
+              <div className="flex justify-between gap-4 text-[var(--text-secondary)]"><span>Items total</span><span className="font-semibold text-[var(--text-primary)]">{formatPrice(order.totalAmount)}</span></div>
+              <div className="flex items-center justify-between gap-4 rounded-2xl bg-[var(--brand-primary-soft)] px-3.5 py-3 sm:px-4">
+                <div><p className="font-extrabold text-[var(--text-primary)]">{order.paymentStatus === 'paid' ? 'Total paid' : ['refund_pending', 'refunded', 'refund_failed'].includes(order.paymentStatus) ? 'Refund status' : 'Order total'}</p><p className="mt-0.5 text-xs capitalize text-[var(--text-secondary)]">{order.paymentStatus.replaceAll('_', ' ')}</p></div>
+                <span className="text-xl font-black text-[#103c30] sm:text-2xl">{formatPrice(order.totalAmount)}</span>
+              </div>
+            </div>
+            {order.paymentStatus === 'paid' && <button type="button" onClick={() => downloadInvoice(order)} disabled={Boolean(downloadingInvoiceId)} className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-xs font-semibold text-[var(--brand-primary)] transition hover:bg-[var(--brand-primary-soft)] disabled:cursor-wait disabled:opacity-50"><ArrowDownToLine size={16} />{downloadingInvoiceId === order._id ? 'Preparing invoice…' : 'Download invoice'}</button>}
+          </div>
+        </section>
+
+        {order.orderType === 'pickup' ? <section className="mt-4 rounded-[22px] border border-[var(--border-default)] bg-white p-4 sm:mt-5 sm:p-6">
+          <h2 className="text-lg font-extrabold text-[var(--text-primary)] sm:text-xl">Pickup details</h2>
+          <div className="mt-3 flex items-center gap-4">
+            <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]"><MapPin size={26} /></span>
+            <div className="min-w-0"><p className="font-bold text-[var(--text-primary)]">{order.storeId?.storeName || 'Selected store'}</p><p className="mt-1 text-sm text-[var(--text-secondary)]">{new Date(order.pickupAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })} IST</p>{order.storeId?.location && <p className="mt-1 text-sm text-[var(--text-secondary)]">{order.storeId.location}</p>}</div>
+          </div>
+        </section> : <section className="mt-4 rounded-[22px] border border-[var(--border-default)] bg-white p-4 sm:mt-5 sm:p-6">
+          <h2 className="text-lg font-extrabold text-[var(--text-primary)] sm:text-xl">Delivery address</h2>
+          <div className="mt-3 flex items-center gap-4">
+            <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]"><House size={26} /></span>
+            <div className="min-w-0"><p className="font-bold text-[var(--text-primary)]">{order.deliveryAddress?.label}</p><p className="mt-1 text-sm leading-5 text-[var(--text-secondary)]">{order.deliveryAddress?.fullAddress} · {order.deliveryAddress?.pincode}</p></div>
+          </div>
+        </section>}
+
+        {storePhoneLink ? <a href={`tel:${storePhoneLink}`} className="mt-4 flex items-center gap-4 rounded-[22px] border border-[var(--border-default)] bg-white p-4 transition hover:border-[var(--brand-secondary)] sm:mt-5 sm:p-6">
+          <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]"><Headset size={26} /></span>
+          <span className="min-w-0 flex-1"><span className="block font-extrabold text-[var(--text-primary)]">Need help with this order?</span><span className="mt-1 block text-sm text-[var(--text-secondary)]">Share order #{orderIdLabel} with {order.storeId?.storeName || 'your store'}.</span></span>
+          <ChevronRight size={22} className="shrink-0 text-[var(--text-secondary)]" />
+        </a> : <section className="mt-4 flex items-center gap-4 rounded-[22px] border border-[var(--border-default)] bg-white p-4 sm:mt-5 sm:p-6">
+          <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]"><Headset size={26} /></span>
+          <div className="min-w-0"><h2 className="font-extrabold text-[var(--text-primary)]">Need help with this order?</h2><p className="mt-1 text-sm text-[var(--text-secondary)]">This store hasn’t added a contact number yet. Share order #{orderIdLabel} when you contact the store.</p></div>
+        </section>}
+
+        <RefundDetails refund={order.refund} paymentStatus={order.paymentStatus} />
+        {invoiceError && <p role="alert" className="mt-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-800">{invoiceError}</p>}
+        {actionMessage && <p role="status" className={`mt-4 rounded-xl p-3 text-sm ${actionMessage.toLowerCase().includes('failed') ? 'bg-rose-50 text-rose-800' : 'bg-[var(--status-success-soft)] text-[var(--text-secondary)]'}`}>{actionMessage}</p>}
+        {(paymentAllowed || cancelAllowed) && <div className="mt-4 flex flex-wrap gap-3">
+          {paymentAllowed && <button disabled={paymentState.isLoading} onClick={payForCurrentOrder} className="rounded-xl bg-[var(--brand-primary)] px-4 py-2.5 text-sm font-bold text-white hover:bg-[var(--brand-primary-hover)] disabled:opacity-50">{paymentState.isLoading ? 'Connecting to Razorpay…' : 'Pay for this order'}</button>}
+          {cancelAllowed && <button disabled={cancelState.isLoading} onClick={cancelCurrent} className="rounded-xl border border-rose-200 px-4 py-2.5 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50">{cancelState.isLoading ? 'Cancelling…' : 'Cancel order'}</button>}
+        </div>}
+      </>}
     </div>
   </>
 
   return <>
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-    <div><p className="text-[10px] font-bold uppercase tracking-[.18em] text-[var(--text-secondary)]">A little something for later</p><h1 className="mt-1 text-3xl font-black tracking-tight text-[var(--text-secondary)]">My orders</h1><p className="mt-1 text-sm text-slate-500">Your fresh finds, past and present.</p></div>
-    <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto]">
-      <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">{statuses.map((item) => <button key={item} onClick={() => { setStatus(item); setPage(1) }} className={`shrink-0 rounded-full border px-4 py-2 text-xs font-semibold capitalize ${status === item ? 'border-[var(--brand-primary)] bg-[var(--brand-primary)] text-white' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'}`}>{item === 'all' ? 'All statuses' : item}</button>)}</div>
-      <label className="flex h-10 items-center rounded-xl border border-[var(--border-default)] bg-white px-3 text-xs font-semibold text-[var(--text-secondary)]"><span className="mr-2">Order type</span><select aria-label="Filter orders by type" value={orderType} onChange={(event) => { setOrderType(event.target.value); setPage(1) }} className="bg-transparent text-[var(--text-primary)] outline-none"><option value="all">All</option><option value="delivery">Delivery</option><option value="pickup">Store pickup</option></select></label>
-    </div>
+    <div className="mx-auto max-w-5xl px-4 py-5 sm:px-6 sm:py-9 lg:px-8">
+    <section className="relative isolate overflow-hidden rounded-[24px] border border-[#e6e9df] bg-gradient-to-r from-[#f7f8f2] via-[#f2f6ee] to-[#e6f0e5] px-5 py-6 sm:rounded-[30px] sm:px-9 sm:py-8">
+      <img src="/categories/meat.png" alt="" className="pointer-events-none absolute right-0 top-0 z-0 h-full w-[45%] object-cover opacity-25 [mask-image:linear-gradient(to_right,transparent_0%,black_55%)] sm:w-[38%]" />
+      <div className="relative z-10">
+        <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[var(--brand-primary)]">Made fresh, delivered with care</p>
+        <h1 className="mt-2 text-3xl font-black tracking-tight text-[var(--text-primary)] sm:text-4xl">Your orders</h1>
+        <p className="mt-2 max-w-md text-sm leading-5 text-[var(--text-secondary)] sm:text-base">Track deliveries and revisit your purchases.</p>
+      </div>
+    </section>
     {error && <p role="alert" className="mt-5 rounded-xl bg-rose-50 p-4 text-sm text-rose-800">{getErrorMessage(error)} <button onClick={refetch} className="font-bold underline">Retry</button></p>}
     {invoiceError && <p role="alert" className="mt-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-800">{invoiceError}</p>}
-    {isLoading ? <div className="mt-5"><CookingLoader label="Gathering your orders…" /></div> : orders.length ? <div className="mt-5 grid gap-3 sm:grid-cols-2">{orders.map((item) => <article key={item._id} className="rounded-[20px] border border-[var(--border-default)] bg-white p-4 transition hover:border-[#bfd2b9] hover:shadow-sm">
+    {isLoading ? <div className="mt-5"><CookingLoader label="Gathering your orders…" /></div> : orders.length ? <div className="mt-5 grid gap-3 sm:gap-4">{orders.map((item) => {
+      const orderItems = item.items || []
+      const itemNames = orderItems.map(({ productName }) => productName).join(' · ')
+      const itemQuantity = orderItems.reduce((sum, orderItem) => sum + Number(orderItem.quantity || 0), 0)
+      const quantityLabel = orderItems.length > 0 && orderItems.every(({ selectionType }) => selectionType === 'weight')
+        ? `${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 1 }).format(itemQuantity)} kg`
+        : `${orderItems.length} ${orderItems.length === 1 ? 'item' : 'items'}`
+      const paymentLabel = item.paymentStatus === 'paid' ? 'Paid' : item.paymentStatus.replaceAll('_', ' ')
+      return <article key={item._id} className="rounded-[22px] border border-[var(--border-default)] bg-white p-4 shadow-[0_8px_24px_-22px_rgba(27,55,39,.45)] transition hover:border-[#cbdccf] hover:shadow-[0_12px_30px_-22px_rgba(27,55,39,.5)] sm:rounded-[26px] sm:p-6">
       <button type="button" onClick={() => setSearchParams({ order: item._id })} className="order-card-trigger block w-full text-left">
-        <div className="flex items-start justify-between gap-2"><div><p className="text-xs font-bold text-[var(--text-secondary)]">Order #{item._id.slice(-8).toUpperCase()}</p><p className="mt-1 text-[10px] text-slate-400">{new Date(item.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}</p><span className="mt-2 inline-flex rounded-full bg-[var(--brand-primary-soft)] px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-[var(--brand-primary)]">{item.orderType === 'pickup' ? 'Store pickup' : 'Delivery'}</span></div><StatusPill status={item.orderStatus} /></div>
-        <p className="mt-3 line-clamp-1 text-sm font-semibold text-[var(--status-success)]">{item.items?.map(({ productName }) => productName).join(' · ')}</p>
-        <div className="mt-3 flex justify-between border-t border-[var(--surface-subtle)] pt-3 text-xs"><span className="capitalize text-slate-500">Payment {item.paymentStatus}</span><span className="font-extrabold text-[var(--text-secondary)]">{formatPrice(item.totalAmount)}</span></div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-base font-bold text-[var(--text-primary)]">Order #{item._id.slice(-8).toUpperCase()}</p>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">{new Date(item.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} <span className="px-1">·</span> {orderItems.length} {orderItems.length === 1 ? 'item' : 'items'}</p>
+          </div>
+          <StatusPill status={item.orderStatus} />
+        </div>
+        <div className={`mt-4 min-w-0 ${orderItems.length > 3 ? 'space-y-2' : 'flex items-center gap-3'}`}>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {orderItems.slice(0, 3).map((orderItem, index) => {
+              const product = orderItem.productId && typeof orderItem.productId === 'object' ? orderItem.productId : null
+              const imageUrl = orderItem.imageUrl || product?.imageUrl || getCategoryPhoto(orderItem.productType || product?.productType || '')
+              return <img key={`${orderItem.productName}-${index}`} src={imageUrl} alt="" loading="lazy" className="h-[58px] w-[58px] rounded-xl object-cover sm:h-[72px] sm:w-[72px]" />
+            })}
+            {orderItems.length > 3 && <span className="grid h-[58px] w-[48px] place-items-center rounded-xl bg-[#f3f5ef] text-sm font-semibold text-[var(--text-secondary)] sm:h-[72px] sm:w-[58px]">+{orderItems.length - 3}</span>}
+          </div>
+          <div className={`flex min-w-0 items-center gap-3 ${orderItems.length > 3 ? '' : 'flex-1'}`}>
+            <div className="min-w-0 flex-1">
+            <p className={`text-sm font-semibold leading-5 text-[var(--text-primary)] sm:text-base ${orderItems.length > 3 ? 'line-clamp-3' : 'line-clamp-2'}`}>{itemNames}</p>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">{orderItems.length} {orderItems.length === 1 ? 'item' : 'items'} <span className="px-1">·</span> {quantityLabel}</p>
+            </div>
+            {orderItems.length <= 3 && <ArrowRight size={19} className="shrink-0 text-[var(--brand-primary)]" />}
+          </div>
+          {orderItems.length > 3 && <ArrowRight size={19} className="ml-auto block text-[var(--brand-primary)]" />}
+        </div>
       </button>
-      <div className="mt-3 flex justify-end"><button type="button" onClick={() => downloadInvoice(item)} disabled={Boolean(downloadingInvoiceId)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#dfe7dc] px-3 text-xs font-bold text-[var(--status-success)] hover:bg-[var(--bg-app)] disabled:cursor-wait disabled:opacity-50"><FileText size={14} />{downloadingInvoiceId === item._id ? 'Preparing PDF…' : 'Download invoice'}</button></div>
-    </article>)}</div> : <div className="mt-5 rounded-[22px] border border-[var(--border-default)] bg-white px-5 py-14 text-center"><span className="text-4xl">🧺</span><h2 className="mt-3 font-bold text-[var(--text-secondary)]">No orders to show</h2><p className="mt-1 text-sm text-slate-500">When you place an order, it’ll find its way here.</p></div>}
+      <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-[var(--surface-subtle)] pt-4">
+        <div><p className="text-xs text-[var(--text-secondary)]">Payment {paymentLabel}</p><p className="mt-0.5 text-2xl font-black tracking-tight text-[var(--brand-primary)]">{formatPrice(item.totalAmount)}</p></div>
+        <button type="button" onClick={() => downloadInvoice(item)} disabled={Boolean(downloadingInvoiceId)} aria-label={downloadingInvoiceId === item._id ? 'Preparing invoice' : 'Download invoice'} className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-[var(--brand-primary)] transition hover:bg-[var(--brand-primary-soft)] disabled:cursor-wait disabled:opacity-50"><ArrowDownToLine size={16} />{downloadingInvoiceId === item._id ? 'Preparing…' : 'Invoice'}</button>
+      </div>
+    </article>
+    })}</div> : <div className="mt-5 rounded-[22px] border border-[var(--border-default)] bg-white px-5 py-14 text-center"><span className="text-4xl">🧺</span><h2 className="mt-3 font-bold text-[var(--text-secondary)]">No orders to show</h2><p className="mt-1 text-sm text-slate-500">When you place an order, it’ll find its way here.</p></div>}
     {listResponse?.pagination?.pages > 1 && <div className="mt-6 flex items-center justify-center gap-3"><button disabled={page <= 1 || isLoading} onClick={() => setPage((current) => current - 1)} className="rounded-xl border border-[#cdddc8] bg-white px-4 py-2.5 text-sm font-bold text-[var(--status-success)] disabled:opacity-40">Previous</button><span className="text-xs text-[var(--text-secondary)]">Page {page} of {listResponse.pagination.pages}</span><button disabled={page >= listResponse.pagination.pages || isLoading} onClick={() => setPage((current) => current + 1)} className="rounded-xl border border-[#cdddc8] bg-white px-4 py-2.5 text-sm font-bold text-[var(--status-success)] disabled:opacity-40">Next</button></div>}
     </div>
   </>

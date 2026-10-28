@@ -430,6 +430,9 @@ export async function createCheckoutPayment(req, res) {
       return {
         productId: product._id,
         productName: product.productName,
+        imageUrl: product.imageUrl,
+        ...(product.imagePublicId ? { imagePublicId: product.imagePublicId } : {}),
+        productType: product.productType,
         selectionType: priced.selectionType,
         quantity: priced.quantity,
         ...(priced.packLabel ? { packLabel: priced.packLabel } : {}),

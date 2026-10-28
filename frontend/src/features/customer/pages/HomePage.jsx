@@ -55,6 +55,9 @@ export default function HomePage({ categoryScreen = false }) {
     categories,
     browseCategories,
     categoryTints,
+    categoriesLoading,
+    categoriesError,
+    refetchCategories,
     search,
     setSearch,
     sort,
@@ -75,6 +78,7 @@ export default function HomePage({ categoryScreen = false }) {
   const [heroInteractionPaused, setHeroInteractionPaused] = useState(false)
   const activeHeroSlide = heroSlides[heroSlideIndex]
   const HeroIcon = activeHeroSlide.icon
+  const homeCategories = browseCategories.slice(0, 3)
 
   useEffect(() => {
     if (heroInteractionPaused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined
@@ -86,11 +90,13 @@ export default function HomePage({ categoryScreen = false }) {
 
   return (
     <div className="customer-home mx-auto max-w-7xl px-4 pb-5 pt-4 sm:px-6 sm:pt-8 lg:px-8">
-      <label className="customer-search mx-auto flex h-12 max-w-3xl items-center gap-3 rounded-2xl border border-[var(--border-default)] bg-white px-4 text-[var(--text-secondary)] shadow-[0_3px_14px_-10px_rgba(18,49,37,.35)] focus-within:border-[var(--brand-primary)] sm:h-14 sm:rounded-[18px]">
-        <Search size={19} strokeWidth={1.9} />
-        <input aria-label="Search products" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search fresh products or brands" className="w-full bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] sm:text-[15px]" />
-        {search && <button type="button" aria-label="Clear search" onClick={() => setSearch('')} className="shrink-0 text-xs font-semibold text-[var(--brand-primary)]">Clear</button>}
-      </label>
+      <div className="sticky top-[60px] z-20 -mx-4 bg-[var(--bg-app)]/95 px-4 py-2 backdrop-blur-md sm:top-[68px] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <label className="customer-search mx-auto flex h-12 max-w-3xl items-center gap-3 rounded-2xl border border-[var(--border-default)] bg-white px-4 text-[var(--text-secondary)] shadow-[0_3px_14px_-10px_rgba(18,49,37,.35)] focus-within:border-[var(--brand-primary)] sm:h-14 sm:rounded-[18px]">
+          <Search size={19} strokeWidth={1.9} />
+          <input aria-label="Search products" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search fresh products or brands" className="w-full bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] sm:text-[15px]" />
+          {search && <button type="button" aria-label="Clear search" onClick={() => setSearch('')} className="shrink-0 text-xs font-semibold text-[var(--brand-primary)]">Clear</button>}
+        </label>
+      </div>
 
       {!categoryScreen && (
         <section aria-label="Store highlights" aria-roledescription="carousel" className={`customer-hero relative mt-5 min-h-[218px] overflow-hidden rounded-[24px] border border-white/10 bg-gradient-to-br px-5 py-5 shadow-[0_18px_42px_-24px_rgba(10,45,31,.6)] transition-colors duration-700 sm:mt-7 sm:min-h-[310px] sm:rounded-[30px] sm:px-10 sm:py-9 ${activeHeroSlide.theme}`} onMouseEnter={() => setHeroInteractionPaused(true)} onMouseLeave={() => setHeroInteractionPaused(false)} onFocusCapture={() => setHeroInteractionPaused(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setHeroInteractionPaused(false) }}>
@@ -101,7 +107,7 @@ export default function HomePage({ categoryScreen = false }) {
             <span className={`inline-flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-[.14em] sm:gap-2 sm:text-[10px] ${activeHeroSlide.accent}`}><HeroIcon size={13} strokeWidth={2.2} /> {activeHeroSlide.eyebrow}</span>
             <h1 className="mt-2 font-display text-[1.55rem] font-semibold leading-[1.03] tracking-[-.045em] text-white sm:mt-3 sm:text-[2.7rem]">{activeHeroSlide.title}</h1>
             <p className="mt-2 max-w-[19rem] text-[10px] leading-relaxed text-white/75 sm:mt-3 sm:text-sm">{activeHeroSlide.description}</p>
-            <button type="button" onClick={() => navigate(activeHeroSlide.category ? `/categories/${encodeURIComponent(activeHeroSlide.category)}` : '/categories')} className="mt-3 inline-flex h-9 items-center gap-2 rounded-full bg-white px-4 text-[10px] font-bold text-[#174b39] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#e9f4e9] sm:mt-5 sm:h-11 sm:px-5 sm:text-xs">{activeHeroSlide.action} <ArrowRight size={13} /></button>
+            <button type="button" onClick={() => navigate(activeHeroSlide.category ? `/categories/${encodeURIComponent(activeHeroSlide.category)}` : '/categories')} className="mt-3 inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 text-[9px] font-bold text-[#174b39] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#e9f4e9] sm:mt-5 sm:h-11 sm:gap-2 sm:px-5 sm:text-xs">{activeHeroSlide.action} <ArrowRight size={12} className="shrink-0 sm:h-[13px] sm:w-[13px]" /></button>
           </div>
           <div className="absolute bottom-4 right-5 z-10 flex items-center gap-1.5 sm:bottom-6 sm:right-8" aria-label="Choose highlight">
             {heroSlides.map((slide, index) => (
@@ -112,24 +118,35 @@ export default function HomePage({ categoryScreen = false }) {
       )}
 
       {!categoryScreen && (
-        <section id="browse-categories" className="scroll-mt-24 pt-7 sm:scroll-mt-28 sm:pt-10">
+        <section id="browse-categories" className="scroll-mt-28 pt-7 sm:scroll-mt-32 sm:pt-10">
           <div className="mb-4 flex items-end justify-between gap-3 sm:mb-5">
             <div>
-              <p className="text-[9px] font-bold uppercase tracking-[.16em] text-[var(--brand-primary)] sm:text-[10px]">A market in a few taps</p>
-              <h2 className="mt-1 text-lg font-bold tracking-[-.035em] text-[var(--text-primary)] sm:text-2xl">Shop by category</h2>
+              <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[var(--brand-primary)] sm:text-xs">A market in a few taps</p>
+              <h2 className="mt-1 text-2xl font-extrabold tracking-[-.045em] text-[var(--text-primary)] sm:text-4xl">Shop by category</h2>
+              <p className="mt-1 text-sm text-[var(--text-secondary)] sm:text-lg">Fresh picks for every meal.</p>
             </div>
-            <Link to="/categories" className="inline-flex items-center gap-1 pb-1 text-[11px] font-semibold text-[var(--text-secondary)] transition hover:text-[var(--brand-primary)] sm:text-xs">See all <ArrowRight size={13} /></Link>
+            <Link to="/categories" className="mb-1 inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-[var(--brand-secondary)] bg-[var(--brand-primary-soft)] px-3 text-[11px] font-bold text-[var(--brand-primary)] transition hover:bg-[var(--brand-secondary)] sm:h-11 sm:gap-2 sm:px-5 sm:text-sm">See all <ArrowRight size={15} /></Link>
           </div>
-          <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-5 sm:gap-4">
-            {browseCategories.map((item, index) => (
-              <Link key={item.id} to={`/categories/${encodeURIComponent(item.id)}`} className="category-tile group min-w-0 rounded-2xl border border-transparent bg-white p-2.5 text-center shadow-[0_4px_16px_-12px_rgba(17,44,31,.35)] transition duration-200 hover:-translate-y-0.5 hover:border-[var(--brand-secondary)] hover:shadow-md sm:rounded-[20px] sm:p-4">
-                <span className="mx-auto grid aspect-square max-h-[88px] place-items-center overflow-hidden rounded-xl sm:rounded-2xl" style={{ backgroundColor: categoryTints[index % categoryTints.length] }}>
-                  <CategoryPhoto category={item.id} imageUrl={item.imageUrl} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.06]" />
+          {categoriesError && <p role="alert" className="mb-3 rounded-xl bg-[var(--status-danger-soft)] px-3 py-2 text-xs text-[var(--status-danger)]">We couldn’t load categories from the store. <button type="button" onClick={refetchCategories} className="font-bold underline">Try again</button></p>}
+          {categoriesLoading && <p role="status" className="mb-3 text-xs text-[var(--text-secondary)]">Loading store categories…</p>}
+          {!categoriesLoading && !categoriesError && homeCategories.length > 0 && <div className="grid grid-cols-3 gap-2 sm:gap-4 lg:gap-5">
+            {homeCategories.map((item, index) => (
+              <Link key={item.id} to={`/categories/${encodeURIComponent(item.id)}`} className="category-tile group min-w-0 overflow-hidden rounded-[16px] border border-[var(--border-default)] bg-white text-left shadow-[0_8px_24px_-20px_rgba(17,44,31,.45)] transition duration-200 hover:-translate-y-0.5 hover:border-[var(--brand-secondary)] hover:shadow-[0_14px_28px_-20px_rgba(17,44,31,.42)] sm:rounded-[24px]">
+                <span className="block aspect-[1.2] overflow-hidden sm:aspect-[1.4]" style={{ backgroundColor: categoryTints[index % categoryTints.length] }}>
+                  <CategoryPhoto category={item.label} imageUrl={item.imageUrl} placeholderOnly className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.05]" />
                 </span>
-                <span className="mt-2 block truncate text-[10px] font-semibold text-[var(--text-primary)] sm:mt-3 sm:text-sm">{item.label}</span>
+                <span className="flex min-h-[52px] items-center gap-1 px-2 py-2 sm:min-h-[78px] sm:gap-3 sm:px-4 sm:py-3">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[10px] font-extrabold leading-tight tracking-[-.025em] text-[var(--text-primary)] sm:text-base">{item.label}</span>
+                    <span className="mt-0.5 block truncate text-[8px] leading-3 text-[var(--text-secondary)] sm:mt-1 sm:text-xs sm:leading-4">Fresh picks from your store</span>
+                  </span>
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[var(--brand-primary-soft)] text-[var(--brand-primary)] transition group-hover:bg-[var(--brand-primary)] group-hover:text-white sm:h-10 sm:w-10">
+                    <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5 sm:h-[18px] sm:w-[18px]" />
+                  </span>
+                </span>
               </Link>
             ))}
-          </div>
+          </div>}
         </section>
       )}
 

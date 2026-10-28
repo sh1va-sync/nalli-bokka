@@ -74,6 +74,18 @@ const orderItemSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  imageUrl: {
+    type: String,
+    trim: true
+  },
+  imagePublicId: {
+    type: String,
+    trim: true
+  },
+  productType: {
+    type: String,
+    trim: true
+  },
   selectionType: {
     type: String,
     required: true,

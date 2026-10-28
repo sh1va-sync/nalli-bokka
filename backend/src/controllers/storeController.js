@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import AuditEvent from '../models/AuditEvent.js';
+import CheckoutAttempt from '../models/CheckoutAttempt.js';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
 import ProductCategory from '../models/ProductCategory.js';
@@ -30,6 +31,15 @@ const PRODUCT_FIELDS = [
   'pieceWeightGrams',
   'packs'
 ];
+
+async function productImageHasOrderReference(imagePublicId) {
+  if (!imagePublicId) return false;
+  const [order, checkoutAttempt] = await Promise.all([
+    Order.exists({ 'items.imagePublicId': imagePublicId }),
+    CheckoutAttempt.exists({ 'items.imagePublicId': imagePublicId })
+  ]);
+  return Boolean(order || checkoutAttempt);
+}
 
 async function assertStoreProductType(productType, storeId, session) {
   const normalizedType = productType.toLowerCase();
@@ -368,7 +378,12 @@ export async function updateProduct(req, res) {
   }
 
   const warnings = [];
-  if (image && existingProduct.imagePublicId && existingProduct.imagePublicId !== image.imagePublicId) {
+  if (
+    image
+    && existingProduct.imagePublicId
+    && existingProduct.imagePublicId !== image.imagePublicId
+    && !await productImageHasOrderReference(existingProduct.imagePublicId)
+  ) {
     try {
       await deleteProductImage(existingProduct.imagePublicId);
     } catch (cleanupError) {
@@ -390,6 +405,27 @@ export async function deleteProduct(req, res) {
       if (!deletedProduct) {
         throw new AppError(404, 'Product not found');
       }
+      if (deletedProduct.imageUrl) {
+        await Order.updateMany(
+          {
+            'items.productId': deletedProduct._id,
+            'items.imageUrl': { $exists: false }
+          },
+          {
+            $set: {
+              'items.$[item].imageUrl': deletedProduct.imageUrl,
+              'items.$[item].productType': deletedProduct.productType,
+              ...(deletedProduct.imagePublicId ? { 'items.$[item].imagePublicId': deletedProduct.imagePublicId } : {})
+            }
+          },
+          {
+            arrayFilters: [
+              { 'item.productId': deletedProduct._id, 'item.imageUrl': { $exists: false } }
+            ],
+            session
+          }
+        );
+      }
       await recordStoreAudit({
         session,
         req,
@@ -402,7 +438,7 @@ export async function deleteProduct(req, res) {
   } finally {
     await session.endSession();
   }
-  if (deletedProduct.imagePublicId) {
+  if (deletedProduct.imagePublicId && !await productImageHasOrderReference(deletedProduct.imagePublicId)) {
     try {
       await deleteProductImage(deletedProduct.imagePublicId);
     } catch (cleanupError) {

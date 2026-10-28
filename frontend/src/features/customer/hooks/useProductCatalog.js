@@ -3,14 +3,6 @@ import { useSelector } from 'react-redux'
 import { useGetProductCategoriesQuery, useGetProductsQuery } from '../../api/api.js'
 import { getProductStoreId } from '../utils.js'
 
-const builtInCategories = [
-  { id: 'vegetable', label: 'Vegetables' },
-  { id: 'fruit', label: 'Fruit' },
-  { id: 'meat', label: 'Meat & fish' },
-  { id: 'rice', label: 'Rice & grains' },
-  { id: 'oil', label: 'Oils' },
-]
-const builtInCategoryIds = new Set(builtInCategories.map(({ id }) => id))
 const categoryTints = ['#edf5e9', '#fff2e3', '#fcebea', '#eaf3f8', '#f5f0e7']
 
 export function formatCategoryLabel(name) {
@@ -19,7 +11,7 @@ export function formatCategoryLabel(name) {
 
 export function useProductCatalog({ categoryScreen = false, categoryId = '' }) {
   const selectedStore = useSelector((state) => state.selectedStore)
-  const { data: categoriesResponse } = useGetProductCategoriesQuery(
+  const { data: categoriesResponse, isLoading: categoriesLoading, error: categoriesError, refetch: refetchCategories } = useGetProductCategoriesQuery(
     { storeId: selectedStore?._id },
     { skip: !selectedStore?._id },
   )
@@ -31,14 +23,12 @@ export function useProductCatalog({ categoryScreen = false, categoryId = '' }) {
   const category = categoryScreen ? categoryId : ''
   const categories = useMemo(() => [
     { id: '', label: 'All' },
-    ...builtInCategories,
-    ...(categoriesResponse?.data || [])
-      .filter((name) => !builtInCategoryIds.has(name))
-      .map((name) => ({ id: name, label: formatCategoryLabel(name) })),
-  ].map((category) => ({
-    ...category,
-    imageUrl: categoriesResponse?.images?.[category.id],
-  })), [categoriesResponse?.data, categoriesResponse?.images])
+    ...(categoriesResponse?.data || []).map((name) => ({
+      id: name,
+      label: formatCategoryLabel(name),
+      imageUrl: categoriesResponse?.images?.[name],
+    })),
+  ], [categoriesResponse?.data, categoriesResponse?.images])
 
   const pageKeyMatches = pageState.storeId === selectedStore?._id && pageState.category === category && pageState.search === querySearch
   const page = pageKeyMatches ? pageState.page : 1
@@ -86,6 +76,9 @@ export function useProductCatalog({ categoryScreen = false, categoryId = '' }) {
   return {
     category,
     categories,
+    categoriesLoading,
+    categoriesError,
+    refetchCategories,
     browseCategories,
     categoryTints,
     search,

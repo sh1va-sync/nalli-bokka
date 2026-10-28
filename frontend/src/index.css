@@ -105,34 +105,34 @@ button:not(.button-strong)[class*="bg-[var(--brand-primary)]"]:hover {
 }
 
 .store-selector-button {
-  border-color: var(--brand-primary);
-  background-color: var(--brand-primary);
-  color: #fff;
+  border-color: #b8d7c2;
+  background-color: #e7f3e9;
+  color: var(--brand-primary);
   transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .store-selector-button:hover {
-  border-color: var(--brand-primary-hover);
-  background-color: var(--brand-primary-hover);
+  border-color: #94c3a3;
+  background-color: #d9eddc;
 }
 
 .store-selector-button:disabled {
-  border-color: #dce7df;
-  background-color: #dce7df;
-  color: #52675b;
+  border-color: #d3e2d6;
+  background-color: #eff5ef;
+  color: var(--text-secondary);
 }
 
-.store-selector-button > span {
-  color: #fff;
+.store-selector-button .store-selector-caption {
+  color: var(--text-secondary);
 }
 
 .store-selector-button .store-selector-icon {
-  background-color: rgb(255 255 255 / 14%);
-  color: #fff;
+  background-color: #d3e9d8;
+  color: var(--brand-primary);
 }
 
 .store-selector-button .store-selector-status {
-  background-color: #fff;
+  background-color: #d3e9d8;
   color: var(--brand-primary);
 }
 

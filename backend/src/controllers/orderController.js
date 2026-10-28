@@ -21,11 +21,15 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-async function paginateOrders(filter, page, limit, sort = { createdAt: -1, _id: -1 }) {
+async function paginateOrders(filter, page, limit, sort = { createdAt: -1, _id: -1 }, includeProductImages = false) {
+  const query = Order.find(filter)
+    .populate('storeId', 'storeName location')
+    .sort(sort);
+  if (includeProductImages) {
+    query.populate('items.productId', 'imageUrl productType');
+  }
   const [data, total] = await Promise.all([
-    Order.find(filter)
-      .populate('storeId', 'storeName location')
-      .sort(sort)
+    query
       .skip((page - 1) * limit)
       .limit(limit),
     Order.countDocuments(filter)
@@ -45,14 +49,16 @@ export async function listUserOrders(req, res) {
   if (from) {
     filter.createdAt = { $gte: new Date(from), $lt: new Date(to) };
   }
-  res.json(await paginateOrders(filter, page, limit));
+  res.json(await paginateOrders(filter, page, limit, undefined, true));
 }
 
 export async function getUserOrder(req, res) {
   const order = await Order.findOne({
     _id: req.validated.params.orderId,
     userId: req.auth.id
-  }).populate('storeId', 'storeName location storePhone storeNumber');
+  })
+    .populate('storeId', 'storeName location storePhone storeNumber')
+    .populate('items.productId', 'imageUrl productType');
   if (!order) {
     throw new AppError(404, 'Order not found');
   }
