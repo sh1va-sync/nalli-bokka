@@ -2,7 +2,6 @@ import Product from '../models/Product.js';
 import ProductCategory from '../models/ProductCategory.js';
 import AppError from '../utils/AppError.js';
 import escapeRegex from '../utils/escapeRegex.js';
-import { BUILT_IN_PRODUCT_TYPES } from '../utils/productTypes.js';
 
 export async function listProductCategories(req, res) {
   const { storeId } = req.validated.query;
@@ -14,7 +13,7 @@ export async function listProductCategories(req, res) {
     ? Object.fromEntries(categories.filter(category => category.imageUrl).map(({ name, imageUrl }) => [name, imageUrl]))
     : {};
   res.json({
-    data: [...new Set([...BUILT_IN_PRODUCT_TYPES, ...customNames])].sort(),
+    data: [...new Set(customNames)].sort(),
     images
   });
 }

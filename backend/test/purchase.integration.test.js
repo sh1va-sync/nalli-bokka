@@ -230,11 +230,11 @@ test('store-created categories persist and support custom product pricing and in
   const publicCategoriesResponse = await fetch(`${baseUrl}/products/categories?storeId=${store._id}`);
   assert.equal(publicCategoriesResponse.status, 200);
   const publicCategories = await publicCategoriesResponse.json();
-  assert.ok(publicCategories.data.includes('pet supplies'));
+  assert.deepEqual(publicCategories.data, ['pet supplies']);
   assert.equal(publicCategories.images['pet supplies'], createdCategory.imageUrl);
   const otherStoreCategoriesResponse = await fetch(`${baseUrl}/products/categories?storeId=${otherStore._id}`);
   const otherStoreCategories = await otherStoreCategoriesResponse.json();
-  assert.equal(otherStoreCategories.data.includes('pet supplies'), false);
+  assert.deepEqual(otherStoreCategories.data, []);
   assert.deepEqual(otherStoreCategories.images, {});
 
   const fruitDeleteResponse = await fetch(`${baseUrl}/store/product-categories/fruit`, {
@@ -245,8 +245,8 @@ test('store-created categories persist and support custom product pricing and in
   const storeCategoriesAfterDelete = await fetch(`${baseUrl}/store/product-categories`, { headers });
   assert.equal(storeCategoriesAfterDelete.status, 200);
   assert.equal((await storeCategoriesAfterDelete.json()).data.includes('fruit'), false);
-  const publicCategoriesAfterDelete = await fetch(`${baseUrl}/products/categories`);
-  assert.ok((await publicCategoriesAfterDelete.json()).data.includes('fruit'));
+  const publicCategoriesAfterDelete = await fetch(`${baseUrl}/products/categories?storeId=${store._id}`);
+  assert.deepEqual((await publicCategoriesAfterDelete.json()).data, ['pet supplies']);
   const restoreBuiltInResponse = await fetch(`${baseUrl}/store/product-categories`, {
     method: 'POST',
     headers: { ...headers, 'content-type': 'application/json' },
@@ -254,6 +254,8 @@ test('store-created categories persist and support custom product pricing and in
   });
   assert.equal(restoreBuiltInResponse.status, 201);
   assert.deepEqual((await restoreBuiltInResponse.json()).data, { name: 'fruit' });
+  const storeCategoriesAfterRestore = await fetch(`${baseUrl}/store/product-categories`, { headers });
+  assert.equal((await storeCategoriesAfterRestore.json()).data.filter(name => name === 'fruit').length, 1);
 
   const duplicateResponse = await fetch(`${baseUrl}/store/product-categories`, {
     method: 'POST',

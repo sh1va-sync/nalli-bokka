@@ -59,7 +59,10 @@ export async function listStoreProductCategories(req, res) {
   ]);
   const deletedNames = new Set(deletedCategories);
   res.json({
-    data: [...BUILT_IN_PRODUCT_TYPES.filter(name => !deletedNames.has(name)), ...categories.map(category => category.name)]
+    data: [...new Set([
+      ...BUILT_IN_PRODUCT_TYPES.filter(name => !deletedNames.has(name)),
+      ...categories.map(category => category.name)
+    ])]
   });
 }
 

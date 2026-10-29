@@ -3,14 +3,21 @@ import { v2 as cloudinaryApi } from 'cloudinary';
 import AppError from '../utils/AppError.js';
 
 function configureCloudinary() {
-  const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = process.env;
-  if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
-    throw new AppError(503, 'Image storage is not configured. Set the Cloudinary environment variables.');
+  const settings = {
+    CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME?.trim(),
+    CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY?.trim(),
+    CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET?.trim()
+  };
+  const missingSettings = Object.entries(settings)
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
+  if (missingSettings.length) {
+    throw new AppError(503, `Image storage is not configured. Missing backend setting(s): ${missingSettings.join(', ')}.`);
   }
   cloudinaryApi.config({
-    cloud_name: CLOUDINARY_CLOUD_NAME,
-    api_key: CLOUDINARY_API_KEY,
-    api_secret: CLOUDINARY_API_SECRET,
+    cloud_name: settings.CLOUDINARY_CLOUD_NAME,
+    api_key: settings.CLOUDINARY_API_KEY,
+    api_secret: settings.CLOUDINARY_API_SECRET,
     secure: true
   });
 }
