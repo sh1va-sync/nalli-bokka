@@ -132,8 +132,8 @@ export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] grid items-end bg-[var(--text-primary)]/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="login-title">
-      <section className="relative mx-auto w-full max-w-md rounded-t-[24px] bg-[var(--bg-app)] p-6 shadow-2xl sm:rounded-[24px] sm:p-8">
+    <div className="customer-dialog-backdrop fixed inset-0 z-[60] grid items-end bg-[var(--text-primary)]/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="login-title">
+      <section className="customer-dialog-panel relative mx-auto w-full max-w-md rounded-t-[24px] bg-[var(--bg-app)] p-6 shadow-2xl sm:rounded-[24px] sm:p-8">
         <button className="absolute right-5 top-5 rounded-full p-2 text-[var(--text-secondary)] hover:bg-[var(--surface-subtle)]" onClick={closeDialog} aria-label="Close sign in"><X size={19} /></button>
         <span className="mb-5 grid h-11 w-11 place-items-center rounded-full bg-[var(--status-danger-soft)] text-[var(--brand-primary)]">{step === 'phone' ? <Phone size={19} /> : <ShieldCheck size={20} />}</span>
         <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[var(--text-secondary)]">NalliBokka account</p>

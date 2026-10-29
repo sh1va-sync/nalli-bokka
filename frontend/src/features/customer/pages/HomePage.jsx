@@ -171,7 +171,7 @@ export default function HomePage({ categoryScreen = false }) {
               <div className="absolute inset-0 bg-gradient-to-r from-[#1a1a1a]/85 via-[#1a1a1a]/60 to-transparent" />
             </div>
 
-            <div key={heroSlideIndex} role="group" aria-roledescription="slide" aria-label={`${heroSlideIndex + 1} of ${heroSlides.length}`} className="relative z-10 flex min-h-[200px] items-center px-5 py-6 sm:min-h-[280px] sm:px-10 sm:py-10">
+            <div key={heroSlideIndex} role="group" aria-roledescription="slide" aria-label={`${heroSlideIndex + 1} of ${heroSlides.length}`} className="customer-hero-slide relative z-10 flex min-h-[200px] items-center px-5 py-6 sm:min-h-[280px] sm:px-10 sm:py-10">
               <div className="max-w-[65%] sm:max-w-[55%]">
                 <span className="text-[8px] font-bold uppercase tracking-[.18em] text-white/80 sm:text-[10px]">{activeHeroSlide.eyebrow}</span>
                 <h1 className="mt-2 text-[1.4rem] font-bold leading-[1.1] tracking-[-.03em] text-white sm:mt-3 sm:text-[2.4rem]">
@@ -217,13 +217,13 @@ export default function HomePage({ categoryScreen = false }) {
           </div> */}
 
         {/* ── Trust badges row ─────────────────────── */}
-        <div className="mt-4 grid grid-cols-3 gap-2 px-3 sm:mt-5 sm:gap-3 sm:px-0">
+        <div className="trust-benefits-enter mt-4 grid grid-cols-3 gap-2 px-3 sm:mt-5 sm:gap-3 sm:px-0">
           {trustBadges.map((badge) => (
             <div
               key={badge.title}
-              className="flex min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border border-[#dce8d8] bg-[#f2f7ee] px-2 py-3 text-center sm:flex-row sm:justify-start sm:gap-3 sm:px-4 sm:py-4 sm:text-left"
+              className="trust-benefit-card flex min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border border-[#dce8d8] bg-[#f2f7ee] px-2 py-3 text-center sm:flex-row sm:justify-start sm:gap-3 sm:px-4 sm:py-4 sm:text-left"
             >
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-[#286640] shadow-sm sm:h-11 sm:w-11">
+              <span className="trust-benefit-icon grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-[#286640] shadow-sm sm:h-11 sm:w-11">
                 <badge.icon size={19} strokeWidth={1.9} />
               </span>
               <span className="min-w-0">
@@ -256,7 +256,7 @@ export default function HomePage({ categoryScreen = false }) {
             {categoriesLoading && <p role="status" className="mb-3 text-xs text-[var(--text-secondary)]">Loading store categories…</p>}
 
             {!categoriesLoading && !categoriesError && homeCategories.length > 0 && (
-              <div className="grid grid-cols-3 gap-2.5 sm:gap-4 lg:gap-5">
+              <div className="category-grid-enter grid grid-cols-3 gap-2.5 sm:gap-4 lg:gap-5">
                 {homeCategories.map((item, index) => {
                   const iconColor = categoryIconColors[index % categoryIconColors.length]
                   return (

@@ -46,8 +46,8 @@ export default function StorePicker({ open, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid items-end bg-[var(--text-primary)]/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="store-title">
-      <section className="mx-auto max-h-[90vh] w-full max-w-lg overflow-hidden rounded-t-[24px] bg-[var(--bg-app)] shadow-2xl sm:rounded-[24px]">
+    <div className="customer-dialog-backdrop fixed inset-0 z-50 grid items-end bg-[var(--text-primary)]/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="store-title">
+      <section className="customer-dialog-panel mx-auto max-h-[90vh] w-full max-w-lg overflow-hidden rounded-t-[24px] bg-[var(--bg-app)] shadow-2xl sm:rounded-[24px]">
         <div className="flex items-start justify-between border-b border-[var(--border-default)] px-6 py-5">
           <div><span className="mb-2 inline-flex h-10 w-10 items-center justify-center rounded-full bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]"><Store size={18} strokeWidth={1.7} /></span><h2 id="store-title" className="font-display text-xl font-medium text-[var(--text-primary)]">Where should we deliver?</h2><p className="mt-1 text-sm text-[var(--text-secondary)]">Choose your neighbourhood store.</p></div>
           {selectedStore?.isOpen !== false && selectedStore && <button className="rounded-full p-2 text-[var(--text-secondary)] hover:bg-[var(--surface-subtle)]" onClick={onClose} aria-label="Close store selection"><X size={19} /></button>}

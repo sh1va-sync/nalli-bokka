@@ -40,7 +40,7 @@ export default function CategoriesPage() {
 
       {error && <p role="alert" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[var(--status-danger-soft)] p-3 text-sm text-[var(--status-danger)]"><span>We couldn’t load categories from the store.</span><button type="button" onClick={refetch} className="font-bold underline">Try again</button></p>}
       {isLoading && <p role="status" className="mt-5 text-sm text-[var(--text-secondary)]">Loading categories…</p>}
-      {!isLoading && !error && filteredCategories.length > 0 && <div className="mt-5 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-5 lg:grid-cols-3">
+      {!isLoading && !error && filteredCategories.length > 0 && <div className="category-grid-enter mt-5 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-5 lg:grid-cols-3">
         {filteredCategories.map((category) => <Link key={category.id} to={`/categories/${encodeURIComponent(category.id)}`} className="group min-w-0 overflow-hidden rounded-[20px] border border-[var(--border-default)] bg-white shadow-[0_8px_24px_-20px_rgba(17,44,31,.45)] transition duration-200 hover:-translate-y-0.5 hover:border-[var(--brand-secondary)] hover:shadow-[0_14px_28px_-20px_rgba(17,44,31,.42)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-primary)] sm:rounded-[26px]">
           <span className="block aspect-[1.48] overflow-hidden" style={{ backgroundColor: category.tint }}>
             <CategoryPhoto category={category.label} imageUrl={category.imageUrl} placeholderOnly className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" />

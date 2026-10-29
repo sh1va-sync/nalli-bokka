@@ -82,7 +82,7 @@ export default function CartDrawer({ open, onClose, items, isGuest, onLogin, onS
 
   if (!pageMode && !open) return null
   return (
-    <div className={pageMode ? 'mx-auto max-w-6xl px-4 pb-10 pt-5 sm:px-6 sm:pt-8 lg:px-8' : 'fixed inset-0 z-40 bg-[var(--text-primary)]/40 backdrop-blur-[2px]'} role={pageMode ? undefined : 'presentation'} onMouseDown={pageMode ? undefined : (event) => { if (event.target === event.currentTarget) onClose() }}>
+    <div className={pageMode ? 'mx-auto max-w-6xl px-4 pb-10 pt-5 sm:px-6 sm:pt-8 lg:px-8' : 'customer-cart-backdrop fixed inset-0 z-40 bg-[var(--text-primary)]/40 backdrop-blur-[2px]'} role={pageMode ? undefined : 'presentation'} onMouseDown={pageMode ? undefined : (event) => { if (event.target === event.currentTarget) onClose() }}>
       {pageMode ? <>
         <header className="relative isolate mb-5 overflow-hidden rounded-[24px] bg-gradient-to-r from-[#edf5ee] via-[#eaf4eb] to-[#e1efe4] px-5 py-6 sm:mb-7 sm:rounded-[30px] sm:px-8 sm:py-8">
           <img src="/hero/green-market.svg" alt="" className="pointer-events-none absolute -right-7 bottom-0 h-[118%] w-[54%] object-contain object-right-bottom opacity-80 sm:right-0 sm:h-[125%] sm:w-[42%]" />
@@ -158,7 +158,7 @@ export default function CartDrawer({ open, onClose, items, isGuest, onLogin, onS
           </section>
           {!isGuest && items.some((item) => item.needsSync) ? <button disabled={syncing} onClick={syncPendingItems} className="mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-[16px] bg-[var(--brand-primary)] text-base font-bold text-white shadow-[0_8px_18px_-8px_rgba(23,97,73,.55)] hover:bg-[var(--brand-primary-hover)] disabled:opacity-60">{syncing ? 'Syncing saved items…' : 'Sync saved items'} <ArrowRight size={21} /></button> : !isGuest && unavailable ? <button disabled className="mt-4 flex h-14 w-full items-center justify-center rounded-[16px] bg-[#e3e1dc] text-base font-semibold text-[var(--text-secondary)]">Resolve unavailable items</button> : isGuest ? <button onClick={onLogin} className="button-strong mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-[16px] text-base font-bold shadow-[0_8px_18px_-8px_rgba(23,97,73,.55)]">Sign in to checkout <ArrowRight size={21} /></button> : <Link to="/checkout" className="button-strong mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-[16px] text-base font-bold shadow-[0_8px_18px_-8px_rgba(23,97,73,.55)]">Proceed to checkout <ArrowRight size={21} /></Link>}
         </>}
-      </> : <aside className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col border-l border-[var(--surface-subtle)] bg-white shadow-2xl" aria-labelledby="basket-title">
+      </> : <aside className="customer-cart-panel absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col border-l border-[var(--surface-subtle)] bg-white shadow-2xl" aria-labelledby="basket-title">
         <div className="flex items-center justify-between border-b border-[var(--surface-subtle)] px-5 py-4 sm:px-8 sm:py-5">
           <h2 id="basket-title" className="text-[25px] font-semibold tracking-[-.035em] text-[var(--text-primary)]">Your cart</h2>
           <button onClick={onClose} aria-label="Close cart" className="rounded-full p-2 text-[var(--text-secondary)] hover:bg-[#f2f1ed]"><X size={23} /></button>

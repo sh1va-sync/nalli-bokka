@@ -63,6 +63,16 @@ button {
   cursor: pointer;
 }
 
+button:not([class*="transition"]),
+a:not([class*="transition"]) {
+  transition: transform 150ms ease;
+}
+
+button:active,
+a:active {
+  transform: scale(0.98);
+}
+
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
@@ -173,6 +183,96 @@ button:not(.button-strong)[class*="bg-[var(--brand-primary)]"]:hover {
   isolation: isolate;
 }
 
+.customer-hero-slide {
+  animation: customer-hero-slide-enter 520ms cubic-bezier(0.2, 0.75, 0.25, 1) backwards;
+}
+
+.customer-route-enter {
+  animation: customer-route-enter 360ms cubic-bezier(0.2, 0.75, 0.25, 1) backwards;
+}
+
+.category-grid-enter > * {
+  animation: category-tile-enter 460ms cubic-bezier(0.2, 0.75, 0.25, 1) backwards;
+}
+
+.category-grid-enter > *:nth-child(2) {
+  animation-delay: 45ms;
+}
+
+.category-grid-enter > *:nth-child(3) {
+  animation-delay: 90ms;
+}
+
+.category-grid-enter > *:nth-child(4) {
+  animation-delay: 135ms;
+}
+
+.category-grid-enter > *:nth-child(5) {
+  animation-delay: 180ms;
+}
+
+.category-grid-enter > *:nth-child(6) {
+  animation-delay: 225ms;
+}
+
+.trust-benefits-enter > * {
+  animation: trust-benefit-enter 460ms cubic-bezier(0.2, 0.75, 0.25, 1) backwards;
+}
+
+.trust-benefits-enter > *:nth-child(2) {
+  animation-delay: 80ms;
+}
+
+.trust-benefits-enter > *:nth-child(3) {
+  animation-delay: 160ms;
+}
+
+.trust-benefit-card {
+  transition: transform 200ms cubic-bezier(0.2, 0.75, 0.25, 1), border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.trust-benefit-icon {
+  transition: transform 220ms cubic-bezier(0.2, 0.75, 0.25, 1), box-shadow 220ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .trust-benefit-card:hover {
+    border-color: #b7d2bb;
+    box-shadow: 0 10px 24px -16px rgb(23 67 46 / 42%);
+    transform: translateY(-3px);
+  }
+
+  .trust-benefit-card:hover .trust-benefit-icon {
+    box-shadow: 0 5px 12px -8px rgb(23 67 46 / 50%);
+    transform: translateY(-1px) scale(1.06);
+  }
+}
+
+.trust-benefit-card:active .trust-benefit-icon {
+  transform: scale(0.94);
+}
+
+.customer-dialog-backdrop,
+.customer-cart-backdrop {
+  animation: product-backdrop-enter 180ms ease-out both;
+}
+
+.customer-dialog-panel {
+  animation: product-sheet-enter 320ms cubic-bezier(0.2, 0.75, 0.25, 1) backwards;
+}
+
+.customer-cart-panel {
+  animation: customer-cart-enter 360ms cubic-bezier(0.2, 0.75, 0.25, 1) backwards;
+}
+
+.customer-bottom-nav-item:active .customer-bottom-nav-icon {
+  transform: scale(0.92);
+}
+
+.customer-bottom-nav-icon {
+  transition: color 150ms ease, background-color 150ms ease, transform 180ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
 .customer-hero::after {
   position: absolute;
   z-index: -1;
@@ -181,6 +281,66 @@ button:not(.button-strong)[class*="bg-[var(--brand-primary)]"]:hover {
     radial-gradient(circle at 88% 30%, rgb(255 255 255 / 12%), transparent 28%),
     linear-gradient(100deg, rgb(0 0 0 / 12%), transparent 72%);
   content: "";
+}
+
+@keyframes customer-route-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes customer-hero-slide-enter {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes category-tile-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes trust-benefit-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes customer-cart-enter {
+  from {
+    opacity: 0.8;
+    transform: translateX(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .category-tile:focus-visible {
@@ -727,6 +887,29 @@ button:not(.button-strong)[class*="bg-[var(--brand-primary)]"]:hover {
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+
+  button,
+  a,
+  .customer-route-enter,
+  .customer-hero-slide,
+  .category-grid-enter > *,
+  .trust-benefits-enter > *,
+  .trust-benefit-card,
+  .trust-benefit-icon,
+  .customer-dialog-backdrop,
+  .customer-dialog-panel,
+  .customer-cart-backdrop,
+  .customer-cart-panel,
+  .customer-bottom-nav-icon {
+    animation: none;
+    transition: none;
+  }
+
+  button:active,
+  a:active,
+  .customer-bottom-nav-item:active .customer-bottom-nav-icon {
+    transform: none;
   }
 
   .dashboard-enter,

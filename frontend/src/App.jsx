@@ -99,33 +99,35 @@ function App() {
       {isHomeRoute && activeOrder && <ActiveOrderBanner order={activeOrder} />}
       {isHomeRoute && activeOrdersError && <p role="status" className="mx-auto max-w-7xl px-4 py-2 text-xs text-[var(--status-danger)] sm:px-6 lg:px-8">{activeOrder ? 'Some order status updates could not be refreshed.' : 'Couldn’t refresh your active order status.'} {getErrorMessage(activeOrdersError)}</p>}
       <main className="pb-24 md:pb-12">
-        <Suspense fallback={<div className="mx-auto max-w-7xl px-5 py-20 text-center text-slate-500">Loading your page…</div>}>
-          {selectedStoreIsClosed ? <section className="mx-auto grid min-h-[65vh] max-w-xl content-center justify-items-center px-5 py-16 text-center">
-            <span className="grid h-16 w-16 place-items-center rounded-2xl bg-[var(--status-danger-soft)] text-[var(--brand-primary)]"><ShoppingBasket size={28} /></span>
-            <p className="mt-5 text-[10px] font-bold uppercase tracking-[.18em] text-[var(--brand-primary)]">Store temporarily closed</p>
-            <h1 className="mt-2 font-display text-3xl font-medium text-[var(--text-primary)]">{selectedStore?.storeName} isn’t taking orders right now</h1>
-            <p className="mt-3 max-w-md text-sm leading-6 text-[var(--text-secondary)]">You can choose another open store, or come back when this store reopens. Your basket will be cleared if you switch stores.</p>
-            <button type="button" onClick={() => setStoreOpen(true)} className="mt-6 rounded-xl bg-[var(--brand-primary)] px-5 py-3 text-sm font-bold text-white transition hover:bg-[var(--brand-primary-hover)]">Choose an open store</button>
-          </section> : <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/categories" element={<CategoriesPage />} />
-            <Route path="/categories/:categoryId" element={<HomePage categoryScreen />} />
-            <Route path="/cart" element={<CartDrawer
-              open
-              pageMode
-              onClose={() => navigate('/')}
-              items={cartItems}
-              isGuest={!token}
-              onLogin={() => openLogin('Sign in to sync your basket and check out.', '/checkout')}
-              onSyncGuest={handleSignedIn}
-            />} />
-            <Route path="/checkout" element={<CheckoutPage onLogin={openLogin} onOpenCart={() => setCartOpen(true)} onToast={showToast} />} />
-            <Route path="/profile" element={token ? <ProfilePage /> : <Navigate to="/" replace />} />
-            <Route path="/orders" element={token ? <OrdersPage /> : <Navigate to="/" replace />} />
-            <Route path="/notifications" element={<Navigate to={token ? '/orders' : '/'} replace />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>}
-        </Suspense>
+        <div key={location.pathname} className="customer-route-enter">
+          <Suspense fallback={<div className="mx-auto max-w-7xl px-5 py-20 text-center text-slate-500">Loading your page…</div>}>
+            {selectedStoreIsClosed ? <section className="mx-auto grid min-h-[65vh] max-w-xl content-center justify-items-center px-5 py-16 text-center">
+              <span className="grid h-16 w-16 place-items-center rounded-2xl bg-[var(--status-danger-soft)] text-[var(--brand-primary)]"><ShoppingBasket size={28} /></span>
+              <p className="mt-5 text-[10px] font-bold uppercase tracking-[.18em] text-[var(--brand-primary)]">Store temporarily closed</p>
+              <h1 className="mt-2 font-display text-3xl font-medium text-[var(--text-primary)]">{selectedStore?.storeName} isn’t taking orders right now</h1>
+              <p className="mt-3 max-w-md text-sm leading-6 text-[var(--text-secondary)]">You can choose another open store, or come back when this store reopens. Your basket will be cleared if you switch stores.</p>
+              <button type="button" onClick={() => setStoreOpen(true)} className="mt-6 rounded-xl bg-[var(--brand-primary)] px-5 py-3 text-sm font-bold text-white transition hover:bg-[var(--brand-primary-hover)]">Choose an open store</button>
+            </section> : <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/categories" element={<CategoriesPage />} />
+              <Route path="/categories/:categoryId" element={<HomePage categoryScreen />} />
+              <Route path="/cart" element={<CartDrawer
+                open
+                pageMode
+                onClose={() => navigate('/')}
+                items={cartItems}
+                isGuest={!token}
+                onLogin={() => openLogin('Sign in to sync your basket and check out.', '/checkout')}
+                onSyncGuest={handleSignedIn}
+              />} />
+              <Route path="/checkout" element={<CheckoutPage onLogin={openLogin} onOpenCart={() => setCartOpen(true)} onToast={showToast} />} />
+              <Route path="/profile" element={token ? <ProfilePage /> : <Navigate to="/" replace />} />
+              <Route path="/orders" element={token ? <OrdersPage /> : <Navigate to="/" replace />} />
+              <Route path="/notifications" element={<Navigate to={token ? '/orders' : '/'} replace />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>}
+          </Suspense>
+        </div>
       </main>
       <footer className="border-t border-[var(--border-default)] bg-[var(--bg-app)] px-5 py-7 text-center text-xs text-[var(--text-secondary)]">
         Fresh from your neighbourhood. <span className="font-semibold text-[var(--brand-primary)]">NalliBokka.</span>
