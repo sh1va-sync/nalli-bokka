@@ -142,6 +142,12 @@ const schemas = {
   cartItemCreate: {
     body: selection.extend({ productId: objectId })
   },
+  cartItemsCreate: {
+    body: z.object({
+      productId: objectId,
+      items: z.array(selection).min(1).max(50)
+    }).strict()
+  },
   cartItemUpdate: {
     params: z.object({ itemId: objectId }),
     body: selection

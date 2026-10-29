@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { ArrowRight, Minus, Plus, ShoppingBasket, Trash2, X } from 'lucide-react'
 import { removeGuestItem, updateGuestItem } from '../../cart/cartSlice.js'
-import { useGetProductsQuery, useRemoveCartItemMutation, useUpdateCartItemMutation } from '../../api/api.js'
+import { api, useGetProductsQuery, useRemoveCartItemMutation, useUpdateCartItemMutation } from '../../api/api.js'
 import { formatPrice, formatSelection, getErrorMessage } from '../utils.js'
 import { getCategoryPhoto } from './categoryAssets.js'
 import ProductCard from './ProductCard.jsx'
@@ -24,6 +24,8 @@ export default function CartDrawer({ open, onClose, items, isGuest, onLogin, onS
   const [removeItem] = useRemoveCartItemMutation()
   const [error, setError] = useState('')
   const [syncing, setSyncing] = useState(false)
+  const [cartSyncing, setCartSyncing] = useState(false)
+  const pendingCartChanges = useRef(new Map())
   const unavailable = !isGuest && items.some((item) => item.needsSync || !item.available)
   const total = items.reduce((sum, item) => sum + estimatedTotal(item), 0)
   const { data: recommendationsResponse } = useGetProductsQuery(
@@ -35,38 +37,96 @@ export default function CartDrawer({ open, onClose, items, isGuest, onLogin, onS
     .filter((product) => !cartProductIds.has(String(product._id)) && product.inStock !== false)
     .slice(0, 8)
 
+  function flushCartChange(itemId, entry) {
+    if (entry.inFlight) return
+    entry.timer = null
+    entry.inFlight = true
+    const quantity = entry.quantity
+    const request = quantity === null
+      ? removeItem(itemId).unwrap()
+      : updateItem({
+        itemId,
+        selectionType: entry.item.selectionType,
+        selectedQuantity: quantity,
+        ...(entry.item.selectedPackLabel ? { selectedPackLabel: entry.item.selectedPackLabel } : {}),
+      }).unwrap()
+
+    request.catch((requestError) => {
+      setError(getErrorMessage(requestError))
+      dispatch(api.util.invalidateTags(['Cart']))
+    }).finally(() => {
+      entry.inFlight = false
+      if (pendingCartChanges.current.get(itemId) !== entry) return
+      if (entry.quantity !== quantity) {
+        entry.timer = setTimeout(() => flushCartChange(itemId, entry), 0)
+      } else {
+        pendingCartChanges.current.delete(itemId)
+        setCartSyncing(pendingCartChanges.current.size > 0)
+      }
+    })
+  }
+
+  function queueCartChange(item, quantity) {
+    const itemId = item.itemId
+    let entry = pendingCartChanges.current.get(itemId)
+    if (!entry) {
+      entry = { item, quantity, timer: null, inFlight: false }
+      pendingCartChanges.current.set(itemId, entry)
+    } else {
+      entry.item = item
+      entry.quantity = quantity
+      clearTimeout(entry.timer)
+    }
+    entry.quantity = quantity
+    setCartSyncing(true)
+    entry.timer = setTimeout(() => flushCartChange(itemId, entry), 250)
+  }
+
   async function changeQuantity(item, amount) {
     setError('')
-    const current = Number(item.selectedQuantity)
-    const next = current + amount
+    const pending = item.itemId && pendingCartChanges.current.get(item.itemId)
+    const current = Number(pending?.quantity ?? item.selectedQuantity)
+    const next = Number((current + amount).toFixed(2))
     if (next <= 0) {
       await deleteItem(item)
       return
     }
-    try {
-      if (isGuest || item.needsSync) {
-        dispatch(updateGuestItem({ key: item.key, selectedQuantity: Number(next.toFixed(2)) }))
-      } else {
-        await updateItem({
-          itemId: item.itemId,
-          selectionType: item.selectionType,
-          selectedQuantity: next,
-          ...(item.selectedPackLabel ? { selectedPackLabel: item.selectedPackLabel } : {}),
-        }).unwrap()
-      }
-    } catch (requestError) {
-      setError(getErrorMessage(requestError))
+    if (isGuest || item.needsSync) {
+      dispatch(updateGuestItem({ key: item.key, selectedQuantity: next }))
+      return
     }
+    dispatch(api.util.updateQueryData('getCart', undefined, (cart) => {
+      const cachedItem = cart.data?.items.find(({ itemId }) => itemId === item.itemId)
+      if (!cachedItem) return
+      cachedItem.selectedQuantity = next
+      if (Number.isFinite(Number(cachedItem.unitPrice))) {
+        cachedItem.lineTotal = Number((cachedItem.unitPrice * next).toFixed(2))
+      }
+      if (cart.data.total !== null && Number.isFinite(Number(cachedItem.lineTotal))) {
+        cart.data.total = Number(cart.data.items.reduce((total, cartItem) => (
+          total + Number(cartItem.lineTotal || 0)
+        ), 0).toFixed(2))
+      }
+    }))
+    queueCartChange(item, next)
   }
 
   async function deleteItem(item) {
     setError('')
-    try {
-      if (isGuest || item.needsSync) dispatch(removeGuestItem(item.key))
-      else await removeItem(item.itemId).unwrap()
-    } catch (requestError) {
-      setError(getErrorMessage(requestError))
+    if (isGuest || item.needsSync) {
+      dispatch(removeGuestItem(item.key))
+      return
     }
+    dispatch(api.util.updateQueryData('getCart', undefined, (cart) => {
+      if (!cart.data?.items) return
+      cart.data.items = cart.data.items.filter(({ itemId }) => itemId !== item.itemId)
+      const unavailableItems = cart.data.items.some((cartItem) => cartItem.available === false)
+      cart.data.hasUnavailableItems = unavailableItems
+      cart.data.total = unavailableItems
+        ? null
+        : Number(cart.data.items.reduce((total, cartItem) => total + Number(cartItem.lineTotal || 0), 0).toFixed(2))
+    }))
+    queueCartChange(item, null)
   }
 
   async function syncPendingItems() {
@@ -113,8 +173,9 @@ export default function CartDrawer({ open, onClose, items, isGuest, onLogin, onS
                     <div className="min-w-0 flex-1">
                       <h2 className="truncate text-sm font-extrabold leading-5 text-[var(--text-primary)] sm:text-lg">{item.productName || product.productName}</h2>
                       <p className="mt-1 text-xs text-[var(--text-secondary)] sm:text-sm">{formatSelection(item)}</p>
+                      {item.pendingAdd && <p className="mt-1 text-[10px] font-semibold text-[var(--brand-primary)]">Adding to your cart…</p>}
                     </div>
-                    <button type="button" onClick={() => deleteItem(item)} aria-label={`Remove ${item.productName || product.productName} from cart`} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[var(--text-secondary)] transition hover:bg-[var(--status-danger-soft)] hover:text-[var(--status-danger)]">
+                    <button type="button" disabled={item.pendingAdd} onClick={() => deleteItem(item)} aria-label={`Remove ${item.productName || product.productName} from cart`} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[var(--text-secondary)] transition hover:bg-[var(--status-danger-soft)] hover:text-[var(--status-danger)] disabled:opacity-40">
                       <Trash2 size={17} />
                     </button>
                   </div>
@@ -122,9 +183,9 @@ export default function CartDrawer({ open, onClose, items, isGuest, onLogin, onS
                   {unavailableItem && <p className="mt-1 text-[10px] font-semibold text-rose-700">{item.issue || 'No longer available'}</p>}
                   <div className="mt-2 flex flex-wrap items-center justify-between gap-2 sm:mt-3">
                     <div className="flex h-9 items-center gap-1 rounded-full border border-[#dce9df] bg-[#f1f7f2] px-1 sm:h-11 sm:gap-2">
-                      <button type="button" onClick={() => changeQuantity(item, -step)} aria-label="Decrease quantity" className="grid h-7 w-8 place-items-center rounded-full text-[var(--text-primary)] transition hover:bg-white sm:h-9 sm:w-10"><Minus size={16} /></button>
+                      <button type="button" disabled={item.pendingAdd} onClick={() => changeQuantity(item, -step)} aria-label="Decrease quantity" className="grid h-7 w-8 place-items-center rounded-full text-[var(--text-primary)] transition hover:bg-white disabled:opacity-40 sm:h-9 sm:w-10"><Minus size={16} /></button>
                       <span className="min-w-5 text-center text-sm font-bold text-[var(--text-primary)]">{item.selectedQuantity}</span>
-                      <button type="button" onClick={() => changeQuantity(item, step)} aria-label="Increase quantity" className="grid h-7 w-8 place-items-center rounded-full text-[var(--text-primary)] transition hover:bg-white sm:h-9 sm:w-10"><Plus size={17} /></button>
+                      <button type="button" disabled={item.pendingAdd} onClick={() => changeQuantity(item, step)} aria-label="Increase quantity" className="grid h-7 w-8 place-items-center rounded-full text-[var(--text-primary)] transition hover:bg-white disabled:opacity-40 sm:h-9 sm:w-10"><Plus size={17} /></button>
                     </div>
                     <span className="shrink-0 text-sm font-extrabold text-[var(--text-primary)] sm:text-lg">{unavailableItem ? 'Unavailable' : formatPrice(estimatedTotal(item))}</span>
                   </div>
@@ -156,7 +217,7 @@ export default function CartDrawer({ open, onClose, items, isGuest, onLogin, onS
             </div>
             <p className="mt-2 text-[10px] leading-4 text-[var(--text-secondary)]">Final prices and delivery fee are confirmed by the store at checkout.</p>
           </section>
-          {!isGuest && items.some((item) => item.needsSync) ? <button disabled={syncing} onClick={syncPendingItems} className="mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-[16px] bg-[var(--brand-primary)] text-base font-bold text-white shadow-[0_8px_18px_-8px_rgba(23,97,73,.55)] hover:bg-[var(--brand-primary-hover)] disabled:opacity-60">{syncing ? 'Syncing saved items…' : 'Sync saved items'} <ArrowRight size={21} /></button> : !isGuest && unavailable ? <button disabled className="mt-4 flex h-14 w-full items-center justify-center rounded-[16px] bg-[#e3e1dc] text-base font-semibold text-[var(--text-secondary)]">Resolve unavailable items</button> : isGuest ? <button onClick={onLogin} className="button-strong mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-[16px] text-base font-bold shadow-[0_8px_18px_-8px_rgba(23,97,73,.55)]">Sign in to checkout <ArrowRight size={21} /></button> : <Link to="/checkout" className="button-strong mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-[16px] text-base font-bold shadow-[0_8px_18px_-8px_rgba(23,97,73,.55)]">Proceed to checkout <ArrowRight size={21} /></Link>}
+          {!isGuest && items.some((item) => item.needsSync) ? <button disabled={syncing} onClick={syncPendingItems} className="mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-[16px] bg-[var(--brand-primary)] text-base font-bold text-white shadow-[0_8px_18px_-8px_rgba(23,97,73,.55)] hover:bg-[var(--brand-primary-hover)] disabled:opacity-60">{syncing ? 'Syncing saved items…' : 'Sync saved items'} <ArrowRight size={21} /></button> : !isGuest && unavailable ? <button disabled className="mt-4 flex h-14 w-full items-center justify-center rounded-[16px] bg-[#e3e1dc] text-base font-semibold text-[var(--text-secondary)]">Resolve unavailable items</button> : isGuest ? <button onClick={onLogin} className="button-strong mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-[16px] text-base font-bold shadow-[0_8px_18px_-8px_rgba(23,97,73,.55)]">Sign in to checkout <ArrowRight size={21} /></button> : cartSyncing || error || items.some((item) => item.pendingAdd) ? <button disabled className="mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-[16px] bg-[#e3e1dc] text-base font-semibold text-[var(--text-secondary)]">{cartSyncing || items.some((item) => item.pendingAdd) ? 'Saving cart…' : 'Resolve cart error'}</button> : <Link to="/checkout" className="button-strong mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-[16px] text-base font-bold shadow-[0_8px_18px_-8px_rgba(23,97,73,.55)]">Proceed to checkout <ArrowRight size={21} /></Link>}
         </>}
       </> : <aside className="customer-cart-panel absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col border-l border-[var(--surface-subtle)] bg-white shadow-2xl" aria-labelledby="basket-title">
         <div className="flex items-center justify-between border-b border-[var(--surface-subtle)] px-5 py-4 sm:px-8 sm:py-5">
@@ -180,9 +241,9 @@ export default function CartDrawer({ open, onClose, items, isGuest, onLogin, onS
                     {unavailableItem && <p className="mt-1 text-[10px] font-semibold text-rose-700">{item.issue || 'No longer available'}</p>}
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
                       <div className="flex h-10 items-center gap-3 rounded-full border border-[var(--border-default)] bg-[var(--bg-app)] px-2 shadow-sm">
-                        <button onClick={() => changeQuantity(item, -step)} aria-label="Decrease quantity" className="grid h-8 w-8 place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--surface-subtle)]"><Minus size={16} /></button>
+                        <button disabled={item.pendingAdd} onClick={() => changeQuantity(item, -step)} aria-label="Decrease quantity" className="grid h-8 w-8 place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--surface-subtle)] disabled:opacity-40"><Minus size={16} /></button>
                         <span className="min-w-5 text-center text-sm font-semibold text-[var(--text-primary)]">{item.selectedQuantity}</span>
-                        <button onClick={() => changeQuantity(item, step)} aria-label="Increase quantity" className="grid h-8 w-8 place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--surface-subtle)]"><Plus size={16} /></button>
+                        <button disabled={item.pendingAdd} onClick={() => changeQuantity(item, step)} aria-label="Increase quantity" className="grid h-8 w-8 place-items-center rounded-full text-[var(--text-primary)] hover:bg-[var(--surface-subtle)] disabled:opacity-40"><Plus size={16} /></button>
                       </div>
                       <span className="text-base font-semibold text-[var(--text-primary)]">{unavailableItem ? 'Unavailable' : formatPrice(estimatedTotal(item))}</span>
                     </div>
@@ -195,7 +256,7 @@ export default function CartDrawer({ open, onClose, items, isGuest, onLogin, onS
         {items.length > 0 && <div className="border-t border-[var(--border-default)] bg-[var(--bg-app)] px-5 pb-5 pt-4 sm:px-8 sm:pb-6">
           <div className="flex justify-between text-sm text-[var(--text-secondary)]"><span>Subtotal {isGuest && <span className="text-[10px]">(estimate)</span>}</span><span className="text-[22px] font-semibold tracking-[-.025em] text-[var(--text-primary)]">{formatPrice(total)}</span></div>
           <p className="mt-1 text-[10px] leading-4 text-[var(--text-secondary)]">Final prices are confirmed with the store when your cart is refreshed.</p>
-          {!isGuest && items.some((item) => item.needsSync) ? <button disabled={syncing} onClick={syncPendingItems} className="mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--brand-primary)] text-base font-semibold shadow-sm hover:bg-[var(--brand-primary-hover)] disabled:opacity-60">{syncing ? 'Syncing saved items…' : 'Sync saved items'} <ArrowRight size={17} /></button> : !isGuest && unavailable ? <button disabled className="mt-4 flex h-14 w-full items-center justify-center rounded-[14px] bg-[#e3e1dc] text-base font-semibold text-[var(--text-secondary)]">Resolve unavailable items</button> : isGuest ? <button onClick={onLogin} className="button-strong mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--brand-primary)] text-base font-semibold shadow-sm hover:bg-[var(--brand-primary-hover)]">Sign in to checkout <ArrowRight size={17} /></button> : <Link to="/checkout" onClick={onClose} className="button-strong mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--brand-primary)] text-base font-semibold shadow-sm hover:bg-[var(--brand-primary-hover)]">Proceed to checkout</Link>}
+          {!isGuest && items.some((item) => item.needsSync) ? <button disabled={syncing} onClick={syncPendingItems} className="mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--brand-primary)] text-base font-semibold shadow-sm hover:bg-[var(--brand-primary-hover)] disabled:opacity-60">{syncing ? 'Syncing saved items…' : 'Sync saved items'} <ArrowRight size={17} /></button> : !isGuest && unavailable ? <button disabled className="mt-4 flex h-14 w-full items-center justify-center rounded-[14px] bg-[#e3e1dc] text-base font-semibold text-[var(--text-secondary)]">Resolve unavailable items</button> : isGuest ? <button onClick={onLogin} className="button-strong mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--brand-primary)] text-base font-semibold shadow-sm hover:bg-[var(--brand-primary-hover)]">Sign in to checkout <ArrowRight size={17} /></button> : cartSyncing || error || items.some((item) => item.pendingAdd) ? <button disabled className="mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-[14px] bg-[#e3e1dc] text-base font-semibold text-[var(--text-secondary)]">{cartSyncing || items.some((item) => item.pendingAdd) ? 'Saving cart…' : 'Resolve cart error'}</button> : <Link to="/checkout" onClick={onClose} className="button-strong mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--brand-primary)] text-base font-semibold shadow-sm hover:bg-[var(--brand-primary-hover)]">Proceed to checkout</Link>}
         </div>}
       </aside>}
     </div>

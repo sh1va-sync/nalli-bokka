@@ -792,6 +792,21 @@ button:not(.button-strong)[class*="bg-[var(--brand-primary)]"]:hover {
   }
 }
 
+.notification-panel-enter {
+  animation: notification-panel-enter 160ms ease-out both;
+}
+
+@keyframes notification-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .order-toast {
   animation: order-toast-enter 360ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
@@ -914,6 +929,7 @@ button:not(.button-strong)[class*="bg-[var(--brand-primary)]"]:hover {
 
   .dashboard-enter,
   .dashboard-page-transition,
+  .notification-panel-enter,
   .order-toast,
   .active-order-banner,
   .active-order-pulse,

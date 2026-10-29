@@ -331,6 +331,22 @@ Request for a pack:
 
 Success: `201 { "data": <recalculated cart response> }`. Possible errors include `400` invalid/incompatible selection, `404` unknown product, and `409` out of stock.
 
+#### `POST /cart/items/bulk`
+
+Adds up to 50 selections for the same product and saves the cart once. The request body contains `productId` and an `items` array; each entry uses the selection shape above. Every selection and combined line quantity is validated before the cart is saved.
+
+```json
+{
+  "productId": "<productId>",
+  "items": [
+    { "selectionType": "pack", "selectedQuantity": 1, "selectedPackLabel": "1 L" },
+    { "selectionType": "pack", "selectedQuantity": 2, "selectedPackLabel": "5 L" }
+  ]
+}
+```
+
+Success: `201 { "data": <recalculated cart response> }`. Possible errors include `400` invalid/incompatible selection, `404` unknown product, and `409` out of stock.
+
 #### `PATCH /cart/items/:itemId`
 
 Replaces the selected quantity/type for one existing cart line. The body uses the shared selection shape above (no productId; product is determined from the cart line).
@@ -342,6 +358,10 @@ Success: `200 { "data": <recalculated cart response> }`. Possible errors: `400` 
 Removes one cart line.
 
 Success: `200 { "data": <recalculated cart response> }`. Returns `404` if the cart line does not exist.
+
+#### `DELETE /cart/items`
+
+Clears all cart lines. Success: `204 No Content`.
 
 ### 4.5 Orders and checkout
 

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { Minus, Plus, Trash2, X } from 'lucide-react'
 import { addGuestItem } from '../../cart/cartSlice.js'
-import { useAddCartItemMutation } from '../../api/api.js'
+import { useAddCartItemMutation, useAddCartItemsMutation } from '../../api/api.js'
 import { formatPrice, getErrorMessage } from '../utils.js'
 import { getCategoryPhoto } from './categoryAssets.js'
 
@@ -66,6 +66,7 @@ export default function ProductCard({ product }) {
   const dispatch = useDispatch()
   const token = useSelector((state) => state.auth.token)
   const [addItem, { isLoading }] = useAddCartItemMutation()
+  const [addItems, { isLoading: isAddingPacks }] = useAddCartItemsMutation()
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [counts, setCounts] = useState({})
   const [error, setError] = useState('')
@@ -107,27 +108,30 @@ export default function ProductCard({ product }) {
       setOptionsOpen(false)
       return
     }
+    setOptionsOpen(false)
     try {
       if (selectedOptions[0].selectionType === 'weight') {
         await addItem({
           productId: product._id,
           selectionType: 'weight',
           selectedQuantity: selectedOptions.reduce((total, option) => total + option.quantity * option.count, 0),
+          product,
         }).unwrap()
       } else {
-        for (const option of selectedOptions) {
-          await addItem({
-            productId: product._id,
+        await addItems({
+          productId: product._id,
+          items: selectedOptions.map((option) => ({
             selectionType: 'pack',
             selectedQuantity: option.count,
             selectedPackLabel: option.packLabel,
-          }).unwrap()
-        }
+          })),
+          product,
+        }).unwrap()
       }
       setCounts({})
-      setOptionsOpen(false)
     } catch (requestError) {
       setError(getErrorMessage(requestError))
+      setOptionsOpen(true)
     }
   }
 
@@ -151,7 +155,7 @@ export default function ProductCard({ product }) {
           <p className="mt-0.5 text-[9px] leading-3 text-[var(--text-secondary)]">{product.packs?.length ? 'Price varies by pack' : 'Price varies by quantity'}</p>
           <button
             onClick={() => { setCounts({}); setError(''); setOptionsOpen(true) }}
-            disabled={isLoading || product.inStock === false}
+            disabled={isLoading || isAddingPacks || product.inStock === false}
             className="button-strong product-card-choose mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl text-[12px] font-bold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-45 sm:h-11 sm:text-[13px]"
           >
             <Plus size={15} strokeWidth={2.5} /> Choose
@@ -180,7 +184,7 @@ export default function ProductCard({ product }) {
           </div>
           <div className="border-t border-[var(--surface-subtle)] bg-white px-4 pb-4 pt-3">
             <p className="mb-3 text-center text-sm text-[var(--text-secondary)]">{itemCount} {itemCount === 1 ? 'item' : 'items'} · {formatPrice(subtotal)}</p>
-            <button disabled={isLoading} onClick={addSelection} className="button-strong h-12 w-full rounded-xl text-sm font-bold shadow-sm transition hover:-translate-y-px hover:shadow-md disabled:opacity-60">{isLoading ? 'Adding…' : 'Done'}</button>
+            <button disabled={isLoading || isAddingPacks} onClick={addSelection} className="button-strong h-12 w-full rounded-xl text-sm font-bold shadow-sm transition hover:-translate-y-px hover:shadow-md disabled:opacity-60">{isLoading || isAddingPacks ? 'Adding…' : 'Done'}</button>
           </div>
         </section>
       </div>}

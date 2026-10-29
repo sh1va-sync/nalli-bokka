@@ -5,14 +5,14 @@ import { removeGuestItem } from '../../cart/cartSlice.js'
 import { setSelectedStore } from '../../store/storeSlice.js'
 import {
   api,
-  useAddCartItemMutation,
+  useAddCartItemsMutation,
   useGetCartQuery,
   useGetMeQuery,
   useGetOrdersQuery,
   useGetStoresQuery,
   useGetUserNotificationsQuery,
 } from '../../api/api.js'
-import { clearSessionNotice, setSessionNotice, signedOut } from '../../auth/authSlice.js'
+import { setSessionNotice, signedOut } from '../../auth/authSlice.js'
 import { createUuid, getErrorMessage } from '../utils.js'
 
 export function useCustomerAppState() {
@@ -32,7 +32,7 @@ export function useCustomerAppState() {
   const [loginReturnTo, setLoginReturnTo] = useState('')
   const [toasts, setToasts] = useState([])
   const notificationBaseline = useRef({ token: null, initialized: false, fingerprints: new Set() })
-  const [addCartItem] = useAddCartItemMutation()
+  const [addCartItems] = useAddCartItemsMutation()
 
   const { data: meResponse, error: meError, isLoading: meLoading } = useGetMeQuery(undefined, { skip: !token || isStoreRoute })
   const { data: storesResponse, error: storesError, isLoading: storesLoading } = useGetStoresQuery(
@@ -151,23 +151,36 @@ export function useCustomerAppState() {
   }, [isStoreRoute, notificationResponse, showToast, token])
 
   const handleSignedIn = useCallback(async () => {
+    const itemsByProduct = new Map()
     for (const item of guestItems) {
+      const productId = item.product._id
+      const group = itemsByProduct.get(productId) || { product: item.product, items: [] }
+      group.items.push({
+        selectionType: item.selectionType,
+        selectedQuantity: item.selectedQuantity,
+        ...(item.selectedPackLabel ? { selectedPackLabel: item.selectedPackLabel } : {}),
+      })
+      itemsByProduct.set(productId, group)
+    }
+
+    for (const [productId, group] of itemsByProduct) {
       try {
-        await addCartItem({
-          productId: item.product._id,
-          selectionType: item.selectionType,
-          selectedQuantity: item.selectedQuantity,
-          ...(item.selectedPackLabel ? { selectedPackLabel: item.selectedPackLabel } : {}),
+        await addCartItems({
+          productId,
+          items: group.items,
+          product: group.product,
         }).unwrap()
-        dispatch(removeGuestItem(item.key))
+        for (const item of guestItems.filter((guestItem) => guestItem.product._id === productId)) {
+          dispatch(removeGuestItem(item.key))
+        }
       } catch (error) {
-        return `Your account is ready, but ${item.product.productName} couldn’t sync: ${getErrorMessage(error)}`
+        return `Your account is ready, but ${group.product.productName} couldn’t sync: ${getErrorMessage(error)}`
       }
     }
     if (loginReturnTo) navigate(loginReturnTo)
     setLoginReturnTo('')
     return ''
-  }, [addCartItem, dispatch, guestItems, loginReturnTo, navigate])
+  }, [addCartItems, dispatch, guestItems, loginReturnTo, navigate])
 
   return {
     token,

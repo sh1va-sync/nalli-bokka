@@ -94,8 +94,10 @@ Weight-based quantities use kilograms (`0.25` means 250 g). Piece selections use
 | --- | --- | --- | --- |
 | GET | `/cart` | User | Get cart with current prices and calculated total; total is not persisted, and is `null` while any item is unavailable |
 | POST | `/cart/items` | User | Add a cart line; body `{ "productId": "<id>", "selectionType": "weight", "selectedQuantity": 0.5 }`; pack additionally requires `selectedPackLabel`. Matching selections increment an existing line |
+| POST | `/cart/items/bulk` | User | Add up to 50 selections for one product in a single request; matching selections increment existing lines |
 | PATCH | `/cart/items/:itemId` | User | Change a cart line's selection and quantity |
 | DELETE | `/cart/items/:itemId` | User | Remove a cart line |
+| DELETE | `/cart/items` | User | Clear the cart |
 | GET | `/stores/:id/pickup-slots` | Public | List future 30-minute pickup slots for a store and India-local date |
 | POST | `/payments/razorpay/order` | User | Start checkout; choose `delivery` with `addressId` or `pickup` with `pickupAt` |
 | GET | `/orders` | User | List own orders; optional `orderStatus`, `orderType`, and paired `from`/`to` date bounds |

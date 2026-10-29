@@ -1201,3 +1201,77 @@ test('store refunds are scoped, full, single-request, and settled by deduplicate
   assert.equal(failedRetryResponse.status, 200);
   assert.equal((await failedRetryResponse.json()).data.refundStatus, 'failed');
 });
+
+test('bulk cart updates validate all selections and clear the cart in one request', async () => {
+  const store = await Store.create({
+    storeName: 'Bulk Cart Store',
+    username: 'bulk-cart-store',
+    password: 'test-password-long-enough',
+    location: 'Hyderabad'
+  });
+  const user = await User.create({ name: 'Bulk Cart Customer', phone: '+15551234571' });
+  const product = await Product.create({
+    storeId: store._id,
+    productType: 'oil',
+    productName: 'Bulk Cart Oil',
+    imageUrl: 'https://example.test/oil.jpg',
+    inStock: true,
+    packs: [
+      { label: '1 L', price: 10 },
+      { label: '5 L', price: 40 }
+    ]
+  });
+  const token = jwt.sign({ role: 'user' }, process.env.JWT_SECRET, {
+    subject: String(user._id), expiresIn: '5m', issuer: 'nalli-bokka-api'
+  });
+  const headers = {
+    authorization: `Bearer ${token}`,
+    'content-type': 'application/json'
+  };
+
+  const invalidResponse = await fetch(`${baseUrl}/cart/items/bulk`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      productId: String(product._id),
+      items: [
+        { selectionType: 'pack', selectedQuantity: 1, selectedPackLabel: '1 L' },
+        { selectionType: 'pack', selectedQuantity: 1, selectedPackLabel: 'unknown' }
+      ]
+    })
+  });
+  assert.equal(invalidResponse.status, 400);
+  assert.equal(await Cart.exists({ userId: user._id }), null);
+
+  const addResponse = await fetch(`${baseUrl}/cart/items/bulk`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      productId: String(product._id),
+      items: [
+        { selectionType: 'pack', selectedQuantity: 1, selectedPackLabel: '1 L' },
+        { selectionType: 'pack', selectedQuantity: 2, selectedPackLabel: '1 L' },
+        { selectionType: 'pack', selectedQuantity: 1, selectedPackLabel: '5 L' }
+      ]
+    })
+  });
+  assert.equal(addResponse.status, 201);
+  const addedCart = (await addResponse.json()).data;
+  assert.equal(addedCart.items.length, 2);
+  assert.equal(addedCart.items.find(item => item.selectedPackLabel === '1 L').selectedQuantity, 3);
+  assert.equal(addedCart.total, 70);
+
+  const clearResponse = await fetch(`${baseUrl}/cart/items`, {
+    method: 'DELETE',
+    headers: { authorization: headers.authorization }
+  });
+  assert.equal(clearResponse.status, 204);
+  const cartResponse = await fetch(`${baseUrl}/cart`, {
+    headers: { authorization: headers.authorization }
+  });
+  assert.deepEqual((await cartResponse.json()).data, {
+    items: [],
+    total: 0,
+    hasUnavailableItems: false
+  });
+});

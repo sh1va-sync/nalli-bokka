@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { MapPin, Search, Store, X } from 'lucide-react'
-import { useGetCartQuery, useGetStoresQuery, useRemoveCartItemMutation } from '../../api/api.js'
+import { useClearCartMutation, useGetCartQuery, useGetStoresQuery } from '../../api/api.js'
 import { clearGuestCart } from '../../cart/cartSlice.js'
 import { setSelectedStore } from '../../store/storeSlice.js'
 import CookingLoader from './CookingLoader.jsx'
@@ -17,7 +17,7 @@ export default function StorePicker({ open, onClose }) {
   const [switchError, setSwitchError] = useState('')
   const { data, error, isLoading, isFetching, refetch } = useGetStoresQuery({ limit: 100, search: search || undefined }, { skip: !open })
   const { data: cartResponse, error: cartError, isFetching: cartFetching, refetch: refetchCart } = useGetCartQuery(undefined, { skip: !open || !token })
-  const [removeCartItem] = useRemoveCartItemMutation()
+  const [clearCart] = useClearCartMutation()
   if (!open) return null
 
   const stores = data?.data || []
@@ -32,7 +32,7 @@ export default function StorePicker({ open, onClose }) {
       if (!confirmed) return
       setSwitchingStoreId(store._id)
       try {
-        for (const item of cartItems) await removeCartItem(item._id).unwrap()
+        if (token && cartItems.length) await clearCart().unwrap()
         dispatch(clearGuestCart())
       } catch (removeError) {
         setSwitchError(`Could not clear your basket, so the store was not switched. Some items may already have been removed. ${getErrorMessage(removeError)}`)

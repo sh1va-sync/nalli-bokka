@@ -105,6 +105,58 @@ export async function addCartItem(req, res) {
   res.status(201).json({ data: await buildCartResponse(cart) });
 }
 
+export async function addCartItems(req, res) {
+  const { productId, items } = req.validated.body;
+  const product = await Product.findById(productId);
+  if (!product) {
+    throw new AppError(404, 'Product not found');
+  }
+
+  let cart = await Cart.findOne({ userId: req.auth.id });
+  if (!cart) {
+    cart = new Cart({ userId: req.auth.id, items: [] });
+  }
+
+  const quantities = new Map();
+  for (const selection of items) {
+    const key = JSON.stringify([selection.selectionType, selection.selectedPackLabel || '']);
+    quantities.set(key, (quantities.get(key) || 0) + selection.selectedQuantity);
+  }
+
+  for (const [key, selectedQuantity] of quantities) {
+    const [selectionType, selectedPackLabel] = JSON.parse(key);
+    const existing = cart.items.find(item => (
+      item.selectionType === selectionType
+      && item.selectedPackLabel === (selectedPackLabel || undefined)
+      && String(item.productId) === productId
+    ));
+    const combinedQuantity = (existing?.selectedQuantity || 0) + selectedQuantity;
+    priceSelection(product, selectionType, combinedQuantity, selectedPackLabel || undefined);
+    if (existing) {
+      existing.selectedQuantity = combinedQuantity;
+    } else {
+      cart.items.push({
+        productId,
+        selectionType,
+        selectedQuantity,
+        ...(selectedPackLabel ? { selectedPackLabel } : {})
+      });
+    }
+  }
+
+  await cart.save();
+  res.status(201).json({ data: await buildCartResponse(cart) });
+}
+
+export async function clearCart(req, res) {
+  const cart = await Cart.findOne({ userId: req.auth.id });
+  if (cart) {
+    cart.items = [];
+    await cart.save();
+  }
+  res.status(204).end();
+}
+
 export async function updateCartItem(req, res) {
   const cart = await Cart.findOne({ userId: req.auth.id });
   const item = cart?.items.id(req.validated.params.itemId);

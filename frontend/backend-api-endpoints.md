@@ -608,6 +608,26 @@ If no cart exists, the endpoint returns an empty `items` list, `total: 0`, and `
 
 **Important errors:** `400` incompatible selection, invalid quantity, or unknown pack label; `401` unauthorized; `404` product missing; `409` product out of stock or combined quantity not valid.
 
+### `POST /cart/items/bulk`
+
+**Purpose:** Adds up to 50 selections for one product in a single request. Each entry in `items` uses the selection format above. The server validates every selection and combined line quantity before saving the cart.
+
+**Request body:**
+
+```json
+{
+  "productId": "<productId>",
+  "items": [
+    { "selectionType": "pack", "selectedQuantity": 1, "selectedPackLabel": "1 L" },
+    { "selectionType": "pack", "selectedQuantity": 2, "selectedPackLabel": "5 L" }
+  ]
+}
+```
+
+**Success — `201 Created`:** `{ "data": <current cart response> }`.
+
+**Important errors:** `400` invalid or incompatible selection; `401` unauthorized; `404` product missing; `409` out of stock or combined quantity not valid.
+
 ### `PATCH /cart/items/:itemId`
 
 **Purpose:** Replaces the selection type/quantity/pack for one existing cart line. It does not add to the previous quantity.
@@ -625,6 +645,10 @@ If no cart exists, the endpoint returns an empty `items` list, `total: 0`, and `
 **Success — `200 OK`:** `{ "data": <updated cart response> }`.
 
 **Important errors:** `400` malformed line ID; `401` unauthorized; `404` cart line missing.
+
+### `DELETE /cart/items`
+
+**Purpose:** Clears all cart lines in one request. Success: `204 No Content`.
 
 ## Customer orders
 
