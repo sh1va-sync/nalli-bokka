@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   createProduct,
+  addStoreTransactionNote,
   createStoreProductCategory,
   deleteStoreProductCategory,
   deleteProduct,
@@ -50,6 +51,7 @@ router.get('/orders/:orderId', validate(schemas.orderParams), getStoreOrder);
 router.patch('/orders/:orderId/status', validate(schemas.orderStatusUpdate), updateStoreOrderStatus);
 router.post('/orders/:orderId/refund', validate(schemas.storeOrderRefund), refundStoreOrder);
 router.get('/transactions', validate(schemas.transactionList), listStoreTransactions);
+router.post('/transactions/:transactionId/notes', validate(schemas.storeTransactionNote), addStoreTransactionNote);
 router.get('/transactions/:transactionId', validate(schemas.transactionParams), getStoreTransaction);
 router.get('/reports/export', validate(schemas.storeReportExport), exportStoreReport);
 

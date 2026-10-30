@@ -18,6 +18,24 @@
 
 import mongoose from 'mongoose';
 
+const transactionCaseNoteSchema = new mongoose.Schema({
+  note: {
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: 2000
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Store',
+    required: true
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+}, { _id: true });
+
 const transactionSchema = new mongoose.Schema({
   orderId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -62,6 +80,10 @@ const transactionSchema = new mongoose.Schema({
   },
   refundRequestedAt: {
     type: Date
+  },
+  caseNotes: {
+    type: [transactionCaseNoteSchema],
+    default: []
   },
   timestamp: {
     type: Date,

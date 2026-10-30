@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowRight, Package, RotateCw, Search, ShieldCheck, Truck } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Package, RotateCw, Search, ShieldCheck, Truck } from 'lucide-react'
 import { useSelector } from 'react-redux'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import ProductCard from '../components/ProductCard.jsx'
@@ -131,7 +131,12 @@ export default function HomePage({ categoryScreen = false }) {
       </div> */}
 
       {/* ── Sticky Search Bar ───────────────────────── */}
-      <div className="sticky top-0 z-40 border-b border-[#e7e9e2] bg-[#fffefa]/95 px-3 py-2 backdrop-blur-md sm:px-0 sm:py-3">
+      <div className="sticky top-[60px] z-40 border-b border-[#e7e9e2] bg-[#fffefa]/95 px-3 py-2 backdrop-blur-md sm:top-[80px] sm:px-0 sm:py-3">
+        {categoryScreen && <div className="mx-auto mb-2 max-w-3xl">
+          <Link to="/categories" className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#dce8d8] bg-white px-3 text-xs font-semibold text-[#286640] shadow-sm transition hover:bg-[#f2f7ee] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#39734b]">
+            <ArrowLeft size={14} />{t('All categories')}
+          </Link>
+        </div>}
         <label className="customer-search mx-auto flex h-12 max-w-3xl items-center gap-3 rounded-2xl border border-[#dfe5d8] bg-[#f5f6f0] px-4 text-[#687568] transition focus-within:border-[#39734b] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#39734b]/10 sm:h-14 sm:rounded-[18px]">
           <Search size={20} strokeWidth={1.9} className="shrink-0 text-[#39734b]" />
           <input

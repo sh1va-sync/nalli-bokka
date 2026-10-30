@@ -418,6 +418,22 @@ export const api = createApi({
       query: (params = {}) => ({ url: '/store/transactions', params }),
       providesTags: ['StoreTransactions'],
     }),
+    getStoreTransaction: builder.query({
+      query: (transactionId) => `/store/transactions/${transactionId}`,
+      providesTags: ['StoreTransactions'],
+    }),
+    addStoreTransactionNote: builder.mutation({
+      query: ({ transactionId, note }) => ({
+        url: `/store/transactions/${transactionId}/notes`,
+        method: 'POST',
+        body: { note },
+      }),
+      invalidatesTags: ['StoreTransactions'],
+    }),
+    reorderOrder: builder.mutation({
+      query: (orderId) => ({ url: `/cart/reorder/${orderId}`, method: 'POST' }),
+      invalidatesTags: ['Cart'],
+    }),
     toggleStoreStatus: builder.mutation({
       query: (isOpen) => ({
         url: '/store/status',
@@ -499,6 +515,9 @@ export const {
   useUpdateStoreOrderStatusMutation,
   useRefundStoreOrderMutation,
   useGetStoreTransactionsQuery,
+  useGetStoreTransactionQuery,
+  useAddStoreTransactionNoteMutation,
+  useReorderOrderMutation,
   useToggleStoreStatusMutation,
   useUpdateStoreHoursMutation,
   useExportStoreReportMutation,

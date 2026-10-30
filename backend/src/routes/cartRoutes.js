@@ -5,6 +5,7 @@ import {
   clearCart,
   getCart,
   removeCartItem,
+  reorderUserOrder,
   updateCartItem
 } from '../controllers/cartController.js';
 import authenticate from '../middleware/authenticate.js';
@@ -15,6 +16,7 @@ const router = Router();
 router.use(authenticate('user'));
 router.get('/', getCart);
 router.delete('/items', clearCart);
+router.post('/reorder/:orderId', validate(schemas.reorderOrderParams), reorderUserOrder);
 router.post('/items/bulk', validate(schemas.cartItemsCreate), addCartItems);
 router.post('/items', validate(schemas.cartItemCreate), addCartItem);
 router.patch('/items/:itemId', validate(schemas.cartItemUpdate), updateCartItem);

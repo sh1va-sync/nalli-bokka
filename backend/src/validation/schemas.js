@@ -228,7 +228,10 @@ const schemas = {
   transactionList: {
     query: dateRangeQuery({
       ...pagination,
-      status: z.enum(['created', 'paid', 'failed']).optional()
+      status: z.enum(['created', 'paid', 'failed']).optional(),
+      refundStatus: z.enum(['none', 'pending', 'processed', 'failed']).optional(),
+      search: z.string().trim().min(1).max(100).optional(),
+      sort: z.enum(['newest', 'oldest', 'amount_desc', 'amount_asc']).default('newest')
     })
   },
   storeReportExport: {
@@ -241,6 +244,15 @@ const schemas = {
   },
   transactionParams: {
     params: z.object({ transactionId: objectId })
+  },
+  storeTransactionNote: {
+    params: z.object({ transactionId: objectId }),
+    body: z.object({
+      note: z.string().trim().min(1).max(2000)
+    }).strict()
+  },
+  reorderOrderParams: {
+    params: z.object({ orderId: objectId })
   }
 };
 

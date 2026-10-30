@@ -1,4 +1,5 @@
 import Cart from '../models/Cart.js';
+import Order from '../models/Order.js';
 import Product from '../models/Product.js';
 import AppError from '../utils/AppError.js';
 import { priceSelection, roundToPaise } from '../utils/pricing.js';
@@ -146,6 +147,77 @@ export async function addCartItems(req, res) {
 
   await cart.save();
   res.status(201).json({ data: await buildCartResponse(cart) });
+}
+
+export async function reorderUserOrder(req, res) {
+  const order = await Order.findOne({
+    _id: req.validated.params.orderId,
+    userId: req.auth.id
+  }).lean();
+  if (!order) {
+    throw new AppError(404, 'Order not found');
+  }
+
+  const products = await Product.find({
+    _id: { $in: order.items.map(item => item.productId) }
+  });
+  const productsById = new Map(products.map(product => [String(product._id), product]));
+  let cart = await Cart.findOne({ userId: req.auth.id });
+  if (!cart) {
+    cart = new Cart({ userId: req.auth.id, items: [] });
+  }
+
+  const skippedItems = [];
+  let addedItems = 0;
+  for (const orderedItem of order.items) {
+    const product = productsById.get(String(orderedItem.productId));
+    if (!product) {
+      skippedItems.push({ productName: orderedItem.productName, reason: 'Product no longer exists' });
+      continue;
+    }
+
+    try {
+      priceSelection(product, orderedItem.selectionType, orderedItem.quantity, orderedItem.packLabel);
+      const existing = cart.items.find(item => (
+        String(item.productId) === String(product._id)
+        && item.selectionType === orderedItem.selectionType
+        && item.selectedPackLabel === orderedItem.packLabel
+      ));
+      if (existing) {
+        priceSelection(
+          product,
+          orderedItem.selectionType,
+          existing.selectedQuantity + orderedItem.quantity,
+          orderedItem.packLabel
+        );
+        existing.selectedQuantity += orderedItem.quantity;
+      } else {
+        cart.items.push({
+          productId: product._id,
+          selectionType: orderedItem.selectionType,
+          selectedQuantity: orderedItem.quantity,
+          ...(orderedItem.packLabel ? { selectedPackLabel: orderedItem.packLabel } : {})
+        });
+      }
+      addedItems += 1;
+    } catch (error) {
+      if (!(error instanceof AppError) || ![400, 409].includes(error.status)) {
+        throw error;
+      }
+      skippedItems.push({ productName: orderedItem.productName, reason: error.message });
+    }
+  }
+
+  if (addedItems > 0) {
+    await cart.save();
+  }
+  res.json({
+    data: {
+      ...(await buildCartResponse(cart)),
+      addedItems,
+      skippedItems
+    }
+  });
 }
 
 export async function clearCart(req, res) {

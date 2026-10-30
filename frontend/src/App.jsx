@@ -22,6 +22,7 @@ const OrdersPage = lazy(() => import('./features/customer/pages/OrdersPage.jsx')
 const CategoriesPage = lazy(() => import('./features/customer/pages/CategoriesPage.jsx'))
 const StoreLoginPage = lazy(() => import('./features/storeAdmin/pages/StoreLoginPage.jsx'))
 const StoreDashboardPage = lazy(() => import('./features/storeAdmin/pages/StoreDashboardPage.jsx'))
+const StoreTransactionDetailPage = lazy(() => import('./features/storeAdmin/pages/StoreTransactionDetailPage.jsx'))
 
 function App() {
   const t = useTranslation()
@@ -81,6 +82,7 @@ function App() {
     <Suspense fallback={<div className="grid min-h-screen place-items-center text-sm text-[var(--text-secondary)]"><span className="mr-2 inline-block h-4 w-4 rounded-full border-2 border-[var(--border-default)] border-t-[var(--brand-primary)] motion-safe:animate-spin" />{t('Loading store workspace…')}</div>}>
       <Routes>
         <Route path="/store/login" element={<StoreLoginPage />} />
+        <Route path="/store/transactions/:transactionId" element={<StoreTransactionDetailPage />} />
         <Route path="/store" element={<StoreDashboardPage />} />
         <Route path="/store/*" element={<Navigate to="/store" replace />} />
       </Routes>

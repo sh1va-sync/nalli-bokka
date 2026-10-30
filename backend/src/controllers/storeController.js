@@ -8,6 +8,7 @@ import Product from '../models/Product.js';
 import ProductCategory from '../models/ProductCategory.js';
 import Store from '../models/Store.js';
 import Transaction from '../models/Transaction.js';
+import User from '../models/User.js';
 import AppError from '../utils/AppError.js';
 import escapeRegex from '../utils/escapeRegex.js';
 import { BUILT_IN_PRODUCT_TYPES } from '../utils/productTypes.js';
@@ -566,7 +567,7 @@ export async function getDashboard(req, res) {
   const { days, from, to } = req.validated.query;
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const period = from ? { $gte: new Date(from), $lt: new Date(to) } : null;
-  const [products, orderCounts, revenue, recentOrders, periodOrderCount, periodTransactions] = await Promise.all([
+  const [products, orderCounts, revenue, recentOrders, periodOrderCount, periodOrderGroups, periodTransactions] = await Promise.all([
     Product.aggregate([
       { $match: { storeId: productStoreId(storeId) } },
       { $group: { _id: '$inStock', count: { $sum: 1 } } }
@@ -587,6 +588,15 @@ export async function getDashboard(req, res) {
     ]),
     Order.find({ storeId }).sort({ createdAt: -1 }).limit(10).populate('userId', 'name phone'),
     period ? Order.countDocuments({ storeId, createdAt: period }) : null,
+    period ? Order.aggregate([
+      { $match: { storeId: productStoreId(storeId), createdAt: period } },
+      {
+        $group: {
+          _id: { orderStatus: '$orderStatus', paymentStatus: '$paymentStatus' },
+          count: { $sum: 1 }
+        }
+      }
+    ]) : [],
     period ? Transaction.aggregate([
       { $match: { timestamp: period } },
       {
@@ -628,6 +638,15 @@ export async function getDashboard(req, res) {
   const paidRevenue = roundToPaise(
     periodTransactions.find(group => group._id === 'paid')?.paidAmount || 0
   );
+  const periodOrdersByStatus = {};
+  let paidOrders = 0;
+  for (const group of periodOrderGroups) {
+    periodOrdersByStatus[group._id.orderStatus] =
+      (periodOrdersByStatus[group._id.orderStatus] || 0) + group.count;
+    if (group._id.paymentStatus === 'paid') {
+      paidOrders += group.count;
+    }
+  }
 
   res.json({
     data: {
@@ -646,6 +665,8 @@ export async function getDashboard(req, res) {
           from,
           to,
           orders: periodOrderCount,
+          ordersByStatus: periodOrdersByStatus,
+          paidOrders,
           paidRevenue,
           paidTransactions: transactionCounts.paid || 0,
           transactions: {
@@ -661,7 +682,7 @@ export async function getDashboard(req, res) {
 }
 
 export async function listStoreTransactions(req, res) {
-  const { page, limit, status, from, to } = req.validated.query;
+  const { page, limit, status, refundStatus, from, to, search, sort } = req.validated.query;
   const storeId = new mongoose.Types.ObjectId(req.auth.id);
   const transactionFilter = {
     ...(from ? { timestamp: { $gte: new Date(from), $lt: new Date(to) } } : {})
@@ -669,8 +690,18 @@ export async function listStoreTransactions(req, res) {
   if (status) {
     transactionFilter.status = status;
   }
-
-  const [result] = await Transaction.aggregate([
+  if (refundStatus) {
+    transactionFilter.refundStatus = refundStatus === 'none'
+      ? { $in: ['none', null] }
+      : refundStatus;
+  }
+  const sortBy = {
+    newest: { timestamp: -1, _id: -1 },
+    oldest: { timestamp: 1, _id: 1 },
+    amount_desc: { amount: -1, timestamp: -1, _id: -1 },
+    amount_asc: { amount: 1, timestamp: -1, _id: -1 }
+  }[sort];
+  const pipeline = [
     { $match: transactionFilter },
     {
       $lookup: {
@@ -683,28 +714,69 @@ export async function listStoreTransactions(req, res) {
     { $unwind: '$order' },
     { $match: { 'order.storeId': storeId } },
     {
-      $facet: {
-        data: [
-          { $sort: { timestamp: -1 } },
-          { $skip: (page - 1) * limit },
-          { $limit: limit },
+      $lookup: {
+        from: User.collection.name,
+        localField: 'order.userId',
+        foreignField: '_id',
+        as: 'customer'
+      }
+    },
+    { $unwind: { path: '$customer', preserveNullAndEmptyArrays: true } }
+  ];
+  if (search) {
+    const expression = escapeRegex(search.replace(/^#/, '').trim() || search);
+    pipeline.push({
+      $match: {
+        $or: [
+          { razorpayOrderId: { $regex: expression, $options: 'i' } },
+          { paymentId: { $regex: expression, $options: 'i' } },
+          { refundId: { $regex: expression, $options: 'i' } },
+          { 'customer.name': { $regex: expression, $options: 'i' } },
+          { 'customer.phone': { $regex: expression, $options: 'i' } },
+          { 'customer.email': { $regex: expression, $options: 'i' } },
           {
-            $project: {
-              orderId: 1,
-              razorpayOrderId: 1,
-              paymentId: 1,
-              amount: 1,
-              status: 1,
-              refundStatus: 1,
-              refundId: 1,
-              timestamp: 1
+            $expr: {
+              $or: [
+                { $regexMatch: { input: { $toString: '$_id' }, regex: expression, options: 'i' } },
+                { $regexMatch: { input: { $toString: '$orderId' }, regex: expression, options: 'i' } }
+              ]
             }
           }
-        ],
-        total: [{ $count: 'count' }]
+        ]
       }
+    });
+  }
+  pipeline.push({
+    $facet: {
+      data: [
+        { $sort: sortBy },
+        { $skip: (page - 1) * limit },
+        { $limit: limit },
+        {
+          $project: {
+            orderId: 1,
+            razorpayOrderId: 1,
+            paymentId: 1,
+            amount: 1,
+            status: 1,
+            refundStatus: 1,
+            refundId: 1,
+            refundRequestId: 1,
+            refundRequestedAt: 1,
+            timestamp: 1,
+            orderStatus: '$order.orderStatus',
+            orderPaymentStatus: '$order.paymentStatus',
+            orderType: '$order.orderType',
+            customerName: '$customer.name',
+            customerPhone: '$customer.phone'
+          }
+        }
+      ],
+      total: [{ $count: 'count' }]
     }
-  ]);
+  });
+
+  const [result] = await Transaction.aggregate(pipeline);
   const data = result?.data || [];
   const total = result?.total[0]?.count || 0;
   res.json({ data, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
@@ -712,36 +784,60 @@ export async function listStoreTransactions(req, res) {
 
 export async function getStoreTransaction(req, res) {
   const transactionId = new mongoose.Types.ObjectId(req.validated.params.transactionId);
-  const [transaction] = await Transaction.aggregate([
-    { $match: { _id: transactionId } },
-    {
-      $lookup: {
-        from: Order.collection.name,
-        localField: 'orderId',
-        foreignField: '_id',
-        as: 'order'
-      }
-    },
-    { $unwind: '$order' },
-    { $match: { 'order.storeId': new mongoose.Types.ObjectId(req.auth.id) } },
-    {
-      $project: {
-        orderId: 1,
-        razorpayOrderId: 1,
-        paymentId: 1,
-        amount: 1,
-        status: 1,
-        refundStatus: 1,
-        refundId: 1,
-        timestamp: 1
-      }
-    }
-  ]);
-
+  const transaction = await Transaction.findById(transactionId).lean();
   if (!transaction) {
     throw new AppError(404, 'Transaction not found');
   }
-  res.json({ data: transaction });
+  const order = await Order.findOne({
+    _id: transaction.orderId,
+    storeId: req.auth.id
+  }).populate('userId', 'name phone email').lean();
+  if (!order) {
+    throw new AppError(404, 'Transaction not found');
+  }
+  const checkoutAttempt = await CheckoutAttempt.findOne({
+    razorpayOrderId: transaction.razorpayOrderId,
+    storeId: req.auth.id
+  }).select('status amount razorpayOrderId paymentId orderId createdAt updatedAt').lean();
+  const relatedTransactions = await Transaction.find({ orderId: transaction.orderId })
+    .sort({ timestamp: 1, _id: 1 })
+    .select('amount status paymentId refundStatus refundId refundRequestId refundRequestedAt razorpayOrderId timestamp')
+    .lean();
+  res.json({
+    data: {
+      ...transaction,
+      order,
+      checkoutAttempt,
+      relatedTransactions
+    }
+  });
+}
+
+export async function addStoreTransactionNote(req, res) {
+  const transaction = await Transaction.findById(req.validated.params.transactionId).select('orderId');
+  if (!transaction) {
+    throw new AppError(404, 'Transaction not found');
+  }
+  const order = await Order.exists({
+    _id: transaction.orderId,
+    storeId: req.auth.id
+  });
+  if (!order) {
+    throw new AppError(404, 'Transaction not found');
+  }
+  const updatedTransaction = await Transaction.findOneAndUpdate(
+    { _id: transaction._id },
+    {
+      $push: {
+        caseNotes: {
+          note: req.validated.body.note,
+          createdBy: req.auth.id
+        }
+      }
+    },
+    { new: true, runValidators: true, projection: { caseNotes: { $slice: -1 } } }
+  );
+  res.status(201).json({ data: updatedTransaction.caseNotes[0] });
 }
 
 export async function exportStoreReport(req, res, next) {

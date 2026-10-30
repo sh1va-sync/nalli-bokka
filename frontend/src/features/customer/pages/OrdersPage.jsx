@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { ArrowDownToLine, ArrowLeft, ArrowRight, CalendarDays, Check, ChevronRight, Headset, House, MapPin } from 'lucide-react'
-import { useCancelOrderMutation, useCreatePaymentMutation, useDownloadOrderInvoiceMutation, useGetOrderQuery, useGetOrdersQuery, useVerifyPaymentMutation } from '../../api/api.js'
+import { Link, useSearchParams } from 'react-router-dom'
+import { ArrowDownToLine, ArrowLeft, ArrowRight, CalendarDays, Check, ChevronRight, Headset, House, MapPin, ShoppingBasket } from 'lucide-react'
+import { useCancelOrderMutation, useCreatePaymentMutation, useDownloadOrderInvoiceMutation, useGetOrderQuery, useGetOrdersQuery, useReorderOrderMutation, useVerifyPaymentMutation } from '../../api/api.js'
 import CookingLoader from '../components/CookingLoader.jsx'
 import { getCategoryPhoto } from '../components/categoryAssets.js'
 import { formatItemQuantity, formatPrice, getErrorMessage, loadRazorpaySdk, saveInvoicePdf } from '../utils.js'
@@ -23,13 +23,18 @@ function StatusPill({ status }) {
   return <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[10px] font-bold capitalize ${statusColors[status] || 'bg-slate-100 text-slate-600'}`}>{isComplete && <Check size={13} strokeWidth={2.5} />}{t(status)}</span>
 }
 
-function OrderProgress({ status, orderType = 'delivery' }) {
+function OrderProgress({ status, orderType = 'delivery', statusHistory = [], createdAt, updatedAt }) {
   const t = useTranslation()
-  if (status === 'cancelled') return <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm font-semibold text-rose-800">{t('This order was cancelled.')}</div>
+  const statusDates = new Map(statusHistory.map(({ status: historyStatus, changedAt }) => [historyStatus, changedAt]))
+  if (status === 'cancelled') return <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm font-semibold text-rose-800">{t('This order was cancelled.')}{(statusDates.get('cancelled') || updatedAt) && <p className="mt-1 text-xs font-medium">{new Date(statusDates.get('cancelled') || updatedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</p>}</div>
   const stages = orderType === 'pickup'
     ? ['placed', 'packing', 'ready for pickup', 'picked up']
     : ['placed', 'packing', 'out for delivery', 'delivered']
   const activeIndex = Math.max(0, stages.indexOf(status))
+  const formatStageDate = (stage) => {
+    const date = statusDates.get(stage) || (stage === 'placed' ? createdAt : stage === status ? updatedAt : null)
+    return date ? new Date(date).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : ''
+  }
   return <div className="rounded-[22px] border border-[var(--border-default)] bg-white px-4 py-5 sm:px-7 sm:py-6">
     <h2 className="mb-5 text-lg font-extrabold tracking-tight text-[var(--text-primary)] sm:text-2xl">{t('Order progress')}</h2>
     <div className="grid grid-cols-4">
@@ -37,6 +42,7 @@ function OrderProgress({ status, orderType = 'delivery' }) {
         {index < stages.length - 1 && <span className={`absolute left-1/2 top-[18px] h-[3px] w-full ${index < activeIndex ? 'bg-[#8bc5a2]' : 'bg-[var(--border-default)]'}`} />}
         <span className={`relative z-10 grid h-9 w-9 place-items-center rounded-full border-2 sm:h-11 sm:w-11 ${index <= activeIndex ? 'border-[#176149] bg-[#176149] text-white' : 'border-[#c9dfce] bg-white text-transparent'}`}>{index <= activeIndex && <Check size={19} strokeWidth={2.5} />}</span>
         <span className={`mt-2 px-0.5 text-[9px] leading-4 sm:text-sm ${index <= activeIndex ? 'font-bold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>{t(stage)}</span>
+        {index <= activeIndex && formatStageDate(stage) && <time className="mt-1 px-0.5 text-[8px] leading-3 text-[var(--text-secondary)] sm:text-[10px]">{formatStageDate(stage)}</time>}
       </div>)}
     </div>
   </div>
@@ -95,6 +101,8 @@ export default function OrdersPage() {
   const [invoiceError, setInvoiceError] = useState('')
   const [downloadingInvoiceId, setDownloadingInvoiceId] = useState('')
   const [downloadOrderInvoice] = useDownloadOrderInvoiceMutation()
+  const [reorderOrder, reorderState] = useReorderOrderMutation()
+  const [reorderResult, setReorderResult] = useState(null)
   const order = detailResponse?.data
   const orders = listResponse?.data || []
   const storePhone = order?.storeId?.storePhone || order?.storeId?.storeNumber || ''
@@ -158,6 +166,16 @@ export default function OrdersPage() {
     }
   }
 
+  async function addOrderToCart() {
+    setReorderResult(null)
+    try {
+      const { data } = await reorderOrder(order._id).unwrap()
+      setReorderResult(data)
+    } catch (requestError) {
+      setActionMessage(getErrorMessage(requestError))
+    }
+  }
+
   async function payForCurrentOrder() {
     setActionMessage('')
     try {
@@ -209,7 +227,7 @@ export default function OrdersPage() {
         </section>
 
         <section className="mt-4 sm:mt-5">
-          <OrderProgress status={order.orderStatus} orderType={order.orderType} />
+          <OrderProgress status={order.orderStatus} orderType={order.orderType} statusHistory={order.statusHistory} createdAt={order.createdAt} updatedAt={order.updatedAt} />
           {order.orderStatus !== 'cancelled' && <p className="mt-2 px-1 text-xs text-[var(--text-secondary)]">{t('Status refreshes automatically.')}</p>}
         </section>
 
@@ -218,6 +236,14 @@ export default function OrdersPage() {
             <h2 className="text-xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-2xl">{t('Order summary')}</h2>
             <span className="text-sm text-[var(--text-secondary)]">{order.items?.length || 0} {t(order.items?.length === 1 ? 'item' : 'items')}</span>
           </div>
+          <button type="button" onClick={addOrderToCart} disabled={reorderState.isLoading || !order.items?.length} className="mb-3 inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--brand-primary)] bg-white px-4 text-xs font-bold text-[var(--brand-primary)] transition hover:bg-[var(--brand-primary-soft)] disabled:cursor-wait disabled:opacity-55">
+            <ShoppingBasket size={15} />{t(reorderState.isLoading ? 'Adding previous items…' : 'Order these items again')}
+          </button>
+          {reorderResult && <div role="status" className={`mb-3 rounded-xl p-3 text-xs ${reorderResult.addedItems > 0 ? 'bg-[var(--status-success-soft)] text-[var(--text-primary)]' : 'bg-[var(--status-danger-soft)] text-[var(--status-danger)]'}`}>
+            <p className="font-semibold">{reorderResult.addedItems > 0 ? `${reorderResult.addedItems} ${t('items added to your cart with current prices.')}` : t('No items from this order are currently available.')}</p>
+            {reorderResult.skippedItems?.length > 0 && <ul className="mt-2 list-inside list-disc">{reorderResult.skippedItems.map((item, index) => <li key={`${item.productName}-${index}`}>{t(item.productName)}: {t(item.reason)}</li>)}</ul>}
+            {reorderResult.addedItems > 0 && <Link to="/cart" className="mt-2 inline-flex font-bold underline">{t('View cart')} <ArrowRight size={14} className="ml-1" /></Link>}
+          </div>}
           <div className="rounded-[22px] border border-[var(--border-default)] bg-white p-4 shadow-[0_8px_24px_-22px_rgba(27,61,44,0.3)] sm:p-6">
             <div className="divide-y divide-[var(--border-default)]">
               {order.items?.map((item, index) => {

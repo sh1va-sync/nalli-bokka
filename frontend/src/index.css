@@ -384,9 +384,15 @@ button:not(.button-strong)[class*="bg-[var(--brand-primary)]"]:hover {
   backface-visibility: hidden;
 }
 
-.product-card:hover {
+.product-card:not(.product-card-sold-out):hover {
   border-color: var(--brand-secondary);
   box-shadow: 0 16px 34px -23px rgb(23 67 46 / 40%);
+  transform: translateY(-3px);
+}
+
+.product-card-sold-out:hover {
+  border-color: #b42332;
+  box-shadow: 0 16px 34px -23px rgb(180 35 50 / 24%);
   transform: translateY(-3px);
 }
 
@@ -476,12 +482,12 @@ button:not(.button-strong)[class*="bg-[var(--brand-primary)]"]:hover {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .product-card:hover .product-card-image {
+  .product-card:not(.product-card-sold-out):hover .product-card-image {
     filter: saturate(1.06);
     transform: scale(1.045);
   }
 
-  .product-card:hover .product-card-image-shade {
+  .product-card:not(.product-card-sold-out):hover .product-card-image-shade {
     opacity: 0.15;
   }
 }

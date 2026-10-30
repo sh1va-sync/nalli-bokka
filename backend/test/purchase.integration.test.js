@@ -227,6 +227,22 @@ test('store-created categories persist and support custom product pricing and in
   assert.equal(inventoryResponse.status, 200);
   assert.equal((await inventoryResponse.json()).data[0]._id, product._id);
 
+  const soldOutResponse = await fetch(`${baseUrl}/store/products/${product._id}/stock`, {
+    method: 'PATCH',
+    headers: { ...headers, 'content-type': 'application/json' },
+    body: JSON.stringify({ inStock: false })
+  });
+  assert.equal(soldOutResponse.status, 200);
+  const publicSoldOutResponse = await fetch(`${baseUrl}/products?storeId=${store._id}&productType=pet%20supplies`);
+  assert.equal(publicSoldOutResponse.status, 200);
+  const publicSoldOutProducts = await publicSoldOutResponse.json();
+  assert.equal(publicSoldOutProducts.data.length, 1);
+  assert.equal(publicSoldOutProducts.data[0]._id, product._id);
+  assert.equal(publicSoldOutProducts.data[0].inStock, false);
+  const publicSoldOutDetailResponse = await fetch(`${baseUrl}/products/${product._id}`);
+  assert.equal(publicSoldOutDetailResponse.status, 200);
+  assert.equal((await publicSoldOutDetailResponse.json()).data.inStock, false);
+
   const publicCategoriesResponse = await fetch(`${baseUrl}/products/categories?storeId=${store._id}`);
   assert.equal(publicCategoriesResponse.status, 200);
   const publicCategories = await publicCategoriesResponse.json();
@@ -378,6 +394,196 @@ test('customer purchase, payment, and store status notification flow works end t
     username: 'integration-store',
     password: 'test-password-long-enough',
     location: 'Hyderabad'
+  });
+
+  test('order status history records initial and subsequent status changes', async () => {
+    const store = await Store.create({
+      storeName: 'Status History Store',
+      username: 'status-history-store',
+      password: 'test-password-long-enough',
+      location: 'Hyderabad'
+    });
+    const user = await User.create({ name: 'Status History Customer', phone: '+15559990031' });
+    const order = await Order.create({
+      userId: user._id,
+      storeId: store._id,
+      orderType: 'pickup',
+      pickupAt: new Date(Date.now() + 60 * 60 * 1000),
+      items: [{
+        productId: new mongoose.Types.ObjectId(),
+        productName: 'History product',
+        selectionType: 'weight',
+        quantity: 1,
+        price: 200
+      }],
+      paymentStatus: 'paid'
+    });
+
+    assert.equal(order.statusHistory.length, 1);
+    assert.equal(order.statusHistory[0].status, 'placed');
+    order.orderStatus = 'packing';
+    await order.save();
+    assert.equal(order.statusHistory.length, 2);
+    assert.equal(order.statusHistory[1].status, 'packing');
+    assert.ok(order.statusHistory[1].changedAt >= order.statusHistory[0].changedAt);
+  });
+
+  test('customer reorder adds available items at current pricing and skips unavailable items', async () => {
+    const store = await Store.create({
+      storeName: 'Reorder Store',
+      username: 'reorder-store',
+      password: 'test-password-long-enough',
+      location: 'Hyderabad'
+    });
+    const user = await User.create({ name: 'Reorder Customer', phone: '+15559990032' });
+    const availableProduct = await Product.create({
+      storeId: store._id,
+      productType: 'fruit',
+      productName: 'Reorder Apples',
+      imageUrl: 'https://example.test/reorder-apples.jpg',
+      inStock: true,
+      pricePerKg: 250
+    });
+    const soldOutProduct = await Product.create({
+      storeId: store._id,
+      productType: 'fruit',
+      productName: 'Sold Out Pears',
+      imageUrl: 'https://example.test/sold-out-pears.jpg',
+      inStock: false,
+      pricePerKg: 180
+    });
+    const order = await Order.create({
+      userId: user._id,
+      storeId: store._id,
+      orderType: 'pickup',
+      pickupAt: new Date(Date.now() + 60 * 60 * 1000),
+      items: [
+        {
+          productId: availableProduct._id,
+          productName: availableProduct.productName,
+          selectionType: 'weight',
+          quantity: 1,
+          price: 200
+        },
+        {
+          productId: soldOutProduct._id,
+          productName: soldOutProduct.productName,
+          selectionType: 'weight',
+          quantity: 1,
+          price: 180
+        },
+        {
+          productId: new mongoose.Types.ObjectId(),
+          productName: 'Deleted product',
+          selectionType: 'weight',
+          quantity: 1,
+          price: 100
+        }
+      ]
+    });
+    const customerToken = jwt.sign(
+      { role: 'user' },
+      process.env.JWT_SECRET,
+      { subject: String(user._id), expiresIn: '5m', issuer: 'nalli-bokka-api' }
+    );
+    const response = await fetch(`${baseUrl}/cart/reorder/${order._id}`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${customerToken}` }
+    });
+    assert.equal(response.status, 200);
+    const result = (await response.json()).data;
+    assert.equal(result.addedItems, 1);
+    assert.equal(result.items.length, 1);
+    assert.equal(result.items[0].unitPrice, 250);
+    assert.equal(result.total, 250);
+    assert.equal(result.skippedItems.length, 2);
+    assert.ok(result.skippedItems.some(item => item.reason === 'Product no longer exists'));
+    assert.ok(result.skippedItems.some(item => item.productName === 'Sold Out Pears'));
+
+    const otherUser = await User.create({ name: 'Other Reorder Customer', phone: '+15559990033' });
+    const otherUserToken = jwt.sign(
+      { role: 'user' },
+      process.env.JWT_SECRET,
+      { subject: String(otherUser._id), expiresIn: '5m', issuer: 'nalli-bokka-api' }
+    );
+    const unauthorizedResponse = await fetch(`${baseUrl}/cart/reorder/${order._id}`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${otherUserToken}` }
+    });
+    assert.equal(unauthorizedResponse.status, 404);
+  });
+
+  test('store dispute notes are scoped to the owning store and returned in transaction details', async () => {
+    const store = await Store.create({
+      storeName: 'Dispute Notes Store',
+      username: 'dispute-notes-store',
+      password: 'test-password-long-enough',
+      location: 'Hyderabad'
+    });
+    const otherStore = await Store.create({
+      storeName: 'Other Dispute Store',
+      username: 'other-dispute-store',
+      password: 'test-password-long-enough',
+      location: 'Hyderabad'
+    });
+    const user = await User.create({ name: 'Dispute Notes Customer', phone: '+15559990034' });
+    const order = await Order.create({
+      userId: user._id,
+      storeId: store._id,
+      orderType: 'pickup',
+      pickupAt: new Date(Date.now() + 60 * 60 * 1000),
+      items: [{
+        productId: new mongoose.Types.ObjectId(),
+        productName: 'Dispute item',
+        selectionType: 'weight',
+        quantity: 1,
+        price: 200
+      }],
+      paymentStatus: 'paid'
+    });
+    const transaction = await Transaction.create({
+      orderId: order._id,
+      razorpayOrderId: `razorpay_dispute_notes_${Date.now()}`,
+      paymentId: `payment_dispute_notes_${Date.now()}`,
+      amount: 200,
+      status: 'paid'
+    });
+    const tokenForStore = storeId => jwt.sign(
+      { role: 'store' },
+      process.env.JWT_SECRET,
+      { subject: String(storeId), expiresIn: '5m', issuer: 'nalli-bokka-api' }
+    );
+    const noteResponse = await fetch(`${baseUrl}/store/transactions/${transaction._id}/notes`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${tokenForStore(store._id)}`,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({ note: 'Customer confirmed the delivery timestamp.' })
+    });
+    assert.equal(noteResponse.status, 201);
+    const note = (await noteResponse.json()).data;
+    assert.equal(note.note, 'Customer confirmed the delivery timestamp.');
+    assert.ok(note._id);
+    assert.ok(note.createdAt);
+
+    const unauthorizedResponse = await fetch(`${baseUrl}/store/transactions/${transaction._id}/notes`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${tokenForStore(otherStore._id)}`,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({ note: 'This store must not see the transaction.' })
+    });
+    assert.equal(unauthorizedResponse.status, 404);
+
+    const detailResponse = await fetch(`${baseUrl}/store/transactions/${transaction._id}`, {
+      headers: { authorization: `Bearer ${tokenForStore(store._id)}` }
+    });
+    assert.equal(detailResponse.status, 200);
+    const detail = (await detailResponse.json()).data;
+    assert.equal(detail.caseNotes.length, 1);
+    assert.equal(detail.caseNotes[0].note, note.note);
   });
   const user = await User.create({
     name: 'Test Customer',

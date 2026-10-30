@@ -116,6 +116,18 @@ const orderItemSchema = new mongoose.Schema({
   }
 }, { _id: false });
 
+const orderStatusHistorySchema = new mongoose.Schema({
+  status: {
+    type: String,
+    enum: ['placed', 'packing', 'out for delivery', 'ready for pickup', 'delivered', 'picked up', 'cancelled'],
+    required: true
+  },
+  changedAt: {
+    type: Date,
+    required: true
+  }
+}, { _id: false });
+
 const orderSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -173,6 +185,10 @@ const orderSchema = new mongoose.Schema({
     enum: ['placed', 'packing', 'out for delivery', 'ready for pickup', 'delivered', 'picked up', 'cancelled'],
     default: 'placed'
   },
+  statusHistory: {
+    type: [orderStatusHistorySchema],
+    default: []
+  },
   paymentStatus: {
     type: String,
     enum: ['pending', 'paid', 'failed', 'refund_pending', 'refunded', 'refund_failed'],
@@ -184,6 +200,17 @@ orderSchema.pre('validate', function calculateTotalAmount() {
   if (this.items.length > 0 && this.items.every(item => Number.isFinite(item.price))) {
     const totalInCents = this.items.reduce((sum, item) => sum + Math.round(item.price * 100), 0);
     this.totalAmount = totalInCents / 100;
+  }
+});
+
+orderSchema.pre('save', function trackOrderStatus() {
+  if (this.isNew && this.statusHistory.length === 0) {
+    this.statusHistory.push({ status: this.orderStatus, changedAt: this.createdAt || new Date() });
+  } else if (!this.isNew && this.isModified('orderStatus')) {
+    const lastStatus = this.statusHistory.at(-1)?.status;
+    if (lastStatus !== this.orderStatus) {
+      this.statusHistory.push({ status: this.orderStatus, changedAt: new Date() });
+    }
   }
 });
 

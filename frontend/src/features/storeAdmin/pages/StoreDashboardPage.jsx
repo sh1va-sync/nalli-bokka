@@ -333,7 +333,7 @@ export default function StoreDashboardPage() {
   const token = useSelector((state) => state.storeAuth.token)
   const store = useSelector((state) => state.storeAuth.store)
   const { data: meResponse, error: meError } = useGetStoreMeQuery(undefined, { skip: !token })
-  const [tab, setTab] = useState('overview')
+  const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get('tab') === 'transactions' ? 'transactions' : 'overview')
   const [productSearch, setProductSearch] = useState('')
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('')
   const [inventoryStockFilter, setInventoryStockFilter] = useState('')
@@ -354,13 +354,21 @@ export default function StoreDashboardPage() {
   const [downloadingInvoiceId, setDownloadingInvoiceId] = useState('')
   const [pendingAction, setPendingAction] = useState('')
   const [exportingReport, setExportingReport] = useState('')
-  const [selectedDate, setSelectedDate] = useState(() => getLocalDateString())
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const date = new URLSearchParams(window.location.search).get('date')
+    return date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : getLocalDateString()
+  })
   const [reportFrom, setReportFrom] = useState(() => getLocalDateString())
   const [reportTo, setReportTo] = useState(() => getLocalDateString())
   const followsToday = useRef(true)
   const [productPage, setProductPage] = useState(1)
   const [orderPage, setOrderPage] = useState(1)
   const [transactionPage, setTransactionPage] = useState(1)
+  const [transactionSearch, setTransactionSearch] = useState('')
+  const [debouncedTransactionSearch, setDebouncedTransactionSearch] = useState('')
+  const [transactionStatusFilter, setTransactionStatusFilter] = useState('')
+  const [transactionRefundFilter, setTransactionRefundFilter] = useState('')
+  const [transactionSort, setTransactionSort] = useState('newest')
   const [auditPage, setAuditPage] = useState(1)
   const orderMotionSnapshot = useRef({ queryKey: '', orders: new Map() })
   const orderMotionTimers = useRef(new Map())
@@ -410,7 +418,11 @@ export default function StoreDashboardPage() {
     page: tab === 'transactions' ? transactionPage : 1,
     limit: 100,
     from: selectedDayRange.from,
-    to: selectedDayRange.to
+    to: selectedDayRange.to,
+    status: tab === 'transactions' ? transactionStatusFilter || undefined : undefined,
+    refundStatus: tab === 'transactions' ? transactionRefundFilter || undefined : undefined,
+    search: tab === 'transactions' ? debouncedTransactionSearch || undefined : undefined,
+    sort: tab === 'transactions' ? transactionSort : 'newest'
   }, { skip: !token, pollingInterval: token ? 30000 : 0 })
   const { data: auditResponse, error: auditError, isLoading: auditLoading } = useGetStoreAuditEventsQuery(
     { page: auditPage, limit: 50 },
@@ -430,6 +442,11 @@ export default function StoreDashboardPage() {
     const timeout = setTimeout(() => setDebouncedOrderSearch(orderSearch.trim()), 250)
     return () => clearTimeout(timeout)
   }, [orderSearch])
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedTransactionSearch(transactionSearch.trim()), 250)
+    return () => clearTimeout(timeout)
+  }, [transactionSearch])
 
   useEffect(() => {
     if (!ordersResponse) return
@@ -590,6 +607,15 @@ export default function StoreDashboardPage() {
     }, 'Store hours updated. Pickup slots now use these hours.')
   }
 
+  function openOrders(status = '') {
+    setStatusFilter(status)
+    setOrderTypeFilter('')
+    setOrderSearch('')
+    setDebouncedOrderSearch('')
+    setOrderPage(1)
+    setTab('orders')
+  }
+
   return <div className="store-workspace min-h-screen bg-[#f1f1ed] text-[var(--text-primary)]">
     <header className="store-workspace-header sticky top-0 z-20 border-b border-[#e5e4de] bg-[#f1f1ed]/95 backdrop-blur">
       <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
@@ -659,6 +685,48 @@ export default function StoreDashboardPage() {
             <MetricCard label={selectedDate === today ? 'Paid revenue today' : 'Paid revenue'} value={periodMetrics ? formatPrice(periodMetrics.paidRevenue) : '—'} detail={`${periodMetrics?.paidTransactions ?? '—'} paid transactions on this day`} icon={ArrowUpRight} tone="green" />
             <MetricCard label="In stock" value={dashboard?.inventory?.inStock ?? '—'} detail="Active inventory products" icon={Boxes} tone="coral" />
             <MetricCard label="Sold out" value={dashboard?.inventory?.outOfStock ?? '—'} detail="Products needing restock" icon={ArrowDownRight} />
+          </div>}
+          {!dashboardLoading && !ordersLoading && !transactionsLoading && <div className="mt-4 grid gap-3 xl:grid-cols-[1.4fr_1fr]">
+            <section className="rounded-[18px] border border-[var(--border-default)] bg-white p-4 sm:p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[.15em] text-[var(--brand-primary)]">{t('Order pipeline')}</p>
+                  <h2 className="mt-1 text-base font-semibold text-[var(--text-primary)]">{t('Orders to follow up')}</h2>
+                  <p className="mt-1 text-xs text-[var(--text-secondary)]">{t('Selected-day order progress and next actions.')}</p>
+                </div>
+                <button type="button" onClick={() => openOrders()} className="text-xs font-semibold text-[var(--brand-primary)]">{t('Review orders')} →</button>
+              </div>
+              {periodMetrics ? <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  ['placed', 'Placed'],
+                  ['packing', 'Preparing'],
+                  ['out for delivery', 'Out for delivery'],
+                  ['ready for pickup', 'Ready for pickup']
+                ].map(([status, label]) => {
+                  const count = periodMetrics.ordersByStatus?.[status] || 0
+                  return <button key={status} type="button" onClick={() => openOrders(status)} className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-app)] p-3 text-left transition hover:border-[var(--brand-primary)] hover:bg-[#fbf0eb]">
+                    <span className="block text-xl font-semibold text-[var(--text-primary)]">{count}</span>
+                    <span className="mt-1 block text-[10px] font-medium text-[var(--text-secondary)]">{t(label)}</span>
+                  </button>
+                })}
+              </div> : <p className="mt-4 rounded-xl bg-[var(--bg-app)] p-3 text-xs text-[var(--text-secondary)]">{t('Order breakdown is unavailable for this period.')}</p>}
+              {periodMetrics && (periodMetrics.ordersByStatus?.placed || 0) + (periodMetrics.ordersByStatus?.packing || 0) + (periodMetrics.ordersByStatus?.['out for delivery'] || 0) + (periodMetrics.ordersByStatus?.['ready for pickup'] || 0) === 0 && <p className="mt-3 text-xs font-medium text-[var(--status-success)]">{t('You’re all caught up for this day.')}</p>}
+            </section>
+            <section className="rounded-[18px] border border-[var(--border-default)] bg-white p-4 sm:p-5">
+              <p className="text-[10px] font-semibold uppercase tracking-[.15em] text-[var(--brand-primary)]">{t('Sales insights')}</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                <div className="rounded-xl bg-[var(--bg-app)] p-3">
+                  <p className="text-[10px] font-medium text-[var(--text-secondary)]">{t('Average paid order')}</p>
+                  <p className="mt-1 text-lg font-semibold text-[var(--text-primary)]">{periodMetrics?.paidOrders ? formatPrice(periodMetrics.paidRevenue / periodMetrics.paidOrders) : '—'}</p>
+                  <p className="mt-1 text-[10px] text-[var(--text-secondary)]">{t('Based on paid orders for this day')}</p>
+                </div>
+                <div className="rounded-xl bg-[var(--bg-app)] p-3">
+                  <p className="text-[10px] font-medium text-[var(--text-secondary)]">{t('Payment follow-ups')}</p>
+                  <p className="mt-1 text-lg font-semibold text-[var(--text-primary)]">{periodMetrics ? periodMetrics.transactions.created + periodMetrics.transactions.failed : '—'}</p>
+                  <p className="mt-1 text-[10px] text-[var(--text-secondary)]">{t('Pending')}: {periodMetrics?.transactions.created ?? '—'} · {t('Failed')}: {periodMetrics?.transactions.failed ?? '—'}</p>
+                </div>
+              </div>
+            </section>
           </div>}
           <section className="mt-5 rounded-[18px] border border-[var(--border-default)] bg-white p-4 sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-semibold uppercase tracking-[.15em] text-[var(--brand-primary)]">{t('Daily activity')}</p><h2 className="mt-1 text-base font-semibold text-[var(--text-primary)]">{t('Orders for this day')}</h2></div><button onClick={() => setTab('orders')} className="text-xs font-semibold text-[var(--brand-primary)]">{t('View all orders')} →</button></div>
@@ -732,7 +800,22 @@ export default function StoreDashboardPage() {
           {transactionsError && <p role="alert" className="mb-3 rounded-xl bg-[var(--status-danger-soft)] p-3 text-sm text-[var(--status-danger)]">{getErrorMessage(transactionsError)}</p>}
           {transactionsLoading ? <StoreLoader label="Loading transactions…" compact /> : <>
             <div className="dashboard-stagger mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><MetricCard label={selectedDate === today ? 'Paid today' : 'Paid revenue'} value={periodMetrics ? formatPrice(periodMetrics.paidRevenue) : '—'} detail={`${periodMetrics?.paidTransactions ?? '—'} captured payments on this day`} icon={ArrowUpRight} tone="green" /><MetricCard label={selectedDate === today ? 'Transactions today' : 'Transactions'} value={periodMetrics ? Object.values(periodMetrics.transactions).reduce((sum, count) => sum + count, 0) : '—'} detail="All payment statuses" icon={CreditCard} /><MetricCard label={selectedDate === today ? 'Failed today' : 'Failed transactions'} value={periodMetrics?.transactions?.failed ?? '—'} detail="Payment attempts" icon={ArrowDownRight} tone="coral" /></div>
-            {selectedDayTransactions.length ? <div className="dashboard-stagger overflow-hidden rounded-[18px] border border-[var(--border-default)] bg-white"><div className="hidden grid-cols-[1.4fr_1fr_1fr_1fr] gap-3 border-b border-[var(--surface-subtle)] bg-[var(--bg-app)] px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)] sm:grid"><span>{t('Order')}</span><span>{t('Time')}</span><span>{t('Status')}</span><span className="text-right">{t('Amount')}</span></div>{selectedDayTransactions.map((transaction) => <div key={transaction._id} className="grid gap-1 border-b border-[#f4eeea] px-4 py-3 last:border-0 transition-colors hover:bg-[var(--bg-app)] sm:grid-cols-[1.4fr_1fr_1fr_1fr] sm:items-center sm:gap-3"><span className="text-xs font-semibold">#{String(transaction.orderId?._id || transaction.orderId).slice(-8).toUpperCase()}</span><span className="text-[11px] text-[var(--text-secondary)]">{new Date(transaction.timestamp).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</span><span className={`w-fit rounded-full px-2 py-1 text-[10px] font-semibold capitalize ${transaction.refundStatus === 'pending' || transaction.refundStatus === 'failed' ? 'bg-[var(--status-danger-soft)] text-[var(--brand-primary)]' : transaction.refundStatus === 'processed' ? 'bg-[var(--status-success-soft)] text-[var(--status-success)]' : transaction.status === 'paid' ? 'bg-[var(--status-success-soft)] text-[var(--status-success)]' : transaction.status === 'failed' ? 'bg-[var(--status-danger-soft)] text-[var(--brand-primary)]' : 'bg-[var(--surface-subtle)] text-[var(--text-secondary)]'}`}>{t(transaction.refundStatus && transaction.refundStatus !== 'none' ? `refund ${transaction.refundStatus}` : transaction.status)}</span><span className="text-xs font-semibold sm:text-right">{formatPrice(transaction.amount)}</span></div>)}</div> : <div className="rounded-[18px] border border-[var(--border-default)] bg-white p-10 text-center"><CreditCard className="mx-auto text-[var(--brand-primary)]" size={26} /><h3 className="mt-3 text-sm font-semibold">{t('No transactions on this day')}</h3><p className="mt-1 text-xs text-[var(--text-secondary)]">{t('Payment activity for the selected day will appear here.')}</p></div>}
+            <div className="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <label className="flex h-10 items-center gap-2 rounded-lg border border-[var(--border-default)] bg-white px-3 text-xs text-[var(--text-secondary)] sm:col-span-2"><Search size={14} className="shrink-0 text-[var(--brand-primary)]" /><input value={transactionSearch} onChange={(event) => { setTransactionSearch(event.target.value); setTransactionPage(1) }} placeholder={t('Search transaction, payment, refund, order, or customer')} className="min-w-0 flex-1 bg-transparent text-sm text-[var(--text-primary)] outline-none" />{transactionSearch && <button type="button" aria-label={t('Clear transaction search')} onClick={() => { setTransactionSearch(''); setDebouncedTransactionSearch(''); setTransactionPage(1) }} className="grid h-7 w-7 place-items-center rounded-full hover:bg-[#f7eee8]"><X size={14} /></button>}</label>
+              <label className="flex h-10 items-center rounded-lg border border-[var(--border-default)] bg-white px-3 text-xs text-[var(--text-secondary)]"><select aria-label={t('Filter transactions by status')} value={transactionStatusFilter} onChange={(event) => { setTransactionStatusFilter(event.target.value); setTransactionPage(1) }} className="w-full bg-transparent text-sm text-[var(--text-primary)] outline-none"><option value="">{t('All payment statuses')}</option><option value="created">{t('created')}</option><option value="paid">{t('paid')}</option><option value="failed">{t('failed')}</option></select></label>
+              <label className="flex h-10 items-center rounded-lg border border-[var(--border-default)] bg-white px-3 text-xs text-[var(--text-secondary)]"><select aria-label={t('Filter transactions by refund status')} value={transactionRefundFilter} onChange={(event) => { setTransactionRefundFilter(event.target.value); setTransactionPage(1) }} className="w-full bg-transparent text-sm text-[var(--text-primary)] outline-none"><option value="">{t('All refund statuses')}</option><option value="pending">{t('refund pending')}</option><option value="processed">{t('refund processed')}</option><option value="failed">{t('refund failed')}</option><option value="none">{t('No refund')}</option></select></label>
+              <label className="flex h-10 items-center rounded-lg border border-[var(--border-default)] bg-white px-3 text-xs text-[var(--text-secondary)]"><select aria-label={t('Sort transactions')} value={transactionSort} onChange={(event) => { setTransactionSort(event.target.value); setTransactionPage(1) }} className="w-full bg-transparent text-sm text-[var(--text-primary)] outline-none"><option value="newest">{t('Newest first')}</option><option value="oldest">{t('Oldest first')}</option><option value="amount_desc">{t('Highest amount')}</option><option value="amount_asc">{t('Lowest amount')}</option></select></label>
+            </div>
+            {selectedDayTransactions.length ? <div className="dashboard-stagger overflow-hidden rounded-[18px] border border-[var(--border-default)] bg-white">
+              <div className="hidden grid-cols-[1.3fr_1fr_1fr_1fr_auto] gap-3 border-b border-[var(--surface-subtle)] bg-[var(--bg-app)] px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)] sm:grid"><span>{t('Order / customer')}</span><span>{t('Payment reference')}</span><span>{t('Time')}</span><span>{t('Status')}</span><span className="text-right">{t('Amount')}</span></div>
+              {selectedDayTransactions.map((transaction) => <div key={transaction._id} className="grid gap-2 border-b border-[#f4eeea] px-4 py-3 last:border-0 transition-colors hover:bg-[var(--bg-app)] sm:grid-cols-[1.3fr_1fr_1fr_1fr_auto] sm:items-center sm:gap-3">
+                <div><p className="text-xs font-semibold">#{String(transaction.orderId?._id || transaction.orderId).slice(-8).toUpperCase()}</p><p className="mt-1 text-[10px] text-[var(--text-secondary)]">{transaction.customerName || t('Customer')}{transaction.customerPhone ? ` · ${transaction.customerPhone}` : ''}</p></div>
+                <p className="break-all font-mono text-[10px] text-[var(--text-secondary)]">{transaction.paymentId || transaction.razorpayOrderId}</p>
+                <time className="text-[11px] text-[var(--text-secondary)]">{new Date(transaction.timestamp).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</time>
+                <span className={`w-fit rounded-full px-2 py-1 text-[10px] font-semibold capitalize ${transaction.refundStatus === 'pending' || transaction.refundStatus === 'failed' ? 'bg-[var(--status-danger-soft)] text-[var(--brand-primary)]' : transaction.refundStatus === 'processed' ? 'bg-[var(--status-success-soft)] text-[var(--status-success)]' : transaction.status === 'paid' ? 'bg-[var(--status-success-soft)] text-[var(--status-success)]' : transaction.status === 'failed' ? 'bg-[var(--status-danger-soft)] text-[var(--brand-primary)]' : 'bg-[var(--surface-subtle)] text-[var(--text-secondary)]'}`}>{t(transaction.refundStatus && transaction.refundStatus !== 'none' ? `refund ${transaction.refundStatus}` : transaction.status)}</span>
+                <div className="flex items-center justify-between gap-3 sm:justify-end"><span className="text-xs font-semibold">{formatPrice(transaction.amount)}</span><Link to={`/store/transactions/${transaction._id}?returnTo=${encodeURIComponent(`/store?tab=transactions&date=${selectedDate}`)}`} aria-label={t('View transaction details')} className="inline-flex h-8 items-center gap-1 rounded-lg border border-[var(--border-default)] px-2 text-[10px] font-semibold text-[var(--brand-primary)] hover:bg-white">{t('Details')} <ChevronRight size={12} /></Link></div>
+              </div>)}
+            </div> : <div className="rounded-[18px] border border-[var(--border-default)] bg-white p-10 text-center"><CreditCard className="mx-auto text-[var(--brand-primary)]" size={26} /><h3 className="mt-3 text-sm font-semibold">{t('No matching transactions')}</h3><p className="mt-1 text-xs text-[var(--text-secondary)]">{t('Try another search or adjust the transaction filters.')}</p></div>}
           </>}
           {!transactionsLoading && <PaginationControls pagination={transactionsResponse?.pagination} page={transactionPage} onPageChange={setTransactionPage} />}
         </>}

@@ -321,6 +321,28 @@ test('dashboard period boundaries must be supplied together in chronological ord
   assert.equal(reversed.success, false);
 });
 
+test('store transaction list validates investigation filters and sorting', () => {
+  const valid = schemas.transactionList.query.safeParse({
+    page: '2',
+    limit: '50',
+    status: 'failed',
+    refundStatus: 'pending',
+    search: 'pay_123',
+    sort: 'amount_desc',
+    from: '2026-10-10T00:00:00.000+05:30',
+    to: '2026-10-11T00:00:00.000+05:30'
+  });
+  const invalidStatus = schemas.transactionList.query.safeParse({ status: 'refunded' });
+  const invalidSort = schemas.transactionList.query.safeParse({ sort: 'customer_name' });
+  const missingRangeEnd = schemas.transactionList.query.safeParse({
+    from: '2026-10-10T00:00:00.000Z'
+  });
+  assert.equal(valid.success, true);
+  assert.equal(invalidStatus.success, false);
+  assert.equal(invalidSort.success, false);
+  assert.equal(missingRangeEnd.success, false);
+});
+
 test('store report exports require a type and paired date boundaries', () => {
   const valid = schemas.storeReportExport.query.safeParse({
     type: 'orders',

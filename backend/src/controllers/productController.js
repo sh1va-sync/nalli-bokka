@@ -20,7 +20,7 @@ export async function listProductCategories(req, res) {
 
 export async function listProducts(req, res) {
   const { page, limit, storeId, productType, search } = req.validated.query;
-  const filter = { inStock: true };
+  const filter = {};
   if (storeId) {
     filter.storeId = storeId;
   }
@@ -44,7 +44,7 @@ export async function listProducts(req, res) {
 }
 
 export async function getProduct(req, res) {
-  const product = await Product.findOne({ _id: req.validated.params.id, inStock: true })
+  const product = await Product.findById(req.validated.params.id)
     .populate('storeId', 'storeName location');
   if (!product) {
     throw new AppError(404, 'Product not found');
