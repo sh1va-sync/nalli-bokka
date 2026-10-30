@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { store } from './app/store.js'
 import './index.css'
 import App from './App.jsx'
+import { LanguageProvider } from './features/i18n/LanguageProvider.jsx'
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -18,7 +19,9 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <Provider store={store}>
       <BrowserRouter>
-        <App />
+        <LanguageProvider>
+          <App />
+        </LanguageProvider>
       </BrowserRouter>
     </Provider>
   </StrictMode>,

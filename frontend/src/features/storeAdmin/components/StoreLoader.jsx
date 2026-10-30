@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { LottieLight } from 'lottie-react'
+import { useTranslation } from '../../i18n/LanguageContext.js'
 
 export default function StoreLoader({ label = 'Loading store workspace…', compact = false }) {
+  const t = useTranslation()
   const [reducedMotion, setReducedMotion] = useState(false)
 
   useEffect(() => {
@@ -22,7 +24,7 @@ export default function StoreLoader({ label = 'Loading store workspace…', comp
         className={compact ? 'h-24 w-32' : 'h-36 w-44'}
         rendererSettings={{ preserveAspectRatio: 'xMidYMid meet' }}
       />
-      <p className="mt-1 text-xs font-semibold text-[var(--text-secondary)]">{label}</p>
+      <p className="mt-1 text-xs font-semibold text-[var(--text-secondary)]">{t(label)}</p>
     </div>
   )
 }

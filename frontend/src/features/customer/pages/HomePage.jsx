@@ -7,6 +7,7 @@ import CookingLoader from '../components/CookingLoader.jsx'
 import CategoryPhoto from '../components/CategoryPhoto.jsx'
 import { useProductCatalog } from '../hooks/useProductCatalog.js'
 import { getErrorMessage } from '../utils.js'
+import { useTranslation } from '../../i18n/LanguageContext.js'
 
 /* ── hero carousel data ─────────────────────────── */
 const heroSlides = [
@@ -80,6 +81,7 @@ const trustBadges = [
 ]
 
 export default function HomePage({ categoryScreen = false }) {
+  const t = useTranslation()
   const navigate = useNavigate()
   const { categoryId = '' } = useParams()
   const selectedStore = useSelector((state) => state.selectedStore)
@@ -113,7 +115,7 @@ export default function HomePage({ categoryScreen = false }) {
     if (heroInteractionPaused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined
     const interval = window.setInterval(() => {
       setHeroSlideIndex((current) => (current + 1) % heroSlides.length)
-    }, 6000)
+    }, 4200)
     return () => window.clearInterval(interval)
   }, [heroInteractionPaused])
 
@@ -123,7 +125,7 @@ export default function HomePage({ categoryScreen = false }) {
       {/* <div className="px-4 pb-2 pt-3 sm:px-0">
         <label className="customer-search mx-auto flex h-12 max-w-3xl items-center gap-3 rounded-2xl border border-[var(--border-default)] bg-[#f5f5f3] px-4 text-[var(--text-secondary)] focus-within:border-[var(--brand-primary)] focus-within:bg-white sm:h-14 sm:rounded-[18px]">
           <Search size={19} strokeWidth={1.9} className="text-[#999]" />
-          <input aria-label="Search products" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search for meat, vegetables, rice, eggs..." className="w-full bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[#999] sm:text-[15px]" />
+          <input aria-label={t('Search products')} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('Search products')} className="w-full bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[#999] sm:text-[15px]" />
           {search && <button type="button" aria-label="Clear search" onClick={() => setSearch('')} className="shrink-0 text-xs font-semibold text-[var(--brand-primary)]">Clear</button>}
         </label>
       </div> */}
@@ -133,20 +135,20 @@ export default function HomePage({ categoryScreen = false }) {
         <label className="customer-search mx-auto flex h-12 max-w-3xl items-center gap-3 rounded-2xl border border-[#dfe5d8] bg-[#f5f6f0] px-4 text-[#687568] transition focus-within:border-[#39734b] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#39734b]/10 sm:h-14 sm:rounded-[18px]">
           <Search size={20} strokeWidth={1.9} className="shrink-0 text-[#39734b]" />
           <input
-            aria-label="Search products"
+            aria-label={t('Search products')}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search meat, vegetables, rice, eggs..."
+            placeholder={t('Search meat, vegetables, rice, eggs...')}
             className="w-full bg-transparent text-sm text-[#203328] outline-none placeholder:text-[#8b9488] sm:text-[15px]"
           />
           {search && (
             <button
               type="button"
-              aria-label="Clear search"
+              aria-label={t('Clear search')}
               onClick={() => setSearch('')}
               className="shrink-0 rounded-full px-2 py-1 text-xs font-bold text-[#39734b] hover:bg-[#e9f3ec]"
             >
-              Clear
+              {t('Clear')}
             </button>
           )}
         </label>
@@ -157,7 +159,7 @@ export default function HomePage({ categoryScreen = false }) {
         <>
           {/* ── Hero banner ───────────────────────────── */}
           <section
-            aria-label="Store highlights"
+            aria-label={t('Store highlights')}
             aria-roledescription="carousel"
             className="customer-hero relative mx-3 mt-2 overflow-hidden rounded-[20px] sm:mx-0 sm:mt-4 sm:rounded-[24px]"
             onMouseEnter={() => setHeroInteractionPaused(true)}
@@ -167,36 +169,42 @@ export default function HomePage({ categoryScreen = false }) {
           >
             {/* Background image */}
             <div className="absolute inset-0 z-0">
-              <img key={activeHeroSlide.bg} src={activeHeroSlide.bg} alt="" className="h-full w-full object-cover transition-opacity duration-500" />
+              {heroSlides.map((slide, index) => <img
+                key={slide.bg}
+                src={slide.bg}
+                alt=""
+                aria-hidden="true"
+                className={`absolute inset-0 h-full w-full object-cover transition-[opacity,transform] duration-700 ease-in-out ${index === heroSlideIndex ? 'scale-100 opacity-100' : 'scale-[1.035] opacity-0'}`}
+              />)}
               <div className="absolute inset-0 bg-gradient-to-r from-[#1a1a1a]/85 via-[#1a1a1a]/60 to-transparent" />
             </div>
 
             <div key={heroSlideIndex} role="group" aria-roledescription="slide" aria-label={`${heroSlideIndex + 1} of ${heroSlides.length}`} className="customer-hero-slide relative z-10 flex min-h-[200px] items-center px-5 py-6 sm:min-h-[280px] sm:px-10 sm:py-10">
               <div className="max-w-[65%] sm:max-w-[55%]">
-                <span className="text-[8px] font-bold uppercase tracking-[.18em] text-white/80 sm:text-[10px]">{activeHeroSlide.eyebrow}</span>
+                <span className="text-[8px] font-bold uppercase tracking-[.18em] text-white/80 sm:text-[10px]">{t(activeHeroSlide.eyebrow)}</span>
                 <h1 className="mt-2 text-[1.4rem] font-bold leading-[1.1] tracking-[-.03em] text-white sm:mt-3 sm:text-[2.4rem]">
-                  {activeHeroSlide.title}<span className="text-[#8cc61f]">{activeHeroSlide.titleAccent}</span>
+                  {t(activeHeroSlide.title)}<span className="text-[#8cc61f]">{t(activeHeroSlide.titleAccent)}</span>
                 </h1>
-                <p className="mt-2 text-[10px] leading-relaxed text-white/70 sm:mt-3 sm:text-sm">{activeHeroSlide.description}</p>
+                <p className="mt-2 text-[10px] leading-relaxed text-white/70 sm:mt-3 sm:text-sm">{t(activeHeroSlide.description)}</p>
                 <button
                   type="button"
                   onClick={() => navigate(activeHeroSlide.category ? `/categories/${encodeURIComponent(activeHeroSlide.category)}` : '/categories')}
                   className="mt-3 inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-4 text-[11px] font-bold text-[#1d3028] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#e9f4e9] sm:mt-5 sm:h-11 sm:gap-2 sm:px-5 sm:text-xs"
                 >
-                  {activeHeroSlide.action} <ArrowRight size={13} className="shrink-0" />
+                  {t(activeHeroSlide.action)} <ArrowRight size={13} className="shrink-0" />
                 </button>
               </div>
 
               {/* Fresh Daily badge */}
               <div className="absolute right-4 top-4 grid h-14 w-14 place-items-center rounded-full bg-[#8cc61f] text-center sm:right-8 sm:top-6 sm:h-16 sm:w-16">
-                <span className="text-[9px] font-bold leading-tight text-white sm:text-[10px]" style={{ whiteSpace: 'pre-line' }}>{activeHeroSlide.badge}</span>
+                <span className="text-[9px] font-bold leading-tight text-white sm:text-[10px]" style={{ whiteSpace: 'pre-line' }}>{t(activeHeroSlide.badge)}</span>
               </div>
             </div>
 
             {/* Pagination dots */}
             <div className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 sm:bottom-5" aria-label="Choose highlight">
               {heroSlides.map((slide, index) => (
-                <button key={slide.category} type="button" aria-label={`Show ${slide.action}`} aria-current={index === heroSlideIndex} onClick={() => setHeroSlideIndex(index)} className={`h-2 rounded-full transition-all ${index === heroSlideIndex ? 'w-5 bg-white' : 'w-2 bg-white/45 hover:bg-white/75'}`} />
+                <button key={slide.category} type="button" aria-label={`${t('Show')} ${t(slide.action)}`} aria-current={index === heroSlideIndex} onClick={() => setHeroSlideIndex(index)} className={`h-2 rounded-full transition-all duration-300 ${index === heroSlideIndex ? 'w-5 bg-white' : 'w-2 bg-white/45 hover:bg-white/75'}`} />
               ))}
             </div>
           </section>
@@ -228,10 +236,10 @@ export default function HomePage({ categoryScreen = false }) {
               </span>
               <span className="min-w-0">
                 <span className="block text-[10px] font-extrabold leading-tight text-[#203328] sm:text-xs">
-                  {badge.title}
+                  {t(badge.title)}
                 </span>
                 <span className="mt-1 block text-[9px] leading-tight text-[#627264] sm:text-[11px]">
-                  {badge.sub}
+                  {t(badge.sub)}
                 </span>
               </span>
             </div>
@@ -245,15 +253,15 @@ export default function HomePage({ categoryScreen = false }) {
           {/* ── Shop by category ──────────────────────── */}
           <section id="browse-categories" className="scroll-mt-28 px-4 pt-5 sm:scroll-mt-32 sm:px-0 sm:pt-8">
             <div className="mb-4 sm:mb-5">
-              <p className="text-[9px] font-bold uppercase tracking-[.18em] text-[var(--text-secondary)] sm:text-[10px]">A market in a few taps</p>
+              <p className="text-[9px] font-bold uppercase tracking-[.18em] text-[var(--text-secondary)] sm:text-[10px]">{t('A market in a few taps')}</p>
               <div className="mt-1 flex items-end justify-between gap-3">
-                <h2 className="text-[1.35rem] font-extrabold tracking-[-.045em] text-[var(--text-primary)] sm:text-3xl">Shop by category</h2>
-                <Link to="/categories" className="mb-0.5 inline-flex shrink-0 items-center gap-1 text-[12px] font-semibold text-[var(--brand-primary)] sm:text-sm">See all <ArrowRight size={14} /></Link>
+                <h2 className="text-[1.35rem] font-extrabold tracking-[-.045em] text-[var(--text-primary)] sm:text-3xl">{t('Shop by category')}</h2>
+                <Link to="/categories" className="mb-0.5 inline-flex shrink-0 items-center gap-1 text-[12px] font-semibold text-[var(--brand-primary)] sm:text-sm">{t('See all')} <ArrowRight size={14} /></Link>
               </div>
             </div>
 
-            {categoriesError && <p role="alert" className="mb-3 rounded-xl bg-[var(--status-danger-soft)] px-3 py-2 text-xs text-[var(--status-danger)]">We couldn't load categories from the store. <button type="button" onClick={refetchCategories} className="font-bold underline">Try again</button></p>}
-            {categoriesLoading && <p role="status" className="mb-3 text-xs text-[var(--text-secondary)]">Loading store categories…</p>}
+            {categoriesError && <p role="alert" className="mb-3 rounded-xl bg-[var(--status-danger-soft)] px-3 py-2 text-xs text-[var(--status-danger)]">{t("We couldn't load categories from the store.")} <button type="button" onClick={refetchCategories} className="font-bold underline">{t('Try again')}</button></p>}
+            {categoriesLoading && <p role="status" className="mb-3 text-xs text-[var(--text-secondary)]">{t('Loading store categories…')}</p>}
 
             {!categoriesLoading && !categoriesError && homeCategories.length > 0 && (
               <div className="category-grid-enter grid grid-cols-3 gap-2.5 sm:gap-4 lg:gap-5">
@@ -269,8 +277,8 @@ export default function HomePage({ categoryScreen = false }) {
                           <ArrowRight size={11} className="sm:h-[14px] sm:w-[14px]" />
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[10px] font-bold leading-tight text-[var(--text-primary)] sm:text-[13px]">{item.label}</span>
-                          <span className="mt-0 block truncate text-[8px] leading-3 text-[var(--text-secondary)] sm:mt-0.5 sm:text-[10px] sm:leading-3">{getCategorySubtitle(item.id)}</span>
+                          <span className="block truncate text-[10px] font-bold leading-tight text-[var(--text-primary)] sm:text-[13px]">{t(item.label)}</span>
+                          <span className="mt-0 block truncate text-[8px] leading-3 text-[var(--text-secondary)] sm:mt-0.5 sm:text-[10px] sm:leading-3">{t(getCategorySubtitle(item.id))}</span>
                         </span>
                         <ArrowRight size={12} className="shrink-0 text-[var(--text-secondary)] opacity-0 transition group-hover:opacity-60 sm:h-[14px] sm:w-[14px]" />
                       </span>
@@ -335,13 +343,13 @@ export default function HomePage({ categoryScreen = false }) {
           {!categoryScreen && (
             <div className="min-w-0">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-[10px] font-bold uppercase tracking-[.15em] text-[var(--text-secondary)]">Browse departments</p>
+                <p className="text-[10px] font-bold uppercase tracking-[.15em] text-[var(--text-secondary)]">{t('Browse departments')}</p>
                 {/* <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[var(--text-secondary)]">Shop by category</p> */}
-                <span className="text-[10px] text-[var(--text-secondary)] sm:hidden">Swipe to explore</span>
+                <span className="text-[10px] text-[var(--text-secondary)] sm:hidden">{t('Swipe to explore')}</span>
               </div>
-              <div aria-label="Product categories" className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto pb-1 sm:gap-1.5">
+              <div aria-label={t('Product categories')} className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto pb-1 sm:gap-1.5">
                 {categories.map((item) => (
-                  <Link key={item.id} to={item.id ? `/categories/${encodeURIComponent(item.id)}` : '/'} className="shrink-0 rounded-full border border-[var(--border-default)] bg-white px-4 py-2.5 text-xs font-semibold text-[var(--text-primary)] shadow-sm transition hover:border-[var(--brand-primary)] hover:bg-[var(--brand-primary-soft)] sm:px-4 sm:py-2.5 sm:text-xs">{item.label}</Link>
+                  <Link key={item.id} to={item.id ? `/categories/${encodeURIComponent(item.id)}` : '/'} className="shrink-0 rounded-full border border-[var(--border-default)] bg-white px-4 py-2.5 text-xs font-semibold text-[var(--text-primary)] shadow-sm transition hover:border-[var(--brand-primary)] hover:bg-[var(--brand-primary-soft)] sm:px-4 sm:py-2.5 sm:text-xs">{t(item.label)}</Link>
                 ))}
               </div>
             </div>
@@ -371,20 +379,20 @@ className="shrink-0 rounded-full border border-[#d6e3d3] bg-[#f0f6ed] px-4 py-2.
         </div>
 
         <div className="mt-4 flex min-h-5 items-center justify-between gap-2 border-b border-[var(--border-default)] pb-3 sm:mt-5">
-          <p className="text-[10px] text-[var(--text-secondary)] sm:text-[11px]">{selectedStore ? `${selectedStore.storeName}${data?.pagination ? ` · ${usingCatalogFallback ? products.length : data.pagination.total} items` : ''}` : 'Choose a store to see its selection'}</p>
-          {isFetching && !isLoading && <span className="text-[11px] text-[var(--text-secondary)]">Updating selection…</span>}
+          <p className="text-[10px] text-[var(--text-secondary)] sm:text-[11px]">{selectedStore ? `${selectedStore.storeName}${data?.pagination ? ` · ${usingCatalogFallback ? products.length : data.pagination.total} ${t('items')}` : ''}` : t('Choose a store to see its selection')}</p>
+          {isFetching && !isLoading && <span className="text-[11px] text-[var(--text-secondary)]">{t('Updating selection…')}</span>}
         </div>
-        {(isLoading || (isFetching && !data)) && <div className="mt-4 rounded-2xl border border-[var(--border-default)] bg-white"><CookingLoader compact label="Finding fresh picks for you…" /></div>}
-        {error && <div role="alert" className="mt-5 rounded-2xl border border-[#e8d9d2] bg-[#fbf5f2] p-5 text-sm text-[var(--text-secondary)]"><p className="font-semibold">We couldn't load the selection.</p><p className="mt-1 text-xs">{getErrorMessage(error)}</p><button onClick={refetch} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold underline"><RotateCw size={13} /> Try again</button></div>}
-        {usingCatalogFallback && <p role="status" className="mt-3 text-[10px] text-[var(--text-secondary)]">Showing products matched to this store.</p>}
-        {!selectedStore && !error && <div className="mt-5 rounded-2xl bg-white px-5 py-12 text-center text-sm text-[var(--text-secondary)]">Choose a store to browse its available products.</div>}
+        {(isLoading || (isFetching && !data)) && <div className="mt-4 rounded-2xl border border-[var(--border-default)] bg-white"><CookingLoader compact label={t('Finding fresh picks for you…')} /></div>}
+        {error && <div role="alert" className="mt-5 rounded-2xl border border-[#e8d9d2] bg-[#fbf5f2] p-5 text-sm text-[var(--text-secondary)]"><p className="font-semibold">{t("We couldn't load the selection.")}</p><p className="mt-1 text-xs">{getErrorMessage(error)}</p><button onClick={refetch} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold underline"><RotateCw size={13} /> {t('Try again')}</button></div>}
+        {usingCatalogFallback && <p role="status" className="mt-3 text-[10px] text-[var(--text-secondary)]">{t('Showing products matched to this store.')}</p>}
+        {!selectedStore && !error && <div className="mt-5 rounded-2xl bg-white px-5 py-12 text-center text-sm text-[var(--text-secondary)]">{t('Choose a store to browse its available products.')}</div>}
         {!isLoading && !isFetching && !error && selectedStore && products.length > 0 && <div className="product-grid mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">{products.map((product) => <ProductCard key={product._id} product={product} />)}</div>}
-        {!isLoading && !isFetching && !error && selectedStore && products.length === 0 && <div className="mt-5 rounded-2xl bg-white px-6 py-14 text-center"><h3 className="font-display text-xl text-[var(--text-secondary)]">Nothing here just yet</h3><p className="mt-1 text-sm text-[var(--text-secondary)]">Try another category or search term.</p></div>}
+        {!isLoading && !isFetching && !error && selectedStore && products.length === 0 && <div className="mt-5 rounded-2xl bg-white px-6 py-14 text-center"><h3 className="font-display text-xl text-[var(--text-secondary)]">{t('Nothing here just yet')}</h3><p className="mt-1 text-sm text-[var(--text-secondary)]">{t('Try another category or search term.')}</p></div>}
         {data?.pagination?.pages > 1 && (
           <div className="mt-7 flex items-center justify-center gap-3">
-            <button disabled={page <= 1 || isFetching} onClick={() => setPageState({ storeId: selectedStore._id, category, search, page: page - 1 })} className="rounded-full border border-[var(--border-default)] px-4 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:bg-white disabled:opacity-40">Previous</button>
-            <span className="text-[11px] text-[var(--text-secondary)]">Page {page} of {data.pagination.pages}</span>
-            <button disabled={page >= data.pagination.pages || isFetching} onClick={() => setPageState({ storeId: selectedStore._id, category, search, page: page + 1 })} className="rounded-full border border-[var(--border-default)] px-4 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:bg-white disabled:opacity-40">Next</button>
+            <button disabled={page <= 1 || isFetching} onClick={() => setPageState({ storeId: selectedStore._id, category, search, page: page - 1 })} className="rounded-full border border-[var(--border-default)] px-4 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:bg-white disabled:opacity-40">{t('Previous')}</button>
+            <span className="text-[11px] text-[var(--text-secondary)]">{t('Page')} {page} {t('of')} {data.pagination.pages}</span>
+            <button disabled={page >= data.pagination.pages || isFetching} onClick={() => setPageState({ storeId: selectedStore._id, category, search, page: page + 1 })} className="rounded-full border border-[var(--border-default)] px-4 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:bg-white disabled:opacity-40">{t('Next')}</button>
           </div>
         )}
       </section>

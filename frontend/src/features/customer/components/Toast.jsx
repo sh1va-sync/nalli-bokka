@@ -1,8 +1,10 @@
 import { useEffect } from 'react'
 import { AlertCircle, Bell, CheckCircle2, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from '../../i18n/LanguageContext.js'
 
 export default function Toast({ toast, onDismiss }) {
+  const t = useTranslation()
   useEffect(() => {
     if (!toast) return undefined
     const timeout = window.setTimeout(() => onDismiss(toast.id), 7000)
@@ -23,10 +25,10 @@ export default function Toast({ toast, onDismiss }) {
   >
     <span className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl ${isError ? 'bg-rose-50' : isNotification ? 'bg-[var(--status-danger-soft)] text-[var(--brand-primary)]' : 'bg-[var(--status-success-soft)]'}`}><Icon size={19} /></span>
     <span className="min-w-0 flex-1">
-      <span className="block text-sm font-semibold">{toast.title}</span>
-      <span className="mt-1 block text-xs leading-5 text-[var(--text-secondary)]">{toast.message}</span>
-      {toast.to && <Link to={toast.to} onClick={() => onDismiss(toast.id)} className="mt-2 inline-flex text-xs font-semibold text-[var(--brand-primary)] hover:underline">{toast.actionLabel || 'View details'} →</Link>}
+      <span className="block text-sm font-semibold">{t(toast.title)}</span>
+      <span className="mt-1 block text-xs leading-5 text-[var(--text-secondary)]">{t(toast.message)}</span>
+      {toast.to && <Link to={toast.to} onClick={() => onDismiss(toast.id)} className="mt-2 inline-flex text-xs font-semibold text-[var(--brand-primary)] hover:underline">{t(toast.actionLabel || 'View details')} →</Link>}
     </span>
-    <button type="button" onClick={() => onDismiss(toast.id)} aria-label="Dismiss notification" className="rounded-lg p-1.5 text-[var(--text-secondary)] transition hover:bg-[#f7f2ee] hover:text-[var(--text-primary)]"><X size={16} /></button>
+    <button type="button" onClick={() => onDismiss(toast.id)} aria-label={t('Dismiss notification')} className="rounded-lg p-1.5 text-[var(--text-secondary)] transition hover:bg-[#f7f2ee] hover:text-[var(--text-primary)]"><X size={16} /></button>
   </div>
 }

@@ -53,6 +53,7 @@ import {
   Truck,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from '../../i18n/LanguageContext.js'
 
 const orderConfig = {
   placed: {
@@ -78,6 +79,7 @@ const orderConfig = {
 }
 
 export default function ActiveOrderBanner({ order }) {
+  const t = useTranslation()
   const isPickup = order.orderType === 'pickup'
 
   const stages = isPickup
@@ -98,11 +100,11 @@ export default function ActiveOrderBanner({ order }) {
   return (
     <section
       className="active-order-banner mx-auto max-w-7xl px-4 pt-3 sm:px-6 lg:px-8"
-      aria-label="Active order"
+      aria-label={t('Active order')}
     >
       <Link
         to={`/orders?order=${order._id}`}
-        aria-label={`Track order ${orderNumber}: ${config.title}`}
+        aria-label={`${t('Track order')} ${orderNumber}: ${t(config.title)}`}
         className="group relative block overflow-hidden rounded-2xl
           border border-[#D8E8D8] bg-white
           shadow-[0_4px_18px_-12px_rgba(23,63,50,0.3)]
@@ -134,24 +136,24 @@ export default function ActiveOrderBanner({ order }) {
             <span className="flex flex-wrap items-center gap-1.5">
               <span className="text-[10px] font-bold uppercase
                 tracking-[0.13em] text-[var(--brand-primary)]">
-                {isPickup ? 'Pickup order' : 'Order update'}
+                {t(isPickup ? 'Pickup order' : 'Order update')}
               </span>
 
               <span className="rounded-full bg-[#EAF3EA] px-2 py-0.5
                 text-[10px] font-semibold capitalize
                 text-[var(--brand-primary)]">
-                {config.title}
+                {t(config.title)}
               </span>
             </span>
 
             <span className="mt-1 block text-sm font-semibold
               leading-snug text-[var(--text-primary)] sm:text-base">
-              {config.message}
+              {t(config.message)}
             </span>
 
             <span className="mt-1 block text-[11px]
               text-[var(--text-secondary)]">
-              #{orderNumber} · Track your order
+              #{orderNumber} · {t('Track your order')}
             </span>
           </span>
 
@@ -168,11 +170,11 @@ export default function ActiveOrderBanner({ order }) {
         <div
           className="flex gap-1.5 px-3.5 pb-3.5 sm:px-4 sm:pb-4"
           role="progressbar"
-          aria-label="Order progress"
+          aria-label={t('Order progress')}
           aria-valuemin={0}
           aria-valuemax={stages.length}
           aria-valuenow={safeStage + 1}
-          aria-valuetext={`Step ${safeStage + 1} of ${stages.length}: ${config.title}`}
+          aria-valuetext={`${t('Step')} ${safeStage + 1} ${t('of')} ${stages.length}: ${t(config.title)}`}
         >
           {stages.map((stage, index) => (
             <span

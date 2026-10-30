@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Download, Share, X } from 'lucide-react'
+import { useTranslation } from '../../i18n/LanguageContext.js'
 
 const DISMISSED_KEY = 'nallibokka-install-prompt-dismissed'
 
@@ -21,6 +22,7 @@ function isStandalone() {
 }
 
 export default function PwaInstallPrompt() {
+  const t = useTranslation()
   const [installEvent, setInstallEvent] = useState(null)
   const [instructionsOpen, setInstructionsOpen] = useState(false)
   const [serviceWorkerReady, setServiceWorkerReady] = useState(false)
@@ -77,15 +79,15 @@ export default function PwaInstallPrompt() {
         <Download size={18} />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-bold text-[var(--text-primary)]">Add NalliBokka to your home screen</p>
+        <p className="text-xs font-bold text-[var(--text-primary)]">{t('Add NalliBokka to your home screen')}</p>
         {instructionsOpen
-          ? <p className="mt-1 flex items-center gap-1 text-[10px] leading-4 text-[var(--text-secondary)]">{isIos ? <>Tap <Share size={12} /> Share, then choose “Add to Home Screen”.</> : 'Open your browser menu, then choose “Install app” or “Add to Home screen”.'}</p>
-          : <p className="mt-1 text-[10px] leading-4 text-[var(--text-secondary)]">Open your store faster, right from your home screen.</p>}
+          ? <p className="mt-1 flex items-center gap-1 text-[10px] leading-4 text-[var(--text-secondary)]">{isIos ? <>{t('Tap')} <Share size={12} /> {t('Share, then choose “Add to Home Screen”.')}</> : t('Open your browser menu, then choose “Install app” or “Add to Home screen”.')}</p>
+          : <p className="mt-1 text-[10px] leading-4 text-[var(--text-secondary)]">{t('Open your store faster, right from your home screen.')}</p>}
       </div>
       {!instructionsOpen && <button type="button" onClick={installApp} className="shrink-0 rounded-lg bg-[var(--brand-primary)] px-3 py-2 text-xs font-bold text-white transition hover:bg-[var(--brand-primary-hover)]">
-        {isIos ? 'How to add' : installEvent ? 'Install' : 'Add to home'}
+        {t(isIos ? 'How to add' : installEvent ? 'Install' : 'Add to home')}
       </button>}
-      <button type="button" onClick={dismissPrompt} aria-label="Dismiss install prompt" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--surface-subtle)]">
+      <button type="button" onClick={dismissPrompt} aria-label={t('Dismiss install prompt')} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--surface-subtle)]">
         <X size={16} />
       </button>
     </aside>
