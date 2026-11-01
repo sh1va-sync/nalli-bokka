@@ -56,6 +56,12 @@ const storeSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  minimumOrderValue: {
+    type: Number,
+    min: 0,
+    max: 1000000,
+    default: 0
+  },
   openingTime: {
     type: String,
     required: true,

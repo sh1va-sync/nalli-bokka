@@ -214,6 +214,12 @@ const schemas = {
       path: ['closingTime']
     })
   },
+  storeMinimumOrderUpdate: {
+    body: z.object({
+      minimumOrderValue: z.number().finite().min(0).max(1000000)
+        .refine(value => Number(value.toFixed(2)) === value, 'Minimum order value can have at most two decimal places')
+    }).strict()
+  },
   storePickupSlots: {
     params: z.object({ id: objectId }),
     query: z.object({

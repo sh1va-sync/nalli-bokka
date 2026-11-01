@@ -13,7 +13,14 @@ export function useProductCatalog({ categoryScreen = false, categoryId = '' }) {
   const selectedStore = useSelector((state) => state.selectedStore)
   const { data: categoriesResponse, isLoading: categoriesLoading, error: categoriesError, refetch: refetchCategories } = useGetProductCategoriesQuery(
     { storeId: selectedStore?._id },
-    { skip: !selectedStore?._id },
+    {
+      skip: !selectedStore?._id,
+      pollingInterval: 15000,
+      skipPollingIfUnfocused: true,
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+      refetchOnMountOrArgChange: true,
+    },
   )
   const [search, setSearch] = useState('')
   const [querySearch, setQuerySearch] = useState('')
@@ -39,7 +46,14 @@ export function useProductCatalog({ categoryScreen = false, categoryId = '' }) {
     search: querySearch.trim() || undefined,
     page,
     limit: 24,
-  }, { skip: !selectedStore })
+  }, {
+    skip: !selectedStore,
+    pollingInterval: 15000,
+    skipPollingIfUnfocused: true,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMountOrArgChange: true,
+  })
 
   const storeFilterReturnedNoProducts = storeProducts?.pagination?.total === 0
   const { currentData: catalogProducts, error: catalogError, isLoading: catalogLoading, isFetching: catalogFetching } = useGetProductsQuery({
@@ -47,7 +61,14 @@ export function useProductCatalog({ categoryScreen = false, categoryId = '' }) {
     search: querySearch.trim() || undefined,
     page,
     limit: 100,
-  }, { skip: !selectedStore || !storeFilterReturnedNoProducts })
+  }, {
+    skip: !selectedStore || !storeFilterReturnedNoProducts,
+    pollingInterval: 15000,
+    skipPollingIfUnfocused: true,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMountOrArgChange: true,
+  })
 
   const usingCatalogFallback = Boolean(storeFilterReturnedNoProducts && catalogProducts)
   const data = usingCatalogFallback ? catalogProducts : storeProducts

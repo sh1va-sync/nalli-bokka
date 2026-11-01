@@ -62,6 +62,11 @@ function App() {
   const isCatalogRoute = location.pathname === '/' || location.pathname === '/categories' || Boolean(categoryMatch)
   const catalogQueryOptions = {
     skip: isStoreRoute || !isCatalogRoute || !selectedStore?._id,
+    pollingInterval: 15000,
+    skipPollingIfUnfocused: true,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+    refetchOnMountOrArgChange: true,
   }
   const { isLoading: categoriesLoading } = useGetProductCategoriesQuery(
     { storeId: selectedStore?._id },

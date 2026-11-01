@@ -14,7 +14,14 @@ export default function CategoriesPage() {
   const selectedStore = useSelector((state) => state.selectedStore)
   const { data: categoriesResponse, isLoading, error, refetch } = useGetProductCategoriesQuery(
     { storeId: selectedStore?._id },
-    { skip: !selectedStore?._id },
+    {
+      skip: !selectedStore?._id,
+      pollingInterval: 15000,
+      skipPollingIfUnfocused: true,
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+      refetchOnMountOrArgChange: true,
+    },
   )
   const [search, setSearch] = useState('')
   const categories = useMemo(() => {

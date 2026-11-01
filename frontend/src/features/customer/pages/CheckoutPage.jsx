@@ -89,7 +89,12 @@ export default function CheckoutPage({ onLogin, onOpenCart, onToast }) {
     || items.length === 0
     || hasUnavailableItems
     || Boolean(cartError)
+    || (Number(selectedStore?.minimumOrderValue) > 0 && cart?.total != null && cart.total < Number(selectedStore.minimumOrderValue))
 
+  const minimumOrderValue = Number(selectedStore?.minimumOrderValue || 0)
+  const minimumOrderShortfall = minimumOrderValue > 0 && cart?.total != null
+    ? Math.max(0, minimumOrderValue - cart.total)
+    : 0
   const orderButtonLabel = paymentBusy || checkoutPaymentState.isLoading
     ? t('Opening secure payment…')
     : t('Place order')
@@ -263,6 +268,8 @@ export default function CheckoutPage({ onLogin, onOpenCart, onToast }) {
             <span className="text-sm font-semibold text-[var(--text-secondary)]">{t('Total amount')}</span>
             <span className="text-xl font-extrabold tracking-tight text-[var(--text-primary)]">{cart?.total == null ? '—' : formatPrice(cart.total)}</span>
           </div>
+          {minimumOrderValue > 0 && <p className="mt-2 text-xs text-[var(--text-secondary)]">{t('Minimum order value')}: <span className="font-bold text-[var(--text-primary)]">{formatPrice(minimumOrderValue)}</span></p>}
+          {minimumOrderShortfall > 0 && <p role="status" className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900">{t('Add')} <strong>{formatPrice(minimumOrderShortfall)}</strong> {t('more to meet the store minimum order.')}</p>}
           {hasUnavailableItems && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900">{t('Remove or resolve unavailable items from your basket before checkout.')}</p>}
           {error && <p role="alert" className="mt-3 rounded-xl bg-[var(--status-danger-soft)] p-3 text-xs leading-5 text-[var(--status-danger)]">{t(error)}</p>}
           <p className="mt-3 text-center text-[10px] leading-4 text-[var(--text-secondary)]">{t('Your order is created only after payment is confirmed.')}</p>
@@ -275,6 +282,7 @@ export default function CheckoutPage({ onLogin, onOpenCart, onToast }) {
           <span className="min-w-0">
             <span className="block text-[10px] font-semibold text-[var(--text-secondary)]">{t('Total amount')}</span>
             <span className="block text-lg font-extrabold leading-tight text-[var(--text-primary)]">{cart?.total == null ? '—' : formatPrice(cart.total)}</span>
+            {minimumOrderShortfall > 0 && <span className="block text-[9px] font-semibold leading-4 text-amber-800">{t('Add')} {formatPrice(minimumOrderShortfall)} {t('more to meet the store minimum order.')}</span>}
           </span>
           <button onClick={submitOrder} disabled={orderButtonDisabled} className="button-strong flex h-12 min-w-40 items-center justify-center gap-2 rounded-xl px-4 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-45">{orderButtonLabel} <ArrowRight size={17} /></button>
         </div>

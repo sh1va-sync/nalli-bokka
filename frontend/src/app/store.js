@@ -1,4 +1,5 @@
 import { configureStore, createListenerMiddleware, isAnyOf } from '@reduxjs/toolkit'
+import { setupListeners } from '@reduxjs/toolkit/query'
 import { api } from '../features/api/api.js'
 import authReducer, { setUser, signedIn, signedOut } from '../features/auth/authSlice.js'
 import storeReducer, { setSelectedStore } from '../features/store/storeSlice.js'
@@ -63,3 +64,5 @@ export const store = configureStore({
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().prepend(persistence.middleware).concat(api.middleware),
 })
+
+setupListeners(store.dispatch)

@@ -384,6 +384,82 @@ test('deleted inventory products retain their image on historical customer order
   }
 });
 
+test('store minimum order setting is public and enforced before creating checkout payment', async () => {
+  const store = await Store.create({
+    storeName: 'Minimum Order Store',
+    username: 'minimum-order-store',
+    password: 'test-password-long-enough',
+    location: 'Hyderabad'
+  });
+  const user = await User.create({
+    name: 'Minimum Order Customer',
+    phone: '+15559990041',
+    addresses: [{
+      label: 'Home',
+      fullAddress: '12 Example Road, Hyderabad',
+      pincode: '500001'
+    }]
+  });
+  const product = await Product.create({
+    storeId: store._id,
+    productType: 'fruit',
+    productName: 'Minimum Order Apples',
+    imageUrl: 'https://example.test/minimum-order-apples.jpg',
+    inStock: true,
+    pricePerKg: 200
+  });
+  await Cart.create({
+    userId: user._id,
+    items: [{ productId: product._id, selectionType: 'weight', selectedQuantity: 1 }]
+  });
+
+  const storeToken = jwt.sign({ role: 'store' }, process.env.JWT_SECRET, {
+    subject: String(store._id), expiresIn: '5m', issuer: 'nalli-bokka-api'
+  });
+  const userToken = jwt.sign({ role: 'user' }, process.env.JWT_SECRET, {
+    subject: String(user._id), expiresIn: '5m', issuer: 'nalli-bokka-api'
+  });
+  const updateMinimumOrder = minimumOrderValue => fetch(`${baseUrl}/store/minimum-order`, {
+    method: 'PATCH',
+    headers: {
+      authorization: 'Bearer ' + storeToken,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({ minimumOrderValue })
+  });
+
+  const invalidValueResponse = await updateMinimumOrder(500.555);
+  assert.equal(invalidValueResponse.status, 400);
+  const updateResponse = await updateMinimumOrder(500.5);
+  const updatePayload = await updateResponse.json();
+  assert.equal(updateResponse.status, 200, JSON.stringify(updatePayload));
+  assert.equal(updatePayload.data.minimumOrderValue, 500.5);
+
+  const publicStoreResponse = await fetch(`${baseUrl}/stores/${store._id}`);
+  assert.equal(publicStoreResponse.status, 200);
+  assert.equal((await publicStoreResponse.json()).data.minimumOrderValue, 500.5);
+
+  const checkoutResponse = await fetch(`${baseUrl}/payments/razorpay/order`, {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer ' + userToken,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      addressId: String(user.addresses[0]._id),
+      storeId: String(store._id),
+      idempotencyKey: '77777777-7777-4777-8777-777777777777'
+    })
+  });
+  assert.equal(checkoutResponse.status, 400);
+  assert.match((await checkoutResponse.json()).error, /minimum order of ₹500\.50/);
+  assert.equal(await CheckoutAttempt.countDocuments({ userId: user._id }), 0);
+
+  const disableMinimumResponse = await updateMinimumOrder(0);
+  assert.equal(disableMinimumResponse.status, 200);
+  assert.equal((await disableMinimumResponse.json()).data.minimumOrderValue, 0);
+});
+
 test('customer purchase, payment, and store status notification flow works end to end', async () => {
   const readinessResponse = await fetch(`${baseUrl}/health/ready`);
   assert.equal(readinessResponse.status, 200);

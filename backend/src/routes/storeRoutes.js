@@ -15,7 +15,8 @@ import {
   updateProduct,
   updateStock,
   updateStoreStatus,
-  updateStoreHours
+  updateStoreHours,
+  updateStoreMinimumOrder
 } from '../controllers/storeController.js';
 import {
   downloadStoreOrderInvoice,
@@ -35,6 +36,7 @@ router.use(authenticate('store'));
 
 router.patch('/status', validate(schemas.storeStatusUpdate), updateStoreStatus);
 router.patch('/hours', validate(schemas.storeHoursUpdate), updateStoreHours);
+router.patch('/minimum-order', validate(schemas.storeMinimumOrderUpdate), updateStoreMinimumOrder);
 router.get('/dashboard', validate(schemas.dashboard), getDashboard);
 router.get('/audit-events', validate(schemas.storeAuditEventList), listStoreAuditEvents);
 router.get('/product-categories', validate(schemas.storeProductCategoryList), listStoreProductCategories);

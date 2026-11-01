@@ -5,6 +5,7 @@ import {
   useAddAddressMutation,
   useCreateCheckoutPaymentMutation,
   useGetCartQuery,
+  useGetStoreQuery,
   useGetPickupSlotsQuery,
   useGetProfileQuery,
   useMarkCheckoutPaymentFailedMutation,
@@ -17,6 +18,12 @@ export function useCheckoutFlow({ onToast }) {
   const token = useSelector((state) => state.auth.token)
   const selectedStore = useSelector((state) => state.selectedStore)
 
+  const { currentData: selectedStoreResponse } = useGetStoreQuery(selectedStore?._id, {
+    skip: !selectedStore?._id,
+    refetchOnMountOrArgChange: true,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+  })
   const { data: profileResponse, isLoading: profileLoading, error: profileError } = useGetProfileQuery(undefined, { skip: !token })
   const { data: cartResponse, isLoading: cartLoading, error: cartError } = useGetCartQuery(undefined, { skip: !token })
   const [createCheckoutPayment, checkoutPaymentState] = useCreateCheckoutPaymentMutation()
@@ -50,6 +57,7 @@ export function useCheckoutFlow({ onToast }) {
   const selectedPickupSlotAvailable = pickupSlots.some((slot) => slot.startAt === pickupAt)
 
   const cart = cartResponse?.data
+  const checkoutStore = selectedStoreResponse?.data || selectedStore
   const items = cart?.items || []
   const hasUnavailableItems = cart?.hasUnavailableItems || items.some((item) => !item.available)
   const loading = profileLoading || cartLoading
@@ -166,7 +174,7 @@ export function useCheckoutFlow({ onToast }) {
 
   return {
     token,
-    selectedStore,
+    selectedStore: checkoutStore,
     profileResponse,
     profileLoading,
     profileError,

@@ -562,6 +562,36 @@ export async function updateStoreHours(req, res) {
   res.json({ data: store });
 }
 
+export async function updateStoreMinimumOrder(req, res) {
+  const session = await Store.db.startSession();
+  let store;
+  try {
+    await session.withTransaction(async () => {
+      store = await Store.findById(req.auth.id).session(session);
+      if (!store) {
+        throw new AppError(404, 'Store not found');
+      }
+      const { minimumOrderValue } = req.validated.body;
+      const previousState = String(store.minimumOrderValue);
+      store.minimumOrderValue = minimumOrderValue;
+      await store.save({ session });
+      await recordStoreAudit({
+        session,
+        req,
+        action: 'store.minimum_order_updated',
+        entityType: 'store',
+        entityId: store._id,
+        previousState,
+        nextState: String(minimumOrderValue),
+        changedFields: ['minimumOrderValue']
+      });
+    });
+  } finally {
+    await session.endSession();
+  }
+  res.json({ data: store });
+}
+
 export async function getDashboard(req, res) {
   const storeId = req.auth.id;
   const { days, from, to } = req.validated.query;

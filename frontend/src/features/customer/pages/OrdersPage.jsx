@@ -92,8 +92,14 @@ export default function OrdersPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [page, setPage] = useState(1)
   const selectedOrderId = searchParams.get('order')
-  const { data: listResponse, isLoading, error, refetch } = useGetOrdersQuery({ page, limit: 20 }, { skip: Boolean(selectedOrderId), pollingInterval: 30000 })
-  const { data: detailResponse, isLoading: detailLoading, error: detailError } = useGetOrderQuery(selectedOrderId, { skip: !selectedOrderId, pollingInterval: 30000 })
+  const { data: listResponse, isLoading, error, refetch } = useGetOrdersQuery(
+    { page, limit: 20 },
+    { skip: Boolean(selectedOrderId), pollingInterval: 15000, skipPollingIfUnfocused: true, refetchOnFocus: true, refetchOnReconnect: true, refetchOnMountOrArgChange: true }
+  )
+  const { data: detailResponse, isLoading: detailLoading, error: detailError } = useGetOrderQuery(
+    selectedOrderId,
+    { skip: !selectedOrderId, pollingInterval: 10000, skipPollingIfUnfocused: true, refetchOnFocus: true, refetchOnReconnect: true, refetchOnMountOrArgChange: true }
+  )
   const [cancelOrder, cancelState] = useCancelOrderMutation()
   const [createPayment, paymentState] = useCreatePaymentMutation()
   const [verifyPayment] = useVerifyPaymentMutation()

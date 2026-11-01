@@ -356,9 +356,12 @@ export async function createCheckoutPayment(req, res) {
     if (existingAttempt.status !== 'pending') {
       throw new AppError(409, 'This checkout attempt is no longer active. Start checkout again to retry payment.');
     }
-    const store = await Store.findById(existingAttempt.storeId).select('isOpen openingTime closingTime');
+    const store = await Store.findById(existingAttempt.storeId).select('isOpen openingTime closingTime minimumOrderValue');
     if (!store || !store.isOpen) {
       throw new AppError(409, 'This store is closed and cannot accept new checkout payments. Choose an open store to continue.');
+    }
+    if (existingAttempt.amount < store.minimumOrderValue) {
+      throw new AppError(409, `This store requires a minimum order of ₹${store.minimumOrderValue.toFixed(2)}. Add more items before checkout.`);
     }
     if (existingAttempt.orderType === 'pickup' && !isValidPickupTime({
       pickupAt: existingAttempt.pickupAt,
@@ -405,7 +408,7 @@ export async function createCheckoutPayment(req, res) {
   if (!requestedStoreId && storeIds.size > 1) {
     throw new AppError(409, 'Your cart contains products from multiple stores; specify storeId to check out one store at a time');
   }
-  const store = await Store.findById(selectedStoreId).select('isOpen openingTime closingTime');
+  const store = await Store.findById(selectedStoreId).select('isOpen openingTime closingTime minimumOrderValue');
   if (!store || !store.isOpen) {
     throw new AppError(409, 'This store is closed and cannot accept new checkout payments. Choose an open store to continue.');
   }
@@ -444,6 +447,9 @@ export async function createCheckoutPayment(req, res) {
     throw new AppError(400, 'Order total must be greater than zero');
   }
   const amount = roundToPaise(totalCents / 100);
+  if (amount < store.minimumOrderValue) {
+    throw new AppError(400, `This store requires a minimum order of ₹${store.minimumOrderValue.toFixed(2)}. Add more items before checkout.`);
+  }
   const razorpay = getRazorpayClient();
   const razorpayOrder = await razorpay.orders.create({
     amount: Math.round(amount * 100),

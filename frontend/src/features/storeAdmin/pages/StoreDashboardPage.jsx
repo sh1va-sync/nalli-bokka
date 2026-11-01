@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
+import { createPortal } from 'react-dom'
 import {
   Activity, AlertCircle, ArrowDownRight, ArrowUpRight, Boxes, CalendarDays, Check, ChevronLeft,
   ChevronRight, ClipboardList, Clock3, CreditCard, LayoutDashboard, LogOut, PackagePlus,
-  Download, FileText, Power, RefreshCw, RotateCcw, Search, Trash2, Truck, X,
+  Download, FileText, Power, RefreshCw, RotateCcw, Search, Settings2, Trash2, Truck, X,
 } from 'lucide-react'
 import {
   useCreateStoreProductMutation, useDeleteStoreProductMutation, useExportStoreReportMutation,
@@ -12,7 +13,7 @@ import {
   useGetStoreMeQuery, useGetStoreOrdersQuery, useGetStoreProductsQuery, useGetStoreProductCategoriesQuery,
   useCreateStoreProductCategoryMutation, useDeleteStoreProductCategoryMutation,
   useGetStoreAuditEventsQuery, useGetStoreTransactionsQuery, useSetStoreProductStockMutation, useToggleStoreStatusMutation,
-  useUpdateStoreHoursMutation,
+  useUpdateStoreHoursMutation, useUpdateStoreMinimumOrderMutation,
   useDownloadStoreOrderInvoiceMutation, useUpdateStoreOrderStatusMutation,
   useRefundStoreOrderMutation, useUpdateStoreProductMutation,
 } from '../../api/api.js'
@@ -32,6 +33,15 @@ const navItems = [
   { id: 'reports', label: 'Reports', icon: Download },
 ]
 const productTypes = ['meat', 'vegetable', 'fruit', 'oil', 'rice']
+const orderStatusStyles = {
+  placed: { borderColor: '#dc2626', backgroundColor: '#fffafa', badge: 'bg-rose-50 text-rose-800' },
+  packing: { borderColor: '#d97706', backgroundColor: '#fffdf7', badge: 'bg-amber-50 text-amber-800' },
+  'out for delivery': { borderColor: '#0284c7', backgroundColor: '#f8fcff', badge: 'bg-sky-50 text-sky-800' },
+  'ready for pickup': { borderColor: '#ea580c', backgroundColor: '#fffaf7', badge: 'bg-orange-50 text-orange-800' },
+  delivered: { borderColor: '#16a34a', backgroundColor: '#f8fdf9', badge: 'bg-emerald-50 text-emerald-800' },
+  'picked up': { borderColor: '#16a34a', backgroundColor: '#f8fdf9', badge: 'bg-emerald-50 text-emerald-800' },
+  cancelled: { borderColor: '#94a3b8', backgroundColor: '#fafbfc', badge: 'bg-slate-100 text-slate-600' },
+}
 const getDefaultPricingMode = (productType, packs = []) => (
   productType === 'oil' || (productType === 'rice' && packs.length) ? 'pack' : 'weight'
 )
@@ -346,6 +356,10 @@ export default function StoreDashboardPage() {
   const [orderTypeFilter, setOrderTypeFilter] = useState('')
   const [openingTimeDraft, setOpeningTimeDraft] = useState(null)
   const [closingTimeDraft, setClosingTimeDraft] = useState(null)
+  const [minimumOrderDraft, setMinimumOrderDraft] = useState(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsPosition, setSettingsPosition] = useState(null)
+  const settingsButtonRef = useRef(null)
   const [showProductForm, setShowProductForm] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
   const [actionError, setActionError] = useState('')
@@ -376,6 +390,7 @@ export default function StoreDashboardPage() {
   const [exportStoreReport] = useExportStoreReportMutation()
   const [toggleStoreStatus] = useToggleStoreStatusMutation()
   const [updateStoreHours] = useUpdateStoreHoursMutation()
+  const [updateStoreMinimumOrder] = useUpdateStoreMinimumOrderMutation()
   const [deleteProduct] = useDeleteStoreProductMutation()
   const [updateOrder] = useUpdateStoreOrderStatusMutation()
   const [refundOrder] = useRefundStoreOrderMutation()
@@ -385,6 +400,7 @@ export default function StoreDashboardPage() {
   const storeOpenState = meResponse?.account?.isOpen ?? store?.isOpen ?? true
   const storeOpeningTime = meResponse?.account?.openingTime ?? store?.openingTime ?? '09:00'
   const storeClosingTime = meResponse?.account?.closingTime ?? store?.closingTime ?? '21:00'
+  const storeMinimumOrderValue = meResponse?.account?.minimumOrderValue ?? store?.minimumOrderValue ?? 0
   const { data: dashboardResponse, error: dashboardError, isLoading: dashboardLoading, refetch: refetchDashboard } = useGetStoreDashboardQuery({ days: 1, ...selectedDayRange }, { skip: !token, pollingInterval: 30000 })
   const { data: productCategoriesResponse, error: productCategoriesError } = useGetStoreProductCategoriesQuery(undefined, { skip: !token || tab !== 'inventory' })
   const productCategories = productCategoriesResponse?.data || productTypes
@@ -437,6 +453,28 @@ export default function StoreDashboardPage() {
   const selectedDayOrders = allOrders
   const selectedDayTransactions = transactions
   const periodMetrics = dashboard?.periodMetrics
+
+  useEffect(() => {
+    if (!settingsOpen) return undefined
+
+    const updateSettingsPosition = () => {
+      const buttonRect = settingsButtonRef.current?.getBoundingClientRect()
+      if (!buttonRect) return
+      const popoverWidth = Math.min(640, window.innerWidth - 32)
+      setSettingsPosition({
+        left: Math.max(16, Math.min(buttonRect.left, window.innerWidth - popoverWidth - 16)),
+        bottom: Math.max(16, window.innerHeight - buttonRect.top + 8),
+      })
+    }
+
+    updateSettingsPosition()
+    window.addEventListener('resize', updateSettingsPosition)
+    window.addEventListener('scroll', updateSettingsPosition, true)
+    return () => {
+      window.removeEventListener('resize', updateSettingsPosition)
+      window.removeEventListener('scroll', updateSettingsPosition, true)
+    }
+  }, [settingsOpen])
 
   useEffect(() => {
     const timeout = setTimeout(() => setDebouncedOrderSearch(orderSearch.trim()), 250)
@@ -607,6 +645,15 @@ export default function StoreDashboardPage() {
     }, 'Store hours updated. Pickup slots now use these hours.')
   }
 
+  async function saveMinimumOrder(event) {
+    event.preventDefault()
+    const minimumOrderValue = Number(minimumOrderDraft ?? storeMinimumOrderValue)
+    await runAction('minimum-order', 'save', async () => {
+      await updateStoreMinimumOrder(minimumOrderValue).unwrap()
+      setMinimumOrderDraft(null)
+    }, minimumOrderValue > 0 ? 'Minimum order value updated.' : 'Minimum order requirement removed.')
+  }
+
   function openOrders(status = '') {
     setStatusFilter(status)
     setOrderTypeFilter('')
@@ -631,21 +678,9 @@ export default function StoreDashboardPage() {
           setTab(id)
         }} className={`store-dashboard-nav-item ${tab === id ? 'is-active' : ''}`}><Icon size={17} strokeWidth={1.8} /><span>{t(label)}</span></button>)}</nav>
         <div className="store-sidebar-footer">
-          <form onSubmit={saveStoreHours} className="store-hours-form rounded-xl border border-[var(--border-default)] bg-white p-3">
-            <div className="flex items-baseline justify-between gap-2">
-              <p className="text-[10px] font-bold uppercase tracking-[.1em] text-[var(--text-secondary)]">{t('Pickup hours')}</p>
-              <span className="text-[9px] text-[var(--text-tertiary)]">30 min · IST</span>
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <label className="text-[10px] font-semibold text-[var(--text-secondary)]">{t('Opens')}
-                <input required type="time" step="1800" value={openingTimeDraft ?? storeOpeningTime} onChange={(event) => setOpeningTimeDraft(event.target.value)} className="mt-1 h-8 w-full rounded-lg border border-[var(--border-default)] bg-white px-2 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--brand-primary)]" />
-              </label>
-              <label className="text-[10px] font-semibold text-[var(--text-secondary)]">{t('Closes')}
-                <input required type="time" step="1800" value={closingTimeDraft ?? storeClosingTime} onChange={(event) => setClosingTimeDraft(event.target.value)} className="mt-1 h-8 w-full rounded-lg border border-[var(--border-default)] bg-white px-2 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--brand-primary)]" />
-              </label>
-            </div>
-            <button type="submit" disabled={pendingAction === 'hours-save' || ((openingTimeDraft ?? storeOpeningTime) === storeOpeningTime && (closingTimeDraft ?? storeClosingTime) === storeClosingTime)} className="mt-2 h-8 w-full rounded-lg border border-[var(--border-default)] bg-[var(--bg-surface)] text-xs font-semibold text-[var(--brand-primary)] hover:bg-[var(--brand-primary-soft)] disabled:cursor-not-allowed disabled:opacity-50">{pendingAction === 'hours-save' ? 'Saving…' : 'Save pickup hours'}</button>
-          </form>
+          <button ref={settingsButtonRef} type="button" onClick={() => setSettingsOpen(true)} className="mb-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-[var(--border-default)] bg-white px-3 text-xs font-semibold text-[var(--text-secondary)] transition hover:border-[var(--brand-primary)] hover:bg-[var(--brand-primary-soft)] hover:text-[var(--brand-primary)]">
+            <Settings2 size={15} />{t('Store settings')}
+          </button>
           <section className={`store-availability-card rounded-xl border p-3 transition-colors duration-300 ${storeOpenState ? 'border-[#e3e5dc] bg-[#f8f8f5]' : 'border-[#ead0ca] bg-[var(--bg-app)]'}`} aria-label={t('Store availability')}>
             <div className="store-availability-summary flex items-center gap-2">
               <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${storeOpenState ? 'bg-[#e9eee5] text-[var(--text-secondary)]' : 'bg-[#f4e5e1] text-[var(--status-danger)]'}`}>
@@ -676,6 +711,44 @@ export default function StoreDashboardPage() {
       <main key={tab} className="store-workspace-main min-w-0 dashboard-page-transition">
         {tab !== 'inventory' && tab !== 'reports' && tab !== 'activity' && <DateFilter selectedDate={selectedDate} today={today} onChange={changeSelectedDate} />}
         {(actionError || actionSuccess) && <p role={actionError ? 'alert' : 'status'} className={`mb-4 flex items-center gap-2 rounded-xl p-3 text-sm ${actionError ? 'bg-[var(--status-danger-soft)] text-[var(--status-danger)]' : 'bg-[var(--status-success-soft)] text-[var(--status-success)]'}`}>{actionError ? <AlertCircle size={16} /> : <Check size={16} />}{t(actionError || actionSuccess)}</p>}
+        {settingsOpen && settingsPosition && createPortal(<div className="fixed inset-0 z-[80] bg-[var(--text-primary)]/15 backdrop-blur-[1px]" onMouseDown={() => setSettingsOpen(false)}>
+          <section role="dialog" aria-modal="true" aria-labelledby="store-settings-title" onMouseDown={(event) => event.stopPropagation()} style={{ left: settingsPosition.left, bottom: settingsPosition.bottom, width: 'min(640px, calc(100vw - 32px))' }} className="fixed max-h-[92vh] overflow-y-auto rounded-[22px] border border-[var(--border-default)] bg-white p-4 shadow-2xl sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="store-settings-title" className="text-lg font-bold text-[var(--text-primary)]">{t('Store settings')}</h2>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">{t('Manage pickup availability and minimum order requirements.')}</p>
+              </div>
+              <button type="button" onClick={() => setSettingsOpen(false)} aria-label={t('Close store settings')} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--bg-app)]"><X size={17} /></button>
+            </div>
+            {(actionError || actionSuccess) && <p role={actionError ? 'alert' : 'status'} className={`mb-4 flex items-center gap-2 rounded-xl p-3 text-sm ${actionError ? 'bg-[var(--status-danger-soft)] text-[var(--status-danger)]' : 'bg-[var(--status-success-soft)] text-[var(--status-success)]'}`}>{actionError ? <AlertCircle size={16} /> : <Check size={16} />}{t(actionError || actionSuccess)}</p>}
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <form onSubmit={saveStoreHours} className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-app)] p-3 sm:p-4">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-xs font-bold uppercase tracking-[.1em] text-[var(--text-secondary)]">{t('Pickup hours')}</p>
+                  <span className="text-[10px] text-[var(--text-tertiary)]">30 min · IST</span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <label className="text-xs font-semibold text-[var(--text-secondary)]">{t('Opens')}
+                    <input required type="time" step="1800" value={openingTimeDraft ?? storeOpeningTime} onChange={(event) => setOpeningTimeDraft(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-[var(--border-default)] bg-white px-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--brand-primary)]" />
+                  </label>
+                  <label className="text-xs font-semibold text-[var(--text-secondary)]">{t('Closes')}
+                    <input required type="time" step="1800" value={closingTimeDraft ?? storeClosingTime} onChange={(event) => setClosingTimeDraft(event.target.value)} className="mt-1 h-9 w-full rounded-lg border border-[var(--border-default)] bg-white px-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--brand-primary)]" />
+                  </label>
+                </div>
+                <button type="submit" disabled={pendingAction === 'hours-save' || ((openingTimeDraft ?? storeOpeningTime) === storeOpeningTime && (closingTimeDraft ?? storeClosingTime) === storeClosingTime)} className="mt-3 h-9 w-full rounded-lg border border-[var(--border-default)] bg-white text-xs font-semibold text-[var(--brand-primary)] hover:bg-[var(--brand-primary-soft)] disabled:cursor-not-allowed disabled:opacity-50">{pendingAction === 'hours-save' ? t('Saving…') : t('Save pickup hours')}</button>
+              </form>
+              <form onSubmit={saveMinimumOrder} className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-app)] p-3 sm:p-4">
+                <label htmlFor="store-minimum-order" className="text-xs font-bold uppercase tracking-[.1em] text-[var(--text-secondary)]">{t('Minimum order value')}</label>
+                <p className="mt-1 text-[10px] leading-4 text-[var(--text-tertiary)]">{t('Customers must meet this basket total before checkout. Set to 0 to disable.')}</p>
+                <div className="mt-3 flex items-center gap-2">
+                  <span className="text-sm font-semibold text-[var(--text-secondary)]">₹</span>
+                  <input id="store-minimum-order" type="number" min="0" max="1000000" step="0.01" required value={minimumOrderDraft ?? storeMinimumOrderValue} onChange={(event) => setMinimumOrderDraft(event.target.value)} className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--border-default)] bg-white px-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--brand-primary)]" />
+                </div>
+                <button type="submit" disabled={pendingAction === 'minimum-order-save' || Number(minimumOrderDraft ?? storeMinimumOrderValue) === storeMinimumOrderValue} className="mt-3 h-9 w-full rounded-lg border border-[var(--border-default)] bg-white text-xs font-semibold text-[var(--brand-primary)] hover:bg-[var(--brand-primary-soft)] disabled:cursor-not-allowed disabled:opacity-50">{pendingAction === 'minimum-order-save' ? t('Saving…') : t('Save minimum order')}</button>
+              </form>
+            </div>
+          </section>
+        </div>, document.body)}
         {tab === 'overview' && <>
           <SectionTitle eyebrow={selectedDate === today ? 'Today at a glance' : 'Daily snapshot'} title="Store overview"><button onClick={() => refetchDashboard()} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#e2e0d9] bg-white px-3 text-xs font-semibold text-[var(--text-secondary)] transition hover:bg-[var(--bg-app)]"><RefreshCw size={14} />{t('Refresh')}</button></SectionTitle>
           {dashboardError && <p role="alert" className="mb-4 rounded-xl bg-[var(--status-danger-soft)] p-3 text-sm text-[var(--status-danger)]">{getErrorMessage(dashboardError)}</p>}
@@ -763,10 +836,11 @@ export default function StoreDashboardPage() {
                   : null
             const paymentConfirmed = ['paid', 'refund_failed'].includes(order.paymentStatus)
             const motion = orderMotion[order._id]
-            return <article key={order._id} className={`rounded-[18px] border bg-white p-4 transition-all duration-500 sm:p-5 ${motion === 'new' ? 'order-live-new border-[var(--brand-primary)] shadow-[0_14px_42px_-24px_rgba(134,25,35,.55)]' : motion === 'updated' ? 'order-live-updated border-[#d7e6d8]' : 'border-[var(--border-default)]'}`}>
+            const statusStyle = orderStatusStyles[order.orderStatus] || { borderColor: 'var(--border-default)', backgroundColor: '#fff', badge: 'bg-[var(--surface-subtle)] text-[var(--text-secondary)]' }
+            return <article key={order._id} style={{ borderColor: statusStyle.borderColor, borderLeftColor: statusStyle.borderColor, backgroundColor: statusStyle.backgroundColor, borderWidth: 2, borderLeftWidth: 6 }} className={`rounded-[18px] border p-4 transition-all duration-500 sm:p-5 ${motion === 'new' ? 'order-live-new shadow-[0_14px_42px_-24px_rgba(134,25,35,.55)]' : motion === 'updated' ? 'order-live-updated' : ''}`}>
               <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><p className="text-[10px] font-semibold uppercase tracking-[.12em] text-[var(--brand-primary)]">{t('Order')} #{order._id.slice(-8).toUpperCase()}</p><span className="rounded-full bg-[var(--brand-primary-soft)] px-2 py-1 text-[9px] font-bold uppercase tracking-[.08em] text-[var(--brand-primary)]">{t(order.orderType === 'pickup' ? 'Store pickup' : 'Delivery')}</span>{motion && <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[.08em] ${motion === 'new' ? 'bg-[var(--status-danger-soft)] text-[var(--brand-primary)]' : 'bg-[var(--status-success-soft)] text-[var(--status-success)]'}`}>{t(motion === 'new' ? 'New order' : 'Just updated')}</span>}</div><h3 className="mt-1 text-sm font-semibold text-[var(--text-primary)]">{customer.name || t('Customer')} <span className="font-normal text-[var(--text-secondary)]">{customer.phone || ''}</span></h3><p className="mt-1 text-[10px] text-[var(--text-secondary)]">{new Date(order.createdAt).toLocaleString('en-IN')}</p>{order.orderType === 'pickup' ? <p className="mt-1 text-xs font-semibold text-[var(--brand-primary)]">{t('Pickup')}: {new Date(order.pickupAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })}</p> : <p className="mt-1 text-xs text-[var(--text-secondary)]">{order.deliveryAddress?.fullAddress} · {order.deliveryAddress?.pincode}</p>}</div><div className="text-right"><p className="text-base font-semibold">{formatPrice(order.totalAmount)}</p><p className="mt-1 text-[10px] capitalize text-[var(--text-secondary)]">{t('Payment')}: {t(order.paymentStatus)}</p></div></div>
               <div className={`mt-3 space-y-1 border-t border-[var(--surface-subtle)] pt-3 ${motion ? 'order-items-highlight' : ''}`}>{order.items?.map((item, index) => <p key={`${item.productId}-${index}`} className={`rounded-lg px-2 py-1 text-xs text-[var(--text-secondary)] transition-colors ${motion ? 'bg-[#fff5ed] text-[var(--text-secondary)]' : ''}`}><span className="font-semibold">{t(item.productName)}</span> · {t(formatItemQuantity(item))}</p>)}</div>
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-2"><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold capitalize ${order.orderStatus === 'placed' ? 'bg-[var(--status-danger-soft)] text-[var(--brand-primary)]' : order.orderStatus === 'delivered' ? 'bg-[var(--status-success-soft)] text-[var(--status-success)]' : 'bg-[var(--surface-subtle)] text-[var(--text-secondary)]'}`}>{t(order.orderStatus)}</span><div className="flex flex-wrap gap-2">
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2"><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold capitalize ${statusStyle.badge}`}>{t(order.orderStatus)}</span><div className="flex flex-wrap gap-2">
                 <button type="button" onClick={() => downloadInvoice(order)} disabled={Boolean(downloadingInvoiceId)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#dfe7dc] px-3 text-xs font-semibold text-[var(--status-success)] hover:bg-[var(--bg-app)] disabled:cursor-wait disabled:opacity-50"><FileText size={14} />{t(downloadingInvoiceId === order._id ? 'Preparing PDF…' : 'Download invoice')}</button>
                 {order.orderStatus === 'placed' && <><button disabled={!paymentConfirmed || pendingAction === `${order._id}-packing`} title={!paymentConfirmed ? t('The API allows accepting an order only after payment is confirmed.') : undefined} onClick={() => changeOrderStatus(order, 'packing')} className="h-9 rounded-lg bg-[var(--brand-primary)] px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-45">{t(pendingAction === `${order._id}-packing` ? 'Accepting…' : paymentConfirmed ? 'Accept order' : 'Awaiting payment')}</button><button disabled={pendingAction === `${order._id}-cancelled`} onClick={() => changeOrderStatus(order, 'cancelled')} className="h-9 rounded-lg border border-[var(--border-default)] px-3 text-xs font-semibold text-[var(--text-secondary)] disabled:opacity-55">{t('Decline')}</button></>}
                 {['placed', 'packing'].includes(order.orderStatus) && order.paymentStatus === 'paid' && <button disabled={pendingAction === `${order._id}-refund`} onClick={() => requestOrderRefund(order)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-rose-200 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-55"><RotateCcw size={13} />{t(pendingAction === `${order._id}-refund` ? 'Requesting…' : 'Full refund')}</button>}

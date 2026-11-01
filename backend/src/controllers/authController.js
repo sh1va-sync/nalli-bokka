@@ -121,6 +121,7 @@ export async function loginStore(req, res) {
       username: store.username,
       location: store.location,
       isOpen: store.isOpen,
+      minimumOrderValue: store.minimumOrderValue,
       openingTime: store.openingTime,
       closingTime: store.closingTime,
       storePhone: store.storePhone || store.storeNumber,

@@ -81,6 +81,10 @@ export const api = createApi({
       providesTags: ['Stores'],
       keepUnusedDataFor: 300,
     }),
+    getStore: builder.query({
+      query: (storeId) => `/stores/${storeId}`,
+      providesTags: ['Stores'],
+    }),
     getPickupSlots: builder.query({
       query: ({ storeId, date }) => ({
         url: `/stores/${storeId}/pickup-slots`,
@@ -458,6 +462,14 @@ export const api = createApi({
       query: (body) => ({ url: '/store/hours', method: 'PATCH', body }),
       invalidatesTags: ['StoreMe', 'Stores', 'StoreAudit'],
     }),
+    updateStoreMinimumOrder: builder.mutation({
+      query: (minimumOrderValue) => ({
+        url: '/store/minimum-order',
+        method: 'PATCH',
+        body: { minimumOrderValue },
+      }),
+      invalidatesTags: ['StoreMe', 'Stores', 'StoreAudit'],
+    }),
     exportStoreReport: builder.mutation({
       query: (params) => ({
         url: '/store/reports/export',
@@ -470,6 +482,7 @@ export const api = createApi({
 
 export const {
   useGetStoresQuery,
+  useGetStoreQuery,
   useGetPickupSlotsQuery,
   useGetProductsQuery,
   useGetProductCategoriesQuery,
@@ -520,5 +533,6 @@ export const {
   useReorderOrderMutation,
   useToggleStoreStatusMutation,
   useUpdateStoreHoursMutation,
+  useUpdateStoreMinimumOrderMutation,
   useExportStoreReportMutation,
 } = api

@@ -24,7 +24,8 @@ const auditEventSchema = new mongoose.Schema({
       'product.deleted',
       'product.stock_updated',
       'store.open_status_updated',
-      'store.hours_updated'
+      'store.hours_updated',
+      'store.minimum_order_updated'
     ]
   },
   entityType: {

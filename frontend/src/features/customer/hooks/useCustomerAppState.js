@@ -37,7 +37,14 @@ export function useCustomerAppState() {
   const { data: meResponse, error: meError, isLoading: meLoading } = useGetMeQuery(undefined, { skip: !token || isStoreRoute })
   const { data: storesResponse, error: storesError, isLoading: storesLoading } = useGetStoresQuery(
     { limit: 100 },
-    { skip: isStoreRoute, pollingInterval: isStoreRoute ? 0 : 60000 }
+    {
+      skip: isStoreRoute,
+      pollingInterval: isStoreRoute ? 0 : 60000,
+      skipPollingIfUnfocused: true,
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+      refetchOnMountOrArgChange: true,
+    }
   )
   const { data: cartResponse, error: cartError, isLoading: cartLoading } = useGetCartQuery(undefined, { skip: !token || isStoreRoute })
   const { data: notificationResponse, isLoading: notificationsLoading } = useGetUserNotificationsQuery(
@@ -48,7 +55,10 @@ export function useCustomerAppState() {
   const isHomeRoute = location.pathname === '/'
   const activeOrdersQueryOptions = {
     skip: !token || isStoreRoute || !isHomeRoute,
-    pollingInterval: token && !isStoreRoute && isHomeRoute ? 60000 : 0,
+    pollingInterval: token && !isStoreRoute && isHomeRoute ? 30000 : 0,
+    skipPollingIfUnfocused: true,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
   }
 
   const { data: placedOrdersResponse, error: placedOrdersError, isLoading: placedOrdersLoading } = useGetOrdersQuery(
@@ -90,6 +100,7 @@ export function useCustomerAppState() {
       latestStore.isOpen !== selectedStore.isOpen
       || latestStore.storePhone !== selectedStore.storePhone
       || latestStore.storeNumber !== selectedStore.storeNumber
+      || latestStore.minimumOrderValue !== selectedStore.minimumOrderValue
     ) {
       dispatch(setSelectedStore({ ...selectedStore, ...latestStore }))
     }
