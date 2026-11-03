@@ -25,7 +25,7 @@ Local development:
 http://localhost:3000/api
 ```
 
-Append each endpoint path below to the base URL. Firebase sends and verifies the OTP in the browser; the API accepts the resulting Firebase ID token.
+Append each endpoint path below to the base URL. Customer OTP codes are sent and verified by the backend through Renflair.
 
 ### Headers
 
@@ -113,20 +113,34 @@ Pagination query parameters are `page` (default `1`, integer >= 1) and `limit` (
 { "status": "not_ready" }
 ```
 
-### `POST /auth/users/verify`
+### `POST /auth/users/otp/send`
 
-**Access:** Public  
-**Purpose:** Verifies the Firebase ID token returned after Firebase Phone Authentication confirms the SMS code. Existing customers receive a customer token; first-time customers receive a short-lived registration token and must finish account creation.
+**Access:** Public
+**Purpose:** Generates a six-digit OTP, stores only a keyed hash for five minutes, and sends the code through Renflair.
 
 **Request body:**
 
 ```json
 {
-  "firebaseIdToken": "<firebase-id-token>"
+  "phone": "+15551234567"
 }
 ```
 
-The token must come from Firebase phone sign-in and contain a verified phone number. The API verifies its signature with Firebase Admin; it does not accept a phone number or OTP code as proof of identity.
+Phone numbers must use E.164 format. The backend calls `https://sms.renflair.in/V1.php` with `API`, `PHONE`, and `OTP` query parameters, and accepts delivery only when the successful HTTP response contains JSON with `"status": "SUCCESS"`. The Renflair API key is configured only on the backend. Success (`200 OK`): `{ "message": "Verification code sent" }`.
+
+### `POST /auth/users/verify`
+
+**Access:** Public
+**Purpose:** Verifies the submitted code against its active server-side challenge. Challenges expire after five minutes, allow at most five attempts, and are consumed on success.
+
+**Request body:**
+
+```json
+{
+  "phone": "+15551234567",
+  "code": "123456"
+}
+```
 
 **Success for an existing customer — `200 OK`:**
 
@@ -181,7 +195,7 @@ For a first-time customer, the response is instead:
 - `401`: Invalid or expired registration token.
 - `409`: An account already exists for the verified phone, or email is already used by another account.
 - `429`: Authentication endpoint rate limit exceeded.
-- `503`: Firebase Admin or secure JWT configuration is unavailable.
+- `503`: Renflair or secure JWT configuration is unavailable.
 
 ### `POST /auth/stores/login`
 
@@ -1166,19 +1180,19 @@ API errors normally use this shape:
 | Status | Typical meaning |
 | --- | --- |
 | `400 Bad Request` | Invalid request body/query/path parameter, unsupported selection, or malformed JSON. |
-| `401 Unauthorized` | Missing/invalid/expired token, invalid Firebase phone token, or invalid store credentials. |
+| `401 Unauthorized` | Missing/invalid/expired token, invalid/expired OTP, or invalid store credentials. |
 | `403 Forbidden` | Token is valid but belongs to the wrong role. |
 | `404 Not Found` | Resource is missing or is outside the authenticated account's scope. |
 | `409 Conflict` | State transition, inventory, payment, idempotency, or uniqueness conflict. |
 | `413 Payload Too Large` | Request body exceeds 1 MB. |
 | `429 Too Many Requests` | Authentication rate limit exceeded. |
-| `503 Service Unavailable` | Required Firebase Admin, Razorpay, or JWT configuration is missing. |
+| `503 Service Unavailable` | Required Renflair, Razorpay, or JWT configuration is missing. |
 | `500 Internal Server Error` | Unexpected server-side failure; response does not expose internal details. |
 
 ## Suggested customer flow
 
 1. Browse `GET /stores` and `GET /products`.
-2. Complete Firebase Phone Authentication in the browser, then submit the resulting ID token to `POST /auth/users/verify`.
+2. Send an OTP with `POST /auth/users/otp/send`, then submit the phone and code to `POST /auth/users/verify`.
 3. Save the returned JWT and load customer data with `GET /users/me`.
 4. Add/select a delivery address and add selections using `POST /cart/items`.
 5. Review `GET /cart`; resolve unavailable items before checkout.

@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import readline from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import Store from '../src/models/Store.js';
+import { prepareStoreInput } from '../src/utils/storeProvisioning.js';
 
 function askHidden(question) {
   return new Promise((resolve, reject) => {
@@ -50,17 +51,37 @@ try {
   }
   await mongoose.connect(process.env.MONGODB_URI);
 
-  const storeName = (await prompts.question('Store name: ')).trim();
-  const username = (await prompts.question('Store username: ')).trim().toLowerCase();
-  const location = (await prompts.question('Store location: ')).trim();
-  const storePhone = (await prompts.question('Store phone (optional): ')).trim();
+  const storeName = await prompts.question('Store name: ');
+  const username = await prompts.question('Store username: ');
+  const location = await prompts.question('Store location: ');
+  const storePhone = await prompts.question('Store phone (optional): ');
+  const storeNumber = await prompts.question('Store number (optional legacy contact): ');
+  const googleMapsLink = await prompts.question('Google Maps link (optional): ');
+  const googleMapLink = await prompts.question('Legacy Google Map link (optional): ');
+  const mapLink = await prompts.question('Map link (optional): ');
+  const isOpen = await prompts.question('Store open now? (yes/no) [yes]: ') || 'yes';
+  const minimumOrderValue = await prompts.question('Minimum order value [0]: ') || '0';
+  const openingTime = await prompts.question('Opening time, HH:00 or HH:30 [09:00]: ') || '09:00';
+  const closingTime = await prompts.question('Closing time, HH:00 or HH:30 [21:00]: ') || '21:00';
   prompts.close();
   const password = await askHidden('Store password (hidden): ');
-  if (!storeName || !username || !location || password.length < 8 || (storePhone && !/^\+?[\d() .-]{6,29}$/.test(storePhone))) {
-    throw new Error('Store name, username, and location are required; password must be at least 8 characters; phone must be a valid phone number');
-  }
+  const storeInput = prepareStoreInput({
+    storeName,
+    username,
+    location,
+    storePhone,
+    storeNumber,
+    googleMapsLink,
+    googleMapLink,
+    mapLink,
+    isOpen,
+    minimumOrderValue,
+    openingTime,
+    closingTime,
+    password,
+  });
 
-  const store = await Store.create({ storeName, username, location, storePhone, password });
+  const store = await Store.create(storeInput);
   console.log(`Store account "${store.username}" created.`);
 } catch (error) {
   console.error(error.message);

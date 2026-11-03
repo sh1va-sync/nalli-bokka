@@ -1,17 +1,17 @@
 # Nalli Bokka API
 
-Express 5 REST API using MongoDB/Mongoose, Firebase Authentication for customer phone verification, JWT bearer tokens, and Razorpay for payments.
+Express 5 REST API using MongoDB/Mongoose, Renflair SMS for customer phone verification, JWT bearer tokens, and Razorpay for payments.
 
 ## Setup
 
-Requirements: Node.js 18+, npm, MongoDB, a Firebase project with Phone sign-in enabled, Cloudinary credentials for product image uploads, and Razorpay credentials for live payment flows.
+Requirements: Node.js 18+, npm, MongoDB, a Renflair SMS API key for customer OTP delivery, Cloudinary credentials for product image uploads, and Razorpay credentials for live payment flows.
 
 ```powershell
 npm install
 Copy-Item .env.example .env
 ```
 
-Set `MONGODB_URI`, `JWT_SECRET` (generate a unique random value of at least 32 characters), and `CORS_ORIGIN` in `.env`. `CORS_ORIGIN` accepts a comma-separated list of website origins. In Firebase Console, enable Phone Authentication and create a service-account key; set `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY` from that key to verify customer sign-in tokens. Store the private key only on the backend and never commit it. Set `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` from your Cloudinary account to enable store product image uploads; keep the API secret only in backend environment settings. Add the Razorpay credentials and webhook secret to enable payments. The server starts only after MongoDB connects and the JWT secret is configured.
+Set `MONGODB_URI`, `JWT_SECRET` (generate a unique random value of at least 32 characters), and `CORS_ORIGIN` in `.env`. `CORS_ORIGIN` accepts a comma-separated list of website origins. Set `RENFLAIR_API_KEY` from your Renflair account to enable customer OTP delivery; keep it only in backend environment settings. Set `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` from your Cloudinary account to enable store product image uploads; keep the API secret only on the backend. Add the Razorpay credentials and webhook secret to enable payments. The server starts only after MongoDB connects and the JWT secret is configured.
 
 ```powershell
 npm run dev
@@ -29,7 +29,7 @@ npm run reconcile-payments
 
 It checks pending checkout attempts, created payment transactions, and pending refunds older than `RECONCILE_MIN_AGE_MINUTES` (default 10) against Razorpay. It never initiates a new payment or refund. Configure the command in your deployment scheduler to run periodically (for example, every 10–15 minutes), and alert on a non-zero exit code or `payment.reconciliation.failed` / `refund.reconciliation.failed` logs. The job requires the same database and Razorpay environment configuration as the API.
 
-Run the automated checks with `npm test`. The purchase integration test starts a temporary MongoDB replica set with `mongodb-memory-server` (the MongoDB binary may be downloaded on its first run) and stubs Razorpay provider calls. Tests do not use application database data or call live Firebase/Razorpay services.
+Run the automated checks with `npm test`. The purchase integration test starts a temporary MongoDB replica set with `mongodb-memory-server` (the MongoDB binary may be downloaded on its first run) and stubs Razorpay provider calls. Tests do not use application database data or call live Renflair/Razorpay services.
 
 ## Provision store/admin accounts
 
@@ -39,15 +39,15 @@ Store registration is deliberately not public. Create store accounts from a trus
 npm run create-store
 ```
 
-The script accepts an optional store phone number. Existing store records need `storePhone` populated in the database before customers can use the order-detail click-to-call action.
+The script prompts for every Store schema field: store identity and location, both supported contact-number fields, all map-link fields, open status, minimum order value, opening/closing times, and a hidden password. Optional fields can be left blank; the open status, minimum order value, and store hours default to `yes`, `0`, and `09:00`–`21:00`. Phone numbers, password length, minimum order value, and 30-minute store-hour increments are validated before the account is created. Existing store records need `storePhone` populated in the database before customers can use the order-detail click-to-call action.
 
 ## Authentication
 
-- Customer OTP: Firebase sends/verifies SMS codes in the browser; the API verifies the Firebase ID token. Existing customers sign in immediately; first-time customers complete registration with the short-lived verification token and a required name.
+- Customer OTP: the API generates and verifies codes and uses Renflair to deliver SMS. Existing customers sign in immediately; first-time customers complete registration with the short-lived verification token and a required name.
 - Order invoices: customers and store admins can download a PDF for their own order. The PDF is generated once from the saved order details and stored with that order for consistent future downloads.
 - Store login: use the provisioned store `username` and password.
 - Authenticated endpoints take `Authorization: Bearer <token>`. Tokens are role-scoped (`user` or `store`) and expire after `JWT_EXPIRES_IN` (default `7d`).
-- Firebase enforces phone-SMS quotas; API ID-token verification/registration and store login are rate-limited.
+- OTP send/verification/registration and store login are rate-limited. OTP challenges are stored as hashes and expire after five minutes.
 
 ## Console logging
 
@@ -63,7 +63,8 @@ All endpoints are under `/api`. Protected endpoints require a bearer token of th
 | --- | --- | --- | --- |
 | GET | `/health` | Public | Liveness check; verifies the HTTP process is responding |
 | GET | `/health/ready` | Public | Readiness check; returns 503 when MongoDB is disconnected |
-| POST | `/auth/users/verify` | Public | Verify Firebase phone sign-in; body `{ "firebaseIdToken": "<firebase-id-token>" }`; returns a registration token for new users |
+| POST | `/auth/users/otp/send` | Public | Send a six-digit OTP; body `{ "phone": "+15551234567" }` |
+| POST | `/auth/users/verify` | Public | Verify an OTP; body `{ "phone": "+15551234567", "code": "123456" }`; returns a registration token for new users |
 | POST | `/auth/users/register` | Public + registration token | Create a new customer account with `name` and optional `email` |
 | POST | `/auth/stores/login` | Public | Store login; body `{ "username": "shop", "password": "..." }` |
 | GET | `/auth/me` | User or store | Get current authenticated account |

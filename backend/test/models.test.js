@@ -15,6 +15,7 @@ import User from '../src/models/User.js';
 import WebhookEvent from '../src/models/WebhookEvent.js';
 import { priceSelection } from '../src/utils/pricing.js';
 import { getIndiaDateString, getPickupSlots, isValidPickupTime } from '../src/utils/pickupSlots.js';
+import { prepareStoreInput } from '../src/utils/storeProvisioning.js';
 
 const objectId = () => new mongoose.Types.ObjectId();
 
@@ -79,6 +80,56 @@ test('store contact numbers are optional and length bounded', async () => {
     location: 'Hyderabad',
     storePhone: '1'.repeat(31)
   }).validate(), /storePhone/);
+});
+
+test('store provisioning captures every persisted store field and applies schema defaults', async () => {
+  const storeInput = prepareStoreInput({
+    storeName: '  Nalli Bokka  ',
+    username: '  NALLI  ',
+    password: 'long-enough-password',
+    location: '  Hyderabad  ',
+    storePhone: '+911234567890',
+    storeNumber: '040 1234 5678',
+    googleMapsLink: 'https://maps.example/store',
+    googleMapLink: '',
+    mapLink: '',
+    isOpen: 'yes',
+    minimumOrderValue: '250',
+    openingTime: '09:00',
+    closingTime: '21:00'
+  });
+
+  assert.deepEqual(Object.keys(storeInput).sort(), Object.keys(Store.schema.paths)
+    .filter(path => !['_id', '__v', 'createdAt', 'updatedAt'].includes(path))
+    .sort());
+  assert.equal(storeInput.storeName, 'Nalli Bokka');
+  assert.equal(storeInput.username, 'nalli');
+  assert.equal(storeInput.isOpen, true);
+  assert.equal(storeInput.minimumOrderValue, 250);
+  await new Store(storeInput).validate();
+});
+
+test('store provisioning rejects invalid operational fields before saving', () => {
+  const baseInput = {
+    storeName: 'Nalli Bokka',
+    username: 'nalli',
+    password: 'long-enough-password',
+    location: 'Hyderabad',
+    storePhone: '',
+    storeNumber: '',
+    googleMapsLink: '',
+    googleMapLink: '',
+    mapLink: '',
+    isOpen: 'yes',
+    minimumOrderValue: '0',
+    openingTime: '09:00',
+    closingTime: '21:00'
+  };
+
+  assert.throws(() => prepareStoreInput({ ...baseInput, openingTime: '09:15' }), /Opening time/);
+  assert.throws(() => prepareStoreInput({ ...baseInput, closingTime: '08:30' }), /later than opening/);
+  assert.throws(() => prepareStoreInput({ ...baseInput, minimumOrderValue: '-1' }), /Minimum order value/);
+  assert.throws(() => prepareStoreInput({ ...baseInput, isOpen: 'sometimes' }), /open status/);
 });
 
 test('order notifications are user-scoped, unread by default, and unique per order status', async () => {

@@ -29,9 +29,15 @@ const selection = z.object({
 ), 'A pack label is required only for pack selections');
 
 const schemas = {
+  sendOtp: {
+    body: z.object({
+      phone: z.string().regex(/^\+[1-9]\d{7,14}$/, 'Phone must be in E.164 format')
+    }).strict()
+  },
   verifyOtp: {
     body: z.object({
-      firebaseIdToken: z.string().min(1).max(8192)
+      phone: z.string().regex(/^\+[1-9]\d{7,14}$/, 'Phone must be in E.164 format'),
+      code: z.string().regex(/^\d{6}$/, 'Verification code must be 6 digits')
     }).strict()
   },
   completeUserRegistration: {

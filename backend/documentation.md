@@ -21,7 +21,7 @@ Endpoints in this document are relative to the base URL unless marked otherwise.
 - Node.js 18 or newer
 - npm
 - MongoDB
-- Firebase Phone Authentication and Firebase Admin service-account credentials for OTP
+- Renflair SMS API credentials for customer OTP delivery
 - Razorpay credentials for online payment
 
 ```powershell
@@ -41,9 +41,7 @@ The server connects to MongoDB before it listens. `npm start` starts without wat
 | `JWT_SECRET` | Yes | Secret used to sign and verify JWTs. Must be at least 32 characters; startup fails otherwise. Use a unique, high-entropy secret. |
 | `JWT_EXPIRES_IN` | No | JWT lifetime accepted by `jsonwebtoken`, for example `7d`; defaults to `7d`. |
 | `CORS_ORIGIN` | No | Comma-separated allow-list of website origins. Defaults to `http://localhost:5173`. Requests without an `Origin` header are allowed. |
-| `FIREBASE_PROJECT_ID` | For OTP | Firebase project ID used to verify ID tokens. |
-| `FIREBASE_CLIENT_EMAIL` | For OTP | Service-account email from Firebase service-account credentials. |
-| `FIREBASE_PRIVATE_KEY` | For OTP | Service-account private key; keep it secret and encode newlines as `\n` in `.env`. |
+| `RENFLAIR_API_KEY` | For OTP | Renflair SMS API key; keep it secret and configure it only on the backend. |
 | `RAZORPAY_KEY_ID` | For payments | Razorpay key ID; returned to the frontend when creating a payment order. |
 | `RAZORPAY_KEY_SECRET` | For payments | Razorpay secret used for API access and client-payment signature verification. Never expose it to the frontend. |
 | `RAZORPAY_WEBHOOK_SECRET` | For webhooks | Secret configured for the Razorpay webhook endpoint. Never expose it to the frontend. |
@@ -62,14 +60,14 @@ Order checkout, payment settlement, and store order-status/notification updates 
 
 ### Customer authentication (OTP)
 
-1. The browser sends the customer's E.164 phone number to Firebase Phone Authentication, protected by Firebase's reCAPTCHA verifier.
-2. The customer enters the received code; Firebase returns a signed ID token.
-3. Submit that token to `POST /auth/users/verify`; Firebase Admin verifies its signature and phone sign-in provider.
+1. The browser sends the customer's E.164 phone number to `POST /auth/users/otp/send`.
+2. The API generates a six-digit code, stores only its keyed hash in MongoDB for five minutes, and asks Renflair to send the code by SMS.
+3. The customer submits the phone number and code to `POST /auth/users/verify`; the API checks the stored challenge and permits up to five verification attempts.
 4. Existing customers receive a JWT and profile. First-time customers receive a short-lived registration token.
 5. First-time customers submit that token, a required name, and optional email to `POST /auth/users/register`; the response contains their JWT and profile.
 6. Send the customer JWT as `Authorization: Bearer <token>` for customer routes.
 
-Firebase applies phone-SMS quotas and abuse protection. API token verification and registration share a rate limit of 5 requests per 10 minutes per client IP. Store login is limited to 10 attempts per 15 minutes per client IP. Rate-limit responses have an `error` string.
+OTP send, verification, and registration share a rate limit of 5 requests per 10 minutes per client IP. Store login is limited to 10 attempts per 15 minutes per client IP. Rate-limit responses have an `error` string.
 
 ### Store-admin authentication
 
@@ -97,7 +95,7 @@ List endpoints accept:
 
 Paged responses use `{ "data": [...], "pagination": { "page": 1, "limit": 20, "total": 0, "pages": 0 } }`. When there are no results, `pages` is `0`.
 
-Standard application errors use `{ "error": "message" }`. Validation errors are `400`; missing resources are usually `404`; state conflicts, unavailable stock, or duplicate unique values are `409`; authentication failures are `401`; role failures are `403`; configured external services that are unavailable return `503`. Unhandled server errors return `500` with a generic message and are logged by the server. Malformed JSON returns `400`; bodies over 1 MB return `413`.
+Standard application errors use `{ "error": "message" }`. Validation errors are `400`; missing resources are usually `404`; state conflicts, unavailable stock, or duplicate unique values are `409`; authentication failures are `401`; role failures are `403`; missing service configuration returns `503`, and upstream provider failures may return `502`. Unhandled server errors return `500` with a generic message and are logged by the server. Malformed JSON returns `400`; bodies over 1 MB return `413`.
 
 ## 4. Endpoint reference
 
@@ -123,15 +121,23 @@ Public readiness check for deployment probes. Returns `200` only when the MongoD
 { "status": "not_ready" }
 ```
 
+#### `POST /auth/users/otp/send`
+
+Public. Generates a six-digit code, stores a keyed hash in MongoDB with a five-minute expiry, and requests SMS delivery from Renflair.
+
+Request: `{ "phone": "+15551234567" }`; phone numbers must use E.164 format. The backend calls `https://sms.renflair.in/V1.php` with `API`, `PHONE`, and `OTP` query parameters. It accepts delivery only when Renflair returns a successful HTTP response with JSON `{ "status": "SUCCESS", "message": "SMS sent succesfulyy" }`. The Renflair API key stays on the backend. Success (`200`): `{ "message": "Verification code sent" }`.
+
+Possible errors: `400` invalid request; `429` rate limit exceeded; `502` SMS provider request failed, returned invalid JSON, or did not report `SUCCESS`; `503` Renflair or JWT configuration unavailable.
+
 #### `POST /auth/users/verify`
 
-Public. Verifies a Firebase ID token produced by Firebase Phone Authentication after the customer enters the SMS code. Firebase handles SMS delivery and reCAPTCHA in the browser; the API verifies the token with Firebase Admin.
+Public. Verifies the submitted code against the active server-side challenge. Challenges expire after five minutes, allow at most five attempts, and are consumed on successful verification.
 
-Request: `{ "firebaseIdToken": "<firebase-id-token>" }`. The token's verified `phone_number` claim supplies the account phone, and its sign-in provider must be `phone`.
+Request: `{ "phone": "+15551234567", "code": "123456" }`.
 
 Existing customers receive `{ "isNewUser": false, "token": "<jwt>", "user": <user> }` with status `200`. First-time customers receive `{ "isNewUser": true, "verificationToken": "<short-lived-registration-jwt>" }` with status `200`; this token expires after 10 minutes and is not an authenticated customer token.
 
-Possible errors: `400` invalid request; `401` invalid/expired Firebase ID token or non-phone sign-in; `429` rate limit exceeded; `503` Firebase Admin or JWT configuration unavailable.
+Possible errors: `400` invalid request; `401` invalid, expired, or exhausted verification code; `429` rate limit exceeded; `503` secure JWT configuration unavailable.
 
 #### `POST /auth/users/register`
 
@@ -838,7 +844,7 @@ src/
   middleware/            Authentication, validation, 404, error handling
   models/                Mongoose document schemas and indexes
   routes/                Endpoint declarations and role protection
-  services/              Firebase Admin token verification and Razorpay client wrappers
+  services/              Renflair SMS delivery and Razorpay client wrappers
   utils/                 Application errors, pricing, regex escaping
   validation/schemas.js  Zod request schemas
 scripts/
@@ -852,7 +858,7 @@ The API router is mounted under `/api`. The raw Razorpay webhook route is mounte
 
 ## 9. Scope and known limitations
 
-- OTP delivery requires Firebase Phone Authentication, frontend Firebase web configuration, Firebase Admin service-account credentials on the API, and authorized frontend domains. Firebase quotas and billing depend on the project plan.
+- OTP delivery requires the backend `RENFLAIR_API_KEY` and a configured MongoDB database for short-lived challenge storage.
 - Online payment flows require configured Razorpay keys; webhook processing additionally requires its webhook secret.
 - Transactions require a replica set or equivalent transaction-capable MongoDB deployment.
 - The API has no customer password flow, store self-registration, password-reset flow, refresh tokens, partial refunds, shipping-rate calculation, or file-upload endpoint.

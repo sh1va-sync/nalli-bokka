@@ -3,8 +3,7 @@ import { after, before, test } from 'node:test';
 import { createHmac } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import app from '../src/app.js';
-import { verifyUserOtp } from '../src/controllers/authController.js';
-import firebaseAuth from '../src/services/firebaseAuth.js';
+import OtpChallenge from '../src/models/OtpChallenge.js';
 import User from '../src/models/User.js';
 import Order from '../src/models/Order.js';
 import { schemas } from '../src/validation/schemas.js';
@@ -216,28 +215,223 @@ test('store invoice download is scoped to the authenticated store', async () => 
   }
 });
 
-test('Firebase phone sign-in token is required before auth verification', async () => {
-  const missingToken = await fetch(`${baseUrl}/auth/users/verify`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({})
-  });
-  assert.equal(missingToken.status, 400);
+test('OTP request schemas require an E.164 phone and a six-digit code', () => {
+  assert.equal(schemas.sendOtp.body.safeParse({ phone: '+15551234567' }).success, true);
+  assert.equal(schemas.sendOtp.body.safeParse({ phone: '5551234567' }).success, false);
+  assert.equal(schemas.verifyOtp.body.safeParse({
+    phone: '+15551234567',
+    code: '123456'
+  }).success, true);
+  assert.equal(schemas.verifyOtp.body.safeParse({
+    phone: '+15551234567',
+    code: '1234'
+  }).success, false);
+  assert.equal(schemas.verifyOtp.body.safeParse({
+    firebaseIdToken: 'retired-firebase-token'
+  }).success, false);
+});
 
-  const legacyOtpBody = await fetch(`${baseUrl}/auth/users/verify`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ phone: '+15551234567', code: '123456' })
-  });
-  assert.equal(legacyOtpBody.status, 400);
+test('OTP send routes through Renflair and persists only a short-lived hash', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalApiKey = process.env.RENFLAIR_API_KEY;
+  const originalFindOneAndUpdate = OtpChallenge.findOneAndUpdate;
+  let savedChallenge;
+  let providerUrl;
+  process.env.RENFLAIR_API_KEY = 'test-renflair-key';
+  OtpChallenge.findOneAndUpdate = async (filter, update, options) => {
+    savedChallenge = { filter, update, options };
+    return {};
+  };
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(input);
+    if (url.hostname === 'sms.renflair.in') {
+      providerUrl = url;
+      assert.equal(init.method, 'GET');
+      return Response.json({ status: 'SUCCESS', message: 'SMS sent succesfulyy' });
+    }
+    return originalFetch(input, init);
+  };
 
-  const malformedToken = await fetch(`${baseUrl}/auth/users/verify`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ firebaseIdToken: '' })
-  });
-  assert.equal(malformedToken.status, 400);
+  try {
+    const response = await fetch(`${baseUrl}/auth/users/otp/send`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ phone: '+15551234567' })
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { message: 'Verification code sent' });
+    assert.equal(providerUrl.origin, 'https://sms.renflair.in');
+    assert.equal(providerUrl.pathname, '/V1.php');
+    assert.equal(providerUrl.searchParams.get('API'), 'test-renflair-key');
+    assert.equal(providerUrl.searchParams.get('PHONE'), '+15551234567');
+    assert.match(providerUrl.searchParams.get('OTP'), /^\d{6}$/);
+    assert.deepEqual(savedChallenge.filter, { phone: '+15551234567' });
+    assert.equal(savedChallenge.update.$set.attemptsUsed, 0);
+    assert.match(savedChallenge.update.$set.codeHash, /^[\da-f]{64}$/);
+    assert.notEqual(savedChallenge.update.$set.codeHash, providerUrl.searchParams.get('OTP'));
+    assert.ok(savedChallenge.update.$set.expiresAt.getTime() > Date.now());
+    assert.ok(savedChallenge.update.$set.expiresAt.getTime() <= Date.now() + 5 * 60 * 1000);
+    assert.equal(savedChallenge.options.upsert, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    OtpChallenge.findOneAndUpdate = originalFindOneAndUpdate;
+    if (originalApiKey === undefined) delete process.env.RENFLAIR_API_KEY;
+    else process.env.RENFLAIR_API_KEY = originalApiKey;
+  }
+});
 
+test('OTP send rejects Renflair responses without SUCCESS and does not persist a challenge', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalApiKey = process.env.RENFLAIR_API_KEY;
+  const originalFindOneAndUpdate = OtpChallenge.findOneAndUpdate;
+  let persisted = false;
+  process.env.RENFLAIR_API_KEY = 'test-renflair-key';
+  OtpChallenge.findOneAndUpdate = async () => {
+    persisted = true;
+    return {};
+  };
+  globalThis.fetch = async (input, init) => {
+    if (new URL(input).hostname === 'sms.renflair.in') {
+      return Response.json({ status: 'FAILED', message: 'SMS was not sent' });
+    }
+    return originalFetch(input, init);
+  };
+
+  try {
+    const response = await fetch(`${baseUrl}/auth/users/otp/send`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ phone: '+15551234567' })
+    });
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error, 'Renflair SMS provider did not confirm delivery');
+    assert.equal(persisted, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    OtpChallenge.findOneAndUpdate = originalFindOneAndUpdate;
+    if (originalApiKey === undefined) delete process.env.RENFLAIR_API_KEY;
+    else process.env.RENFLAIR_API_KEY = originalApiKey;
+  }
+});
+
+test('valid OTP authenticates existing customers and consumes the challenge', async () => {
+  const phone = '+15551234567';
+  const code = '123456';
+  const challenge = {
+    _id: 'otp-challenge',
+    codeHash: createHmac('sha256', process.env.JWT_SECRET).update(`${phone}:${code}`).digest('hex'),
+    attemptsUsed: 0
+  };
+  const user = { _id: '507f1f77bcf86cd799439011', phone };
+  const originalChallengeFindOne = OtpChallenge.findOne;
+  const originalChallengeDelete = OtpChallenge.findOneAndDelete;
+  const originalUserFindOne = User.findOne;
+  let consumedFilter;
+  OtpChallenge.findOne = async filter => {
+    assert.deepEqual(filter, {
+      phone,
+      expiresAt: filter.expiresAt,
+      attemptsUsed: { $lt: 5 }
+    });
+    assert.ok(filter.expiresAt.$gt instanceof Date);
+    return challenge;
+  };
+  OtpChallenge.findOneAndDelete = async filter => {
+    consumedFilter = filter;
+    return challenge;
+  };
+  User.findOne = async filter => {
+    assert.deepEqual(filter, { phone });
+    return user;
+  };
+
+  try {
+    const response = await fetch(`${baseUrl}/auth/users/verify`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ phone, code })
+    });
+    const result = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(result.user.phone, phone);
+    assert.equal(jwt.verify(result.token, process.env.JWT_SECRET).role, 'user');
+    assert.equal(consumedFilter.codeHash, challenge.codeHash);
+    assert.equal(consumedFilter.attemptsUsed, 0);
+  } finally {
+    OtpChallenge.findOne = originalChallengeFindOne;
+    OtpChallenge.findOneAndDelete = originalChallengeDelete;
+    User.findOne = originalUserFindOne;
+  }
+});
+
+test('valid OTP returns a registration token for first-time customers', async () => {
+  const phone = '+15551234568';
+  const code = '654321';
+  const challenge = {
+    _id: 'new-user-otp-challenge',
+    codeHash: createHmac('sha256', process.env.JWT_SECRET).update(`${phone}:${code}`).digest('hex'),
+    attemptsUsed: 0
+  };
+  const originalChallengeFindOne = OtpChallenge.findOne;
+  const originalChallengeDelete = OtpChallenge.findOneAndDelete;
+  const originalUserFindOne = User.findOne;
+  OtpChallenge.findOne = async () => challenge;
+  OtpChallenge.findOneAndDelete = async () => challenge;
+  User.findOne = async () => null;
+
+  try {
+    const response = await fetch(`${baseUrl}/auth/users/verify`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ phone, code })
+    });
+    const result = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(result.isNewUser, true);
+    const registrationClaims = jwt.verify(result.verificationToken, process.env.JWT_SECRET);
+    assert.equal(registrationClaims.purpose, 'user-registration');
+    assert.equal(registrationClaims.sub, phone);
+  } finally {
+    OtpChallenge.findOne = originalChallengeFindOne;
+    OtpChallenge.findOneAndDelete = originalChallengeDelete;
+    User.findOne = originalUserFindOne;
+  }
+});
+
+test('incorrect OTP returns unauthorized and increments the attempt count', async () => {
+  const phone = '+15551234569';
+  const challenge = {
+    _id: 'incorrect-otp-challenge',
+    codeHash: createHmac('sha256', process.env.JWT_SECRET).update(`${phone}:123456`).digest('hex'),
+    attemptsUsed: 0
+  };
+  const originalChallengeFindOne = OtpChallenge.findOne;
+  const originalChallengeUpdate = OtpChallenge.updateOne;
+  let attemptUpdate;
+  OtpChallenge.findOne = async () => challenge;
+  OtpChallenge.updateOne = async (...args) => { attemptUpdate = args; };
+
+  try {
+    const response = await fetch(`${baseUrl}/auth/users/verify`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ phone, code: '000000' })
+    });
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).error, 'Invalid or expired verification code');
+    assert.deepEqual(attemptUpdate[0], {
+      _id: challenge._id,
+      codeHash: challenge.codeHash,
+      attemptsUsed: { $lt: 5 }
+    });
+    assert.deepEqual(attemptUpdate[1], { $inc: { attemptsUsed: 1 } });
+  } finally {
+    OtpChallenge.findOne = originalChallengeFindOne;
+    OtpChallenge.updateOne = originalChallengeUpdate;
+  }
+});
+
+test('legacy OTP endpoint remains unavailable and store login validation is unchanged', async () => {
   const retiredOtpEndpoint = await fetch(`${baseUrl}/auth/users/otp`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -251,56 +445,6 @@ test('Firebase phone sign-in token is required before auth verification', async 
     body: JSON.stringify({ username: '', password: '' })
   });
   assert.equal(login.status, 400);
-});
-
-test('Firebase phone token claims determine the customer login identity', async () => {
-  const originalVerifyIdToken = firebaseAuth.verifyIdToken;
-  const originalFindOne = User.findOne;
-  firebaseAuth.verifyIdToken = async token => {
-    assert.equal(token, 'valid-firebase-id-token');
-    return {
-      phone_number: '+15551234567',
-      firebase: { sign_in_provider: 'phone' }
-    };
-  };
-  User.findOne = async filter => {
-    assert.deepEqual(filter, { phone: '+15551234567' });
-    return { _id: '507f1f77bcf86cd799439011', phone: '+15551234567' };
-  };
-
-  try {
-    const response = await fetch(`${baseUrl}/auth/users/verify`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ firebaseIdToken: 'valid-firebase-id-token' })
-    });
-    const result = await response.json();
-    assert.equal(response.status, 200);
-    assert.equal(result.user.phone, '+15551234567');
-    assert.equal(jwt.verify(result.token, process.env.JWT_SECRET).role, 'user');
-  } finally {
-    firebaseAuth.verifyIdToken = originalVerifyIdToken;
-    User.findOne = originalFindOne;
-  }
-});
-
-test('invalid Firebase ID tokens return unauthorized', async () => {
-  const originalVerifyIdToken = firebaseAuth.verifyIdToken;
-  firebaseAuth.verifyIdToken = async () => {
-    throw Object.assign(new Error('Invalid Firebase token'), { code: 'auth/invalid-id-token' });
-  };
-
-  try {
-    const response = await fetch(`${baseUrl}/auth/users/verify`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ firebaseIdToken: 'invalid-firebase-id-token' })
-    });
-    assert.equal(response.status, 401);
-    assert.equal((await response.json()).error, 'Firebase phone verification is invalid or expired');
-  } finally {
-    firebaseAuth.verifyIdToken = originalVerifyIdToken;
-  }
 });
 
 test('dashboard period boundaries must be supplied together in chronological order', () => {
