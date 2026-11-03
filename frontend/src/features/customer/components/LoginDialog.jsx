@@ -1,26 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useDispatch } from 'react-redux'
 import { ArrowLeft, CheckCircle2, Phone, ShieldCheck, X } from 'lucide-react'
-import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth'
 import { signedIn } from '../../auth/authSlice.js'
-import { getFirebaseAuth } from '../../auth/firebase.js'
-import { useRegisterUserMutation, useVerifyFirebasePhoneTokenMutation } from '../../api/api.js'
+import { useRegisterUserMutation, useSendUserOtpMutation, useVerifyUserOtpMutation } from '../../api/api.js'
 import { getErrorMessage } from '../utils.js'
 import { useTranslation } from '../../i18n/LanguageContext.js'
-
-function getPhoneAuthErrorMessage(error) {
-  const messages = {
-    'auth/unauthorized-domain': 'Firebase is blocking this website origin. Add the exact hostname you opened on your phone to Firebase Console → Authentication → Settings → Authorized domains.',
-    'auth/invalid-app-credential': 'Firebase could not validate this site with reCAPTCHA. Add the site hostname to Firebase Authorized domains. A LAN IP over HTTP may not work; try localhost on the same device or use an authorized HTTPS hostname.',
-    'auth/missing-app-credential': 'Firebase did not receive a reCAPTCHA verification. Reload the page and try again from an authorized hostname.',
-    'auth/captcha-check-failed': 'Firebase reCAPTCHA validation failed. Confirm this hostname is authorized and retry from a supported browser.',
-    'auth/operation-not-allowed': 'Phone sign-in is disabled for this Firebase project. Enable Phone under Firebase Console → Authentication → Sign-in method.',
-    'auth/billing-not-enabled': 'Firebase requires billing to send phone-authentication SMS for this project. Check the project billing plan and SMS region policy.',
-    'auth/api-key-not-valid': 'The Firebase web API key is invalid. Check that the frontend Firebase config comes from the same project as the backend service account.',
-    'auth/too-many-requests': 'Firebase temporarily blocked verification requests. Wait before trying again or check the Firebase SMS quota.'
-  }
-  return messages[error?.code] || getErrorMessage(error)
-}
 
 export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
   const t = useTranslation()
@@ -28,31 +12,19 @@ export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
   const [step, setStep] = useState('phone')
-  const [sendingCode, setSendingCode] = useState(false)
-  const confirmationResult = useRef(null)
-  const firebaseIdToken = useRef('')
-  const recaptchaVerifier = useRef(null)
   const [registrationToken, setRegistrationToken] = useState('')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState('')
-  const [verifyFirebasePhoneToken, verifyState] = useVerifyFirebasePhoneTokenMutation()
+  const [sendUserOtp, sendState] = useSendUserOtpMutation()
+  const [verifyUserOtp, verifyState] = useVerifyUserOtpMutation()
   const [registerUser, registerState] = useRegisterUserMutation()
-  useEffect(() => () => recaptchaVerifier.current?.clear(), [])
   if (!open) return null
 
   const normalizedPhone = phone.startsWith('+') ? phone.replace(/[^\d+]/g, '') : `+91${phone.replace(/\D/g, '')}`
-  const busy = sendingCode || verifyState.isLoading || registerState.isLoading
-
-  function clearPhoneVerification() {
-    recaptchaVerifier.current?.clear()
-    recaptchaVerifier.current = null
-    confirmationResult.current = null
-    firebaseIdToken.current = ''
-  }
+  const busy = sendState.isLoading || verifyState.isLoading || registerState.isLoading
 
   function changePhone() {
-    clearPhoneVerification()
     setCode('')
     setRegistrationToken('')
     setStep('phone')
@@ -76,22 +48,12 @@ export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
   async function requestVerificationCode(event) {
     event?.preventDefault()
     setMessage('')
-    setSendingCode(true)
     try {
-      clearPhoneVerification()
-      const auth = getFirebaseAuth()
-      const verifier = new RecaptchaVerifier(auth, 'firebase-recaptcha-container', {
-        size: 'invisible'
-      })
-      recaptchaVerifier.current = verifier
-      confirmationResult.current = await signInWithPhoneNumber(auth, normalizedPhone, verifier)
+      await sendUserOtp({ phone: normalizedPhone }).unwrap()
       setCode('')
       setStep('code')
     } catch (error) {
-      clearPhoneVerification()
-      setMessage(getPhoneAuthErrorMessage(error))
-    } finally {
-      setSendingCode(false)
+      setMessage(getErrorMessage(error))
     }
   }
 
@@ -99,14 +61,7 @@ export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
     event.preventDefault()
     setMessage('')
     try {
-      if (!firebaseIdToken.current) {
-        if (!confirmationResult.current) {
-          throw new Error('Request a new verification code before continuing.')
-        }
-        const credential = await confirmationResult.current.confirm(code)
-        firebaseIdToken.current = await credential.user.getIdToken()
-      }
-      const result = await verifyFirebasePhoneToken({ firebaseIdToken: firebaseIdToken.current }).unwrap()
+      const result = await verifyUserOtp({ phone: normalizedPhone, code }).unwrap()
       if (result.isNewUser) {
         setRegistrationToken(result.verificationToken)
         setStep('registration')
@@ -151,8 +106,8 @@ export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
         ) : step === 'code' ? (
           <form className="mt-6 space-y-3" onSubmit={submitCode}>
             <button type="button" onClick={changePhone} className="mb-1 flex items-center gap-1 text-xs font-semibold text-[var(--brand-primary)]"><ArrowLeft size={14} /> {t('Change phone number')}</button>
-            <input autoFocus required inputMode="numeric" minLength={4} maxLength={10} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 10))} placeholder={t('Enter OTP')} className="h-12 w-full rounded-xl border border-[var(--border-default)] bg-white px-4 text-center text-lg tracking-[.35em] outline-none focus:border-[var(--brand-primary)]" />
-            <button disabled={busy || code.length < 4} className="button-strong flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand-primary)] text-sm font-medium text-white transition hover:bg-[var(--brand-primary-hover)] disabled:cursor-not-allowed disabled:opacity-50">{busy ? t('Verifying…') : <><CheckCircle2 size={17} /> {t('Verify & continue')}</>}</button>
+            <input autoFocus required inputMode="numeric" minLength={6} maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder={t('Enter OTP')} className="h-12 w-full rounded-xl border border-[var(--border-default)] bg-white px-4 text-center text-lg tracking-[.35em] outline-none focus:border-[var(--brand-primary)]" />
+            <button disabled={busy || code.length !== 6} className="button-strong flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand-primary)] text-sm font-medium text-white transition hover:bg-[var(--brand-primary-hover)] disabled:cursor-not-allowed disabled:opacity-50">{busy ? t('Verifying…') : <><CheckCircle2 size={17} /> {t('Verify & continue')}</>}</button>
           </form>
         ) : (
           <form className="mt-6 space-y-3" onSubmit={submitRegistration}>
@@ -169,7 +124,6 @@ export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
         {message && <p role="alert" className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-800">{t(message)}</p>}
         {step === 'code' && <button type="button" disabled={busy} onClick={requestVerificationCode} className="mt-4 w-full text-center text-xs font-semibold text-[var(--brand-primary)] disabled:opacity-50">{t('Didn’t get the code? Resend')}</button>}
         <p className="mt-5 text-center text-[11px] leading-5 text-slate-400">{t('By continuing, you agree to receive a one-time verification SMS.')}</p>
-        <div id="firebase-recaptcha-container" />
       </section>
     </div>
   )

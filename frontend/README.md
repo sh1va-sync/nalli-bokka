@@ -5,12 +5,10 @@ Customer storefront for ordering groceries, fresh produce, rice, oils and meat f
 ## Run locally
 
 1. Start the API server on `http://localhost:3000`.
-2. Copy `.env.example` to `.env` and set `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, and `VITE_FIREBASE_APP_ID` from Firebase Console → Project settings → General. Enable Phone sign-in in Authentication and add the frontend hostname (including the hostname used for mobile testing) to Authentication → Settings → Authorized domains. Restart Vite after changing `.env`.
+2. Copy `.env.example` to `.env`. Customer OTP delivery is configured on the backend with `RENFLAIR_API_KEY`; the frontend only needs `VITE_API_BASE_URL` when the default `/api` route is not used.
 3. The local `/api` proxy forwards requests to port `3000` without browser CORS; set `VITE_API_BASE_URL` to the server's absolute `/api` URL when the API is hosted separately. A separately hosted API must allow the deployed frontend origin for authenticated cross-origin requests.
 4. Install dependencies with `npm install`.
 5. Start Vite with `npm run dev -- --host 0.0.0.0` to test from another device on your network.
-
-Firebase Phone Authentication validates the page origin with reCAPTCHA. If Firebase rejects a LAN IP as an unauthorized domain, use a Firebase-authorized hostname or an HTTPS development tunnel.
 
 Razorpay Checkout uses its hosted browser SDK. Its public key comes from the payment-order API; no Razorpay secret belongs in this application.
 
@@ -23,7 +21,7 @@ The production build includes a web app manifest, app icons, and a service worke
 - Choose and persist a store; browse its available products.
 - Search with a short debounce, filter by product type, sort, and paginate through the catalog.
 - Use a guest basket before signing in; selections persist locally and are synchronized to the server cart after OTP login.
-- Sign in or create a customer account with Firebase phone OTP and reCAPTCHA; the backend verifies Firebase ID tokens. First-time customers enter a name after phone verification (email is optional) using the backend registration-token flow.
+- Sign in or create a customer account with backend-managed Renflair phone OTP. First-time customers enter a name after phone verification (email is optional) using the backend registration-token flow.
 - Manage customer profile details and saved delivery addresses.
 - Refresh authoritative cart prices, add/select an address without leaving checkout, open Razorpay UPI checkout, and create a one-store order only after server-side payment verification confirms success. Failed or dismissed payments do not create an order and leave the cart intact.
 - Review order history and poll current order status while tracking; download saved PDF invoices directly from order cards; view order updates from the header notification popup.

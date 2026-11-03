@@ -104,7 +104,10 @@ export const api = createApi({
       providesTags: ['ProductCategories'],
       keepUnusedDataFor: 300,
     }),
-    verifyFirebasePhoneToken: builder.mutation({
+    sendUserOtp: builder.mutation({
+      query: (body) => ({ url: '/auth/users/otp/send', method: 'POST', body }),
+    }),
+    verifyUserOtp: builder.mutation({
       query: (body) => ({ url: '/auth/users/verify', method: 'POST', body }),
     }),
     registerUser: builder.mutation({
@@ -486,7 +489,8 @@ export const {
   useGetPickupSlotsQuery,
   useGetProductsQuery,
   useGetProductCategoriesQuery,
-  useVerifyFirebasePhoneTokenMutation,
+  useSendUserOtpMutation,
+  useVerifyUserOtpMutation,
   useRegisterUserMutation,
   useGetMeQuery,
   useGetProfileQuery,
