@@ -19,7 +19,7 @@ export default function Toast({ toast, onDismiss }) {
 
   return <div
     key={toast.id}
-    className={`order-toast pointer-events-auto flex w-full items-start gap-3 rounded-2xl border p-4 shadow-[0_20px_55px_-22px_rgba(43,25,20,.38)] ${isError ? 'border-rose-200 bg-white text-rose-900' : isNotification ? 'border-[var(--border-default)] bg-white text-[var(--text-primary)]' : 'border-[#d5e6d6] bg-white text-[var(--text-secondary)]'}`}
+    className={`order-toast pointer-events-auto flex w-full items-start gap-3 rounded-2xl border p-4 shadow-[0_20px_55px_-22px_rgba(13,71,161,.28)] ${isError ? 'border-[var(--status-danger)]/20 bg-white text-[var(--status-danger)]' : isNotification ? 'border-[var(--border-default)] bg-white text-[var(--text-primary)]' : 'border-[var(--border-default)] bg-white text-[var(--text-secondary)]'}`}
     role={isError ? 'alert' : 'status'}
     aria-live={isError ? 'assertive' : 'polite'}
   >
@@ -29,6 +29,6 @@ export default function Toast({ toast, onDismiss }) {
       <span className="mt-1 block text-xs leading-5 text-[var(--text-secondary)]">{t(toast.message)}</span>
       {toast.to && <Link to={toast.to} onClick={() => onDismiss(toast.id)} className="mt-2 inline-flex text-xs font-semibold text-[var(--brand-primary)] hover:underline">{t(toast.actionLabel || 'View details')} →</Link>}
     </span>
-    <button type="button" onClick={() => onDismiss(toast.id)} aria-label={t('Dismiss notification')} className="rounded-lg p-1.5 text-[var(--text-secondary)] transition hover:bg-[#f7f2ee] hover:text-[var(--text-primary)]"><X size={16} /></button>
+    <button type="button" onClick={() => onDismiss(toast.id)} aria-label={t('Dismiss notification')} className="rounded-lg p-1.5 text-[var(--text-secondary)] transition hover:bg-[var(--bg-app)] hover:text-[var(--text-primary)]"><X size={16} /></button>
   </div>
 }

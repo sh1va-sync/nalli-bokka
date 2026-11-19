@@ -146,7 +146,7 @@ export default function CartDrawer({ open, onClose, items, isGuest, onLogin, onS
   return (
     <div className={pageMode ? 'mx-auto max-w-6xl px-4 pb-10 pt-5 sm:px-6 sm:pt-8 lg:px-8' : 'customer-cart-backdrop fixed inset-0 z-40 bg-[var(--text-primary)]/40 backdrop-blur-[2px]'} role={pageMode ? undefined : 'presentation'} onMouseDown={pageMode ? undefined : (event) => { if (event.target === event.currentTarget) onClose() }}>
       {pageMode ? <>
-        <header className="relative isolate mb-5 overflow-hidden rounded-[24px] bg-gradient-to-r from-[#edf5ee] via-[#eaf4eb] to-[#e1efe4] px-5 py-6 sm:mb-7 sm:rounded-[30px] sm:px-8 sm:py-8">
+        <header className="relative isolate mb-5 overflow-hidden rounded-[24px] bg-gradient-to-r from-[var(--brand-primary-soft)] via-white to-[#FFF7D6] px-5 py-6 sm:mb-7 sm:rounded-[30px] sm:px-8 sm:py-8">
           <img src="/hero/green-market.svg" alt="" className="pointer-events-none absolute -right-7 bottom-0 h-[118%] w-[54%] object-contain object-right-bottom opacity-80 sm:right-0 sm:h-[125%] sm:w-[42%]" />
           <p className="relative z-10 text-[10px] font-bold uppercase tracking-[.18em] text-[var(--brand-primary)] sm:text-xs">{t('Fresh items, ready for your home.')}</p>
           <h1 id="basket-title" className="relative z-10 mt-1 text-3xl font-black tracking-[-.045em] text-[var(--text-primary)] sm:mt-2 sm:text-5xl">{t('Your cart')}</h1>
@@ -160,14 +160,14 @@ export default function CartDrawer({ open, onClose, items, isGuest, onLogin, onS
           <p className="mt-1 max-w-xs text-sm text-[var(--text-secondary)]">{t('Add something fresh and lovely from the shop.')}</p>
           <button type="button" onClick={onClose} className="button-strong mt-5 inline-flex h-11 items-center gap-2 rounded-xl px-5 text-sm font-bold">{t('Explore the shop')} <ArrowRight size={17} /></button>
         </div> : <>
-          <section aria-label={t('Cart items')} className="overflow-hidden rounded-[24px] border border-[var(--border-default)] bg-white px-4 shadow-[0_8px_24px_-20px_rgba(17,44,31,.38)] sm:px-6">
+          <section aria-label={t('Cart items')} className="overflow-hidden rounded-[24px] border border-[var(--border-default)] bg-white px-4 shadow-[0_8px_24px_-20px_rgba(13,71,161,.20)] sm:px-6">
             {items.map((item) => {
               const product = item.product || item
               const unavailableItem = item.available === false
               const step = item.selectionType === 'weight' ? 0.25 : 1
               const imageUrl = product.imageUrl || getCategoryPhoto(product.productType || item.productName)
               return <article key={item.itemId || item.key} className="flex gap-3 border-b border-[var(--border-default)] py-4 last:border-b-0 sm:gap-5 sm:py-5">
-                <div className="h-[76px] w-[76px] shrink-0 overflow-hidden rounded-[14px] bg-[#f1f0eb] sm:h-[96px] sm:w-[96px] sm:rounded-[17px]">
+                <div className="h-[76px] w-[76px] shrink-0 overflow-hidden rounded-[14px] bg-[var(--bg-app)] sm:h-[96px] sm:w-[96px] sm:rounded-[17px]">
                   <img src={imageUrl} alt="" loading="lazy" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = getCategoryPhoto(product.productType || item.productName) }} className="h-full w-full object-cover" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -184,7 +184,7 @@ export default function CartDrawer({ open, onClose, items, isGuest, onLogin, onS
                   {item.needsSync && <p className="mt-1 text-[10px] font-semibold text-amber-700">{t('Waiting to sync')}</p>}
                   {unavailableItem && <p className="mt-1 text-[10px] font-semibold text-rose-700">{t(item.issue || 'No longer available')}</p>}
                   <div className="mt-2 flex flex-wrap items-center justify-between gap-2 sm:mt-3">
-                    <div className="flex h-9 items-center gap-1 rounded-full border border-[#dce9df] bg-[#f1f7f2] px-1 sm:h-11 sm:gap-2">
+                    <div className="flex h-9 items-center gap-1 rounded-full border border-[var(--border-default)] bg-[var(--brand-primary-soft)] px-1 sm:h-11 sm:gap-2">
                       <button type="button" disabled={item.pendingAdd} onClick={() => changeQuantity(item, -step)} aria-label={t('Decrease quantity')} className="grid h-7 w-8 place-items-center rounded-full text-[var(--text-primary)] transition hover:bg-white disabled:opacity-40 sm:h-9 sm:w-10"><Minus size={16} /></button>
                       <span className="min-w-5 text-center text-sm font-bold text-[var(--text-primary)]">{item.selectedQuantity}</span>
                       <button type="button" disabled={item.pendingAdd} onClick={() => changeQuantity(item, step)} aria-label={t('Increase quantity')} className="grid h-7 w-8 place-items-center rounded-full text-[var(--text-primary)] transition hover:bg-white disabled:opacity-40 sm:h-9 sm:w-10"><Plus size={17} /></button>
@@ -196,7 +196,7 @@ export default function CartDrawer({ open, onClose, items, isGuest, onLogin, onS
             })}
           </section>
 
-          {recommendations.length > 0 && <section className="mt-5 rounded-[24px] bg-[#eaf4eb] p-4 sm:mt-6 sm:p-5">
+          {recommendations.length > 0 && <section className="mt-5 rounded-[24px] bg-[var(--brand-primary-soft)] p-4 sm:mt-6 sm:p-5">
             <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="text-base font-extrabold text-[var(--text-primary)] sm:text-xl">{t('You might also like')}</h2>
               <Link to="/" onClick={onClose} className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-[var(--brand-primary)] sm:text-sm">{t('See all')} <ArrowRight size={16} /></Link>
@@ -206,37 +206,37 @@ export default function CartDrawer({ open, onClose, items, isGuest, onLogin, onS
             </div>
           </section>}
 
-          <section aria-label={t('Bill details')} className="mt-5 rounded-[22px] bg-[#eaf4eb] p-4 sm:mt-6 sm:p-6">
+          <section aria-label={t('Bill details')} className="mt-5 rounded-[22px] bg-[var(--bg-app)] p-4 sm:mt-6 sm:p-6">
             <h2 className="text-lg font-extrabold text-[var(--text-primary)] sm:text-xl">{t('Bill details')}</h2>
             <div className="mt-3 flex justify-between gap-4 text-sm text-[var(--text-secondary)] sm:text-base">
               <span>{t('Items total')} ({items.length} {t(items.length === 1 ? 'item' : 'items')}){isGuest && <span className="ml-1 text-[10px]">{t('(estimate)')}</span>}</span>
               <span className="shrink-0 font-bold text-[var(--text-primary)]">{formatPrice(total)}</span>
             </div>
             <div className="mt-2 flex justify-between gap-4 text-sm text-[var(--text-secondary)] sm:text-base"><span>{t('Delivery fee')}</span><span className="shrink-0 font-semibold text-[var(--text-secondary)]">{t('Calculated at checkout')}</span></div>
-            <div className="mt-4 flex items-center justify-between gap-4 border-t border-[#cbded0] pt-4">
+            <div className="mt-4 flex items-center justify-between gap-4 border-t border-[var(--border-default)] pt-4">
               <span className="text-base font-extrabold text-[var(--text-primary)] sm:text-lg">{t('Total amount')}</span>
-              <span className="text-2xl font-black tracking-[-.03em] text-[#103c30] sm:text-3xl">{formatPrice(total)}</span>
+              <span className="text-2xl font-black tracking-[-.03em] text-[var(--text-primary)] sm:text-3xl">{formatPrice(total)}</span>
             </div>
             <p className="mt-2 text-[10px] leading-4 text-[var(--text-secondary)]">{t('Final prices and delivery fee are confirmed by the store at checkout.')}</p>
           </section>
-          {!isGuest && items.some((item) => item.needsSync) ? <button disabled={syncing} onClick={syncPendingItems} className="mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-[16px] bg-[var(--brand-primary)] text-base font-bold text-white shadow-[0_8px_18px_-8px_rgba(23,97,73,.55)] hover:bg-[var(--brand-primary-hover)] disabled:opacity-60">{syncing ? t('Syncing saved items…') : t('Sync saved items')} <ArrowRight size={21} /></button> : !isGuest && unavailable ? <button disabled className="mt-4 flex h-14 w-full items-center justify-center rounded-[16px] bg-[#e3e1dc] text-base font-semibold text-[var(--text-secondary)]">{t('Resolve unavailable items')}</button> : isGuest ? <button onClick={onLogin} className="button-strong mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-[16px] text-base font-bold shadow-[0_8px_18px_-8px_rgba(23,97,73,.55)]">{t('Sign in to checkout')} <ArrowRight size={21} /></button> : cartSyncing || error || items.some((item) => item.pendingAdd) ? <button disabled className="mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-[16px] bg-[#e3e1dc] text-base font-semibold text-[var(--text-secondary)]">{cartSyncing || items.some((item) => item.pendingAdd) ? t('Saving cart…') : t('Resolve cart error')}</button> : <Link to="/checkout" className="button-strong mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-[16px] text-base font-bold shadow-[0_8px_18px_-8px_rgba(23,97,73,.55)]">{t('Proceed to checkout')} <ArrowRight size={21} /></Link>}
+          {!isGuest && items.some((item) => item.needsSync) ? <button disabled={syncing} onClick={syncPendingItems} className="mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-[16px] bg-[var(--brand-primary)] text-base font-bold text-white shadow-[0_8px_18px_-8px_rgba(13,71,161,.35)] hover:bg-[var(--brand-primary-hover)] disabled:opacity-60">{syncing ? t('Syncing saved items…') : t('Sync saved items')} <ArrowRight size={21} /></button> : !isGuest && unavailable ? <button disabled className="mt-4 flex h-14 w-full items-center justify-center rounded-[16px] bg-[var(--border-default)] text-base font-semibold text-[var(--text-secondary)]">{t('Resolve unavailable items')}</button> : isGuest ? <button onClick={onLogin} className="button-strong mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-[16px] text-base font-bold shadow-[0_8px_18px_-8px_rgba(13,71,161,.35)]">{t('Sign in to checkout')} <ArrowRight size={21} /></button> : cartSyncing || error || items.some((item) => item.pendingAdd) ? <button disabled className="mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-[16px] bg-[var(--border-default)] text-base font-semibold text-[var(--text-secondary)]">{cartSyncing || items.some((item) => item.pendingAdd) ? t('Saving cart…') : t('Resolve cart error')}</button> : <Link to="/checkout" className="button-strong mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-[16px] text-base font-bold shadow-[0_8px_18px_-8px_rgba(13,71,161,.35)]">{t('Proceed to checkout')} <ArrowRight size={21} /></Link>}
         </>}
       </> : <aside className="customer-cart-panel absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col border-l border-[var(--surface-subtle)] bg-white shadow-2xl" aria-labelledby="basket-title">
         <div className="flex items-center justify-between border-b border-[var(--surface-subtle)] px-5 py-4 sm:px-8 sm:py-5">
           <h2 id="basket-title" className="text-[25px] font-semibold tracking-[-.035em] text-[var(--text-primary)]">{t('Your cart')}</h2>
-          <button onClick={onClose} aria-label={t('Close cart')} className="rounded-full p-2 text-[var(--text-secondary)] hover:bg-[#f2f1ed]"><X size={23} /></button>
+          <button onClick={onClose} aria-label={t('Close cart')} className="rounded-full p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-app)]"><X size={23} /></button>
         </div>
         {error && <p role="alert" className="mx-6 mt-4 rounded-xl bg-[var(--status-danger-soft)] px-3 py-2 text-sm text-[var(--status-danger)] sm:mx-8">{error}</p>}
         {unavailable && <div className="mx-6 mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 sm:mx-8">{t(items.some((item) => item.needsSync) ? 'Some saved items still need to sync to your account before checkout.' : 'Some items aren’t available at the current price. Remove them before checkout.')}</div>}
         <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-8 sm:py-6">
-          {items.length === 0 ? <div className="grid h-full content-center justify-items-center text-center"><span className="grid h-20 w-20 place-items-center rounded-[28px] bg-[#f3f1ed] text-[var(--text-secondary)]"><ShoppingBasket size={32} /></span><h3 className="mt-5 font-semibold text-[var(--text-primary)]">{t('Your cart is empty')}</h3><p className="mt-1 max-w-xs text-sm text-[var(--text-secondary)]">{t('Add something fresh and lovely from the shop.')}</p><button onClick={onClose} className="mt-5 rounded-lg bg-[var(--brand-primary)] px-5 py-3 text-sm font-semibold text-white">{t('Explore the shop')}</button></div> : (
+          {items.length === 0 ? <div className="grid h-full content-center justify-items-center text-center"><span className="grid h-20 w-20 place-items-center rounded-[28px] bg-[var(--bg-app)] text-[var(--text-secondary)]"><ShoppingBasket size={32} /></span><h3 className="mt-5 font-semibold text-[var(--text-primary)]">{t('Your cart is empty')}</h3><p className="mt-1 max-w-xs text-sm text-[var(--text-secondary)]">{t('Add something fresh and lovely from the shop.')}</p><button onClick={onClose} className="mt-5 rounded-lg bg-[var(--brand-primary)] px-5 py-3 text-sm font-semibold text-white">{t('Explore the shop')}</button></div> : (
             <div className="space-y-4">
               {items.map((item) => {
                 const product = item.product || item
                 const unavailableItem = item.available === false
                 const step = item.selectionType === 'weight' ? 0.25 : 1
-                return <article key={item.itemId || item.key} className="flex gap-4 rounded-[18px] border border-[#eeede9] bg-white p-3.5 shadow-[0_2px_8px_-6px_rgba(48,49,39,.3)] sm:gap-5 sm:p-4">
-                  <div className="h-[72px] w-[72px] shrink-0 overflow-hidden rounded-[13px] bg-[#f1f0eb] sm:h-[76px] sm:w-[76px]">{product.imageUrl ? <img src={product.imageUrl} alt="" className="h-full w-full object-cover" /> : <img src={getCategoryPhoto(product.productType)} alt="" className="h-full w-full object-cover" />}</div>
+                return <article key={item.itemId || item.key} className="flex gap-4 rounded-[18px] border border-[var(--border-default)] bg-white p-3.5 shadow-[0_2px_8px_-6px_rgba(13,71,161,.18)] sm:gap-5 sm:p-4">
+                  <div className="h-[72px] w-[72px] shrink-0 overflow-hidden rounded-[13px] bg-[var(--bg-app)] sm:h-[76px] sm:w-[76px]">{product.imageUrl ? <img src={product.imageUrl} alt="" className="h-full w-full object-cover" /> : <img src={getCategoryPhoto(product.productType)} alt="" className="h-full w-full object-cover" />}</div>
                   <div className="min-w-0 flex-1">
                     <h3 className="truncate text-[15px] font-medium leading-6 text-[var(--text-primary)]">{t(item.productName || product.productName)} — {t(formatSelection(item))}</h3>
                     {item.needsSync && <p className="mt-1 text-[10px] font-semibold text-amber-700">{t('Waiting to sync')}</p>}
@@ -258,7 +258,7 @@ export default function CartDrawer({ open, onClose, items, isGuest, onLogin, onS
         {items.length > 0 && <div className="border-t border-[var(--border-default)] bg-[var(--bg-app)] px-5 pb-5 pt-4 sm:px-8 sm:pb-6">
           <div className="flex justify-between text-sm text-[var(--text-secondary)]"><span>{t('Subtotal')} {isGuest && <span className="text-[10px]">{t('(estimate)')}</span>}</span><span className="text-[22px] font-semibold tracking-[-.025em] text-[var(--text-primary)]">{formatPrice(total)}</span></div>
           <p className="mt-1 text-[10px] leading-4 text-[var(--text-secondary)]">{t('Final prices are confirmed with the store when your cart is refreshed.')}</p>
-          {!isGuest && items.some((item) => item.needsSync) ? <button disabled={syncing} onClick={syncPendingItems} className="mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--brand-primary)] text-base font-semibold shadow-sm hover:bg-[var(--brand-primary-hover)] disabled:opacity-60">{syncing ? t('Syncing saved items…') : t('Sync saved items')} <ArrowRight size={17} /></button> : !isGuest && unavailable ? <button disabled className="mt-4 flex h-14 w-full items-center justify-center rounded-[14px] bg-[#e3e1dc] text-base font-semibold text-[var(--text-secondary)]">{t('Resolve unavailable items')}</button> : isGuest ? <button onClick={onLogin} className="button-strong mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--brand-primary)] text-base font-semibold shadow-sm hover:bg-[var(--brand-primary-hover)]">{t('Sign in to checkout')} <ArrowRight size={17} /></button> : cartSyncing || error || items.some((item) => item.pendingAdd) ? <button disabled className="mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-[14px] bg-[#e3e1dc] text-base font-semibold text-[var(--text-secondary)]">{cartSyncing || items.some((item) => item.pendingAdd) ? t('Saving cart…') : t('Resolve cart error')}</button> : <Link to="/checkout" onClick={onClose} className="button-strong mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--brand-primary)] text-base font-semibold shadow-sm hover:bg-[var(--brand-primary-hover)]">{t('Proceed to checkout')}</Link>}
+          {!isGuest && items.some((item) => item.needsSync) ? <button disabled={syncing} onClick={syncPendingItems} className="mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--brand-primary)] text-base font-semibold shadow-sm hover:bg-[var(--brand-primary-hover)] disabled:opacity-60">{syncing ? t('Syncing saved items…') : t('Sync saved items')} <ArrowRight size={17} /></button> : !isGuest && unavailable ? <button disabled className="mt-4 flex h-14 w-full items-center justify-center rounded-[14px] bg-[var(--border-default)] text-base font-semibold text-[var(--text-secondary)]">{t('Resolve unavailable items')}</button> : isGuest ? <button onClick={onLogin} className="button-strong mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--brand-primary)] text-base font-semibold shadow-sm hover:bg-[var(--brand-primary-hover)]">{t('Sign in to checkout')} <ArrowRight size={17} /></button> : cartSyncing || error || items.some((item) => item.pendingAdd) ? <button disabled className="mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--border-default)] text-base font-semibold text-[var(--text-secondary)]">{cartSyncing || items.some((item) => item.pendingAdd) ? t('Saving cart…') : t('Resolve cart error')}</button> : <Link to="/checkout" onClick={onClose} className="button-strong mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--brand-primary)] text-base font-semibold shadow-sm hover:bg-[var(--brand-primary-hover)]">{t('Proceed to checkout')}</Link>}
         </div>}
       </aside>}
     </div>

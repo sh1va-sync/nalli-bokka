@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Download, Share, X } from 'lucide-react'
 import { useTranslation } from '../../i18n/LanguageContext.js'
 
-const DISMISSED_KEY = 'nallibokka-install-prompt-dismissed'
+const DISMISSED_KEY = 'zepionmart-install-prompt-dismissed'
 
 function wasDismissed() {
   try {
@@ -74,12 +74,12 @@ export default function PwaInstallPrompt() {
   }
 
   return (
-    <aside className="fixed inset-x-3 bottom-[4.75rem] z-40 mx-auto flex max-w-lg items-center gap-3 rounded-2xl border border-[var(--border-default)] bg-white p-3 shadow-[0_12px_36px_-14px_rgba(48,36,31,.3)] md:bottom-5">
+    <aside className="fixed inset-x-3 bottom-[4.75rem] z-40 mx-auto flex max-w-lg items-center gap-3 rounded-2xl border border-[var(--border-default)] bg-white p-3 shadow-[0_12px_36px_-14px_rgba(13,71,161,.24)] md:bottom-5">
       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]">
         <Download size={18} />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-bold text-[var(--text-primary)]">{t('Add NalliBokka to your home screen')}</p>
+        <p className="text-xs font-bold text-[var(--text-primary)]">{t('Add ZepionMart to your home screen')}</p>
         {instructionsOpen
           ? <p className="mt-1 flex items-center gap-1 text-[10px] leading-4 text-[var(--text-secondary)]">{isIos ? <>{t('Tap')} <Share size={12} /> {t('Share, then choose “Add to Home Screen”.')}</> : t('Open your browser menu, then choose “Install app” or “Add to Home screen”.')}</p>
           : <p className="mt-1 text-[10px] leading-4 text-[var(--text-secondary)]">{t('Open your store faster, right from your home screen.')}</p>}

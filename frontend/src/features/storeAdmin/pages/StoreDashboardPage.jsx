@@ -34,13 +34,13 @@ const navItems = [
 ]
 const productTypes = ['meat', 'vegetable', 'fruit', 'oil', 'rice']
 const orderStatusStyles = {
-  placed: { borderColor: '#dc2626', backgroundColor: '#fffafa', badge: 'bg-rose-50 text-rose-800' },
-  packing: { borderColor: '#d97706', backgroundColor: '#fffdf7', badge: 'bg-amber-50 text-amber-800' },
-  'out for delivery': { borderColor: '#0284c7', backgroundColor: '#f8fcff', badge: 'bg-sky-50 text-sky-800' },
-  'ready for pickup': { borderColor: '#ea580c', backgroundColor: '#fffaf7', badge: 'bg-orange-50 text-orange-800' },
-  delivered: { borderColor: '#16a34a', backgroundColor: '#f8fdf9', badge: 'bg-emerald-50 text-emerald-800' },
-  'picked up': { borderColor: '#16a34a', backgroundColor: '#f8fdf9', badge: 'bg-emerald-50 text-emerald-800' },
-  cancelled: { borderColor: '#94a3b8', backgroundColor: '#fafbfc', badge: 'bg-slate-100 text-slate-600' },
+  placed: { borderColor: '#E53935', backgroundColor: '#FDEBEC', badge: 'bg-[var(--status-danger-soft)] text-[var(--status-danger)]' },
+  packing: { borderColor: '#FFC107', backgroundColor: '#FFF7D6', badge: 'bg-[#FFF7D6] text-[var(--text-primary)]' },
+  'out for delivery': { borderColor: '#0D47A1', backgroundColor: '#EAF1FB', badge: 'bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]' },
+  'ready for pickup': { borderColor: '#2E7D32', backgroundColor: '#EAF4EC', badge: 'bg-[var(--status-success-soft)] text-[var(--status-success)]' },
+  delivered: { borderColor: '#2E7D32', backgroundColor: '#EAF4EC', badge: 'bg-[var(--status-success-soft)] text-[var(--status-success)]' },
+  'picked up': { borderColor: '#2E7D32', backgroundColor: '#EAF4EC', badge: 'bg-[var(--status-success-soft)] text-[var(--status-success)]' },
+  cancelled: { borderColor: '#5F6B7A', backgroundColor: '#F5F7FA', badge: 'bg-[var(--bg-app)] text-[var(--text-secondary)]' },
 }
 const getDefaultPricingMode = (productType, packs = []) => (
   productType === 'oil' || (productType === 'rice' && packs.length) ? 'pack' : 'weight'
@@ -78,20 +78,20 @@ function DateFilter({ selectedDate, today, onChange }) {
 
   return <section className="store-dashboard-filter dashboard-enter mb-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--border-default)] bg-white p-4 sm:p-5">
     <div className="flex min-w-0 items-center gap-3">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#f4f3ef] text-[var(--text-secondary)]"><CalendarDays size={18} /></span>
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]"><CalendarDays size={18} /></span>
       <div className="min-w-0">
         <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[var(--text-tertiary)]">{t(selectedDate === today ? "Today's activity" : 'Daily report')}</p>
         <p className="mt-1 truncate text-sm font-semibold text-[var(--text-primary)]">{dateLabel}</p>
       </div>
     </div>
     <div className="flex w-full items-center gap-2 sm:w-auto">
-      <button type="button" onClick={() => shiftDate(-1)} aria-label={t('View previous day')} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[var(--border-default)] text-[var(--text-secondary)] transition hover:bg-[#f7f6f2]"><ChevronLeft size={17} /></button>
-      <label className="relative flex h-10 min-w-0 flex-1 items-center rounded-xl border border-[var(--border-default)] bg-white px-3 text-xs font-semibold text-[var(--text-secondary)] transition focus-within:border-[#aaa69d] sm:w-44 sm:flex-none">
+      <button type="button" onClick={() => shiftDate(-1)} aria-label={t('View previous day')} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[var(--border-default)] text-[var(--text-secondary)] transition hover:bg-[var(--brand-primary-soft)]"><ChevronLeft size={17} /></button>
+      <label className="relative flex h-10 min-w-0 flex-1 items-center rounded-xl border border-[var(--border-default)] bg-white px-3 text-xs font-semibold text-[var(--text-secondary)] transition focus-within:border-[var(--brand-primary)] sm:w-44 sm:flex-none">
         <CalendarDays className="mr-2 shrink-0 text-[var(--text-tertiary)]" size={15} />
         <input aria-label={t('Select dashboard date')} type="date" value={selectedDate} max={today} onChange={(event) => onChange(event.target.value)} className="min-w-0 flex-1 bg-transparent text-xs text-[var(--text-primary)] outline-none" />
       </label>
-      <button type="button" onClick={() => shiftDate(1)} disabled={selectedDate >= today} aria-label={t('View next day')} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[var(--border-default)] text-[var(--text-secondary)] transition hover:bg-[#f7f6f2] disabled:cursor-not-allowed disabled:opacity-40"><ChevronRight size={17} /></button>
-      {selectedDate !== today && <button type="button" onClick={() => onChange(today)} className="h-10 shrink-0 rounded-xl bg-[var(--text-primary)] px-3 text-xs font-semibold text-white transition hover:bg-[#49423e]">{t('Today')}</button>}
+      <button type="button" onClick={() => shiftDate(1)} disabled={selectedDate >= today} aria-label={t('View next day')} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[var(--border-default)] text-[var(--text-secondary)] transition hover:bg-[var(--brand-primary-soft)] disabled:cursor-not-allowed disabled:opacity-40"><ChevronRight size={17} /></button>
+      {selectedDate !== today && <button type="button" onClick={() => onChange(today)} className="h-10 shrink-0 rounded-xl bg-[var(--brand-primary)] px-3 text-xs font-semibold text-white transition hover:bg-[var(--brand-primary-hover)]">{t('Today')}</button>}
     </div>
   </section>
 }
@@ -103,7 +103,7 @@ function MetricCard({ label, value, detail, icon: Icon, tone = 'wine' }) {
     : tone === 'coral'
       ? 'bg-[var(--status-danger-soft)] text-[var(--status-danger)]'
       : 'bg-[var(--surface-subtle)] text-[var(--text-secondary)]'
-  return <article className="store-dashboard-metric rounded-2xl border border-[var(--border-default)] bg-white p-4 transition duration-200 hover:border-[#d3d0c9] sm:p-5">
+  return <article className="store-dashboard-metric rounded-2xl border border-[var(--border-default)] bg-white p-4 transition duration-200 hover:border-[var(--brand-primary)] sm:p-5">
     <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-medium text-[var(--text-secondary)]">{t(label)}</p><p className="mt-2 text-2xl font-semibold tracking-[-.04em] text-[var(--text-primary)]">{value}</p><p className="mt-1 text-[11px] text-[var(--text-secondary)]">{t(detail)}</p></div><span className={`grid h-9 w-9 place-items-center rounded-xl ${colors}`}><Icon size={17} /></span></div>
   </article>
 }
@@ -244,7 +244,7 @@ function ProductForm({ product, categories = [], onCancel, onSaved }) {
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
       <div>
         <label className="text-xs font-semibold text-[var(--text-secondary)]">{t('CATEGORY')}
-          <select disabled={Boolean(product)} value={form.productType} onChange={(event) => changeType(event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-[var(--border-default)] bg-white px-3 text-sm font-normal text-[var(--text-primary)] outline-none focus:border-[var(--brand-primary)] disabled:bg-[#f7f3ef]">{categories.map((type) => <option key={type} value={type}>{t(formatCategoryLabel(type))}</option>)}</select>
+          <select disabled={Boolean(product)} value={form.productType} onChange={(event) => changeType(event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-[var(--border-default)] bg-white px-3 text-sm font-normal text-[var(--text-primary)] outline-none focus:border-[var(--brand-primary)] disabled:bg-[var(--bg-app)]">{categories.map((type) => <option key={type} value={type}>{t(formatCategoryLabel(type))}</option>)}</select>
         </label>
         {!product && (showCategoryInput
           ? <div className="mt-2">
@@ -663,11 +663,11 @@ export default function StoreDashboardPage() {
     setTab('orders')
   }
 
-  return <div className="store-workspace min-h-screen bg-[#f1f1ed] text-[var(--text-primary)]">
-    <header className="store-workspace-header sticky top-0 z-20 border-b border-[#e5e4de] bg-[#f1f1ed]/95 backdrop-blur">
+  return <div className="store-workspace min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
+    <header className="store-workspace-header sticky top-0 z-20 border-b border-[var(--border-default)] bg-white/95 backdrop-blur">
       <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
-        <Link to="/store" className="flex items-center gap-3"><img src="/nallibokka-logo.png" alt="" className="h-9 w-9 object-contain" /><span><span className="block text-sm font-semibold text-[var(--text-primary)]">NalliBokka</span><span className="block text-[10px] text-[var(--text-tertiary)]">{t('Store workspace')}</span></span></Link>
-        <div className="flex items-center gap-2 sm:gap-3"><span className="hidden text-right sm:block"><span className="block text-xs font-semibold text-[var(--text-primary)]">{store?.storeName || meResponse?.store?.storeName || t('Your store')}</span><span className="block text-[10px] text-[var(--text-tertiary)]">{store?.location || meResponse?.store?.location}</span></span><LanguageSwitcher compact /><button onClick={logout} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#e1dfd8] bg-white px-3 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-app)]"><LogOut size={14} /><span className="hidden sm:inline">{t('Sign out')}</span></button></div>
+        <Link to="/store" className="flex items-center gap-3"><img src="/nallibokka-logo.png" alt="" className="h-9 w-9 object-contain" /><span><span className="block text-sm font-semibold text-[var(--text-primary)]">ZepionMart</span><span className="block text-[10px] text-[var(--text-tertiary)]">{t('Store workspace')}</span></span></Link>
+        <div className="flex items-center gap-2 sm:gap-3"><span className="hidden text-right sm:block"><span className="block text-xs font-semibold text-[var(--text-primary)]">{store?.storeName || meResponse?.store?.storeName || t('Your store')}</span><span className="block text-[10px] text-[var(--text-tertiary)]">{store?.location || meResponse?.store?.location}</span></span><LanguageSwitcher compact /><button onClick={logout} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border-default)] bg-white px-3 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-app)]"><LogOut size={14} /><span className="hidden sm:inline">{t('Sign out')}</span></button></div>
       </div>
     </header>
     <div className="store-workspace-layout mx-auto grid max-w-[1600px] gap-5 px-4 py-5 sm:px-6 sm:py-6 md:grid-cols-[172px_minmax(0,1fr)] md:gap-4 md:px-5 lg:grid-cols-[212px_minmax(0,1fr)] lg:gap-6 lg:px-8">
@@ -681,15 +681,15 @@ export default function StoreDashboardPage() {
           <button ref={settingsButtonRef} type="button" onClick={() => setSettingsOpen(true)} className="mb-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-[var(--border-default)] bg-white px-3 text-xs font-semibold text-[var(--text-secondary)] transition hover:border-[var(--brand-primary)] hover:bg-[var(--brand-primary-soft)] hover:text-[var(--brand-primary)]">
             <Settings2 size={15} />{t('Store settings')}
           </button>
-          <section className={`store-availability-card rounded-xl border p-3 transition-colors duration-300 ${storeOpenState ? 'border-[#e3e5dc] bg-[#f8f8f5]' : 'border-[#ead0ca] bg-[var(--bg-app)]'}`} aria-label={t('Store availability')}>
+          <section className={`store-availability-card rounded-xl border p-3 transition-colors duration-300 ${storeOpenState ? 'border-[var(--border-default)] bg-white' : 'border-[var(--status-danger)]/30 bg-[var(--status-danger-soft)]'}`} aria-label={t('Store availability')}>
             <div className="store-availability-summary flex items-center gap-2">
-              <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${storeOpenState ? 'bg-[#e9eee5] text-[var(--text-secondary)]' : 'bg-[#f4e5e1] text-[var(--status-danger)]'}`}>
+              <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${storeOpenState ? 'bg-[var(--status-success-soft)] text-[var(--status-success)]' : 'bg-[var(--status-danger-soft)] text-[var(--status-danger)]'}`}>
                 <Power size={16} />
               </span>
               <div className="min-w-0 flex-1">
                 <span className="block text-[9px] font-semibold uppercase tracking-[.1em] text-[var(--text-tertiary)]">{t('Store status')}</span>
                 <span className={`mt-0.5 flex items-center gap-1.5 text-[11px] font-bold leading-4 ${storeOpenState ? 'text-[var(--status-success)]' : 'text-[var(--status-danger)]'}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${storeOpenState ? 'bg-[#5c9567] motion-safe:animate-pulse' : 'bg-[var(--status-danger)]'}`} />
+                  <span className={`h-1.5 w-1.5 rounded-full ${storeOpenState ? 'bg-[var(--status-success)] motion-safe:animate-pulse' : 'bg-[var(--status-danger)]'}`} />
                   {t(storeOpenState ? 'Open for orders' : 'Not accepting')}
                 </span>
               </div>
@@ -750,7 +750,7 @@ export default function StoreDashboardPage() {
           </section>
         </div>, document.body)}
         {tab === 'overview' && <>
-          <SectionTitle eyebrow={selectedDate === today ? 'Today at a glance' : 'Daily snapshot'} title="Store overview"><button onClick={() => refetchDashboard()} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#e2e0d9] bg-white px-3 text-xs font-semibold text-[var(--text-secondary)] transition hover:bg-[var(--bg-app)]"><RefreshCw size={14} />{t('Refresh')}</button></SectionTitle>
+          <SectionTitle eyebrow={selectedDate === today ? 'Today at a glance' : 'Daily snapshot'} title="Store overview"><button onClick={() => refetchDashboard()} className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border-default)] bg-white px-3 text-xs font-semibold text-[var(--text-secondary)] transition hover:bg-[var(--brand-primary-soft)]"><RefreshCw size={14} />{t('Refresh')}</button></SectionTitle>
           {dashboardError && <p role="alert" className="mb-4 rounded-xl bg-[var(--status-danger-soft)] p-3 text-sm text-[var(--status-danger)]">{getErrorMessage(dashboardError)}</p>}
           {(ordersError || transactionsError) && <p role="alert" className="mb-4 rounded-xl bg-[var(--status-danger-soft)] p-3 text-sm text-[var(--status-danger)]">{ordersError && `Orders: ${getErrorMessage(ordersError)} `}{transactionsError && `Transactions: ${getErrorMessage(transactionsError)}`}</p>}
           {dashboardLoading || ordersLoading || transactionsLoading ? <StoreLoader label={t('Preparing your store overview…')} compact /> : <div className="dashboard-stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -777,7 +777,7 @@ export default function StoreDashboardPage() {
                   ['ready for pickup', 'Ready for pickup']
                 ].map(([status, label]) => {
                   const count = periodMetrics.ordersByStatus?.[status] || 0
-                  return <button key={status} type="button" onClick={() => openOrders(status)} className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-app)] p-3 text-left transition hover:border-[var(--brand-primary)] hover:bg-[#fbf0eb]">
+                  return <button key={status} type="button" onClick={() => openOrders(status)} className="rounded-xl border border-[var(--border-default)] bg-[var(--bg-app)] p-3 text-left transition hover:border-[var(--brand-primary)] hover:bg-[var(--brand-primary-soft)]">
                     <span className="block text-xl font-semibold text-[var(--text-primary)]">{count}</span>
                     <span className="mt-1 block text-[10px] font-medium text-[var(--text-secondary)]">{t(label)}</span>
                   </button>
@@ -803,7 +803,7 @@ export default function StoreDashboardPage() {
           </div>}
           <section className="mt-5 rounded-[18px] border border-[var(--border-default)] bg-white p-4 sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-semibold uppercase tracking-[.15em] text-[var(--brand-primary)]">{t('Daily activity')}</p><h2 className="mt-1 text-base font-semibold text-[var(--text-primary)]">{t('Orders for this day')}</h2></div><button onClick={() => setTab('orders')} className="text-xs font-semibold text-[var(--brand-primary)]">{t('View all orders')} →</button></div>
-            <div className="dashboard-stagger mt-4 space-y-2">{selectedDayOrders.slice(0, 5).map((order) => <div key={order._id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[var(--bg-app)] p-3 transition duration-200 hover:translate-x-1 hover:bg-[#fbf0eb]"><div><p className="text-xs font-semibold">#{order._id.slice(-8).toUpperCase()} · {typeof order.userId === 'object' ? order.userId?.name : 'Customer'}</p><p className="mt-1 text-[10px] text-[var(--text-secondary)]">{new Date(order.createdAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })} · {order.orderStatus}</p></div><span className="text-sm font-semibold">{formatPrice(order.totalAmount)}</span></div>)}
+            <div className="dashboard-stagger mt-4 space-y-2">{selectedDayOrders.slice(0, 5).map((order) => <div key={order._id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[var(--bg-app)] p-3 transition duration-200 hover:translate-x-1 hover:bg-[var(--brand-primary-soft)]"><div><p className="text-xs font-semibold">#{order._id.slice(-8).toUpperCase()} · {typeof order.userId === 'object' ? order.userId?.name : 'Customer'}</p><p className="mt-1 text-[10px] text-[var(--text-secondary)]">{new Date(order.createdAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })} · {order.orderStatus}</p></div><span className="text-sm font-semibold">{formatPrice(order.totalAmount)}</span></div>)}
               {!selectedDayOrders.length && <p className="rounded-xl bg-[var(--bg-app)] p-4 text-center text-xs text-[var(--text-secondary)]">{t('No orders on this day.')}</p>}</div>
             {dashboard?.paidRevenue && <p className="mt-3 text-[10px] text-[var(--text-secondary)]">Revenue overview API reports a rolling period ({dashboard.paidRevenue.sinceDays} day). Daily totals use server aggregates for local midnight boundaries.</p>}
           </section>
@@ -812,7 +812,7 @@ export default function StoreDashboardPage() {
         {tab === 'orders' && <>
           <SectionTitle eyebrow="Order management" title={selectedDate === today ? 'Live orders' : 'Orders'}>
             <div className="flex flex-wrap items-center gap-2">
-              {selectedDate === today && <span className="inline-flex h-9 items-center gap-2 rounded-lg bg-[var(--status-success-soft)] px-3 text-[10px] font-bold uppercase tracking-[.08em] text-[var(--status-success)]"><span className="h-1.5 w-1.5 rounded-full bg-[#5c9567] motion-safe:animate-pulse" />{t('Live · 8 sec')}</span>}
+              {selectedDate === today && <span className="inline-flex h-9 items-center gap-2 rounded-lg bg-[var(--status-success-soft)] px-3 text-[10px] font-bold uppercase tracking-[.08em] text-[var(--status-success)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--status-success)] motion-safe:animate-pulse" />{t('Live · 8 sec')}</span>}
               <label className="flex h-9 items-center gap-2 rounded-lg border border-[var(--border-default)] bg-white px-3 text-xs text-[var(--text-secondary)]"><Truck size={14} /><select aria-label={t('Filter orders by fulfillment')} value={orderTypeFilter} onChange={(event) => { setOrderTypeFilter(event.target.value); setOrderPage(1) }} className="bg-transparent outline-none"><option value="">{t('All order types')}</option><option value="delivery">{t('Delivery')}</option><option value="pickup">{t('Store pickup')}</option></select></label>
               <label className="flex h-9 items-center gap-2 rounded-lg border border-[var(--border-default)] bg-white px-3 text-xs text-[var(--text-secondary)]"><Clock3 size={14} /><select aria-label={t('Filter orders by status')} value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setOrderPage(1) }} className="bg-transparent outline-none"><option value="">{t('All statuses')}</option>{['placed', 'packing', 'out for delivery', 'ready for pickup', 'delivered', 'picked up', 'cancelled'].map((status) => <option key={status} value={status}>{t(status)}</option>)}</select></label>
               <label className="flex h-9 items-center gap-2 rounded-lg border border-[var(--border-default)] bg-white px-3 text-xs text-[var(--text-secondary)]"><select aria-label={t('Sort orders')} value={orderSort} onChange={(event) => { setOrderSort(event.target.value); setOrderPage(1) }} className="bg-transparent outline-none"><option value="newest">{t('Newest first')}</option><option value="oldest">{t('Oldest first')}</option><option value="amount_desc">{t('Highest total')}</option><option value="amount_asc">{t('Lowest total')}</option></select></label>
@@ -821,7 +821,7 @@ export default function StoreDashboardPage() {
           <label className="mb-3 flex h-11 items-center gap-2 rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm text-[var(--text-secondary)] transition focus-within:border-[var(--brand-primary)] focus-within:shadow-[0_0_0_3px_rgba(223,118,103,.12)]">
             <Search size={16} className="shrink-0 text-[var(--brand-primary)]" />
             <input value={orderSearch} onChange={(event) => { setOrderSearch(event.target.value); setOrderPage(1) }} placeholder={t('Search order ID, customer name or phone')} className="min-w-0 flex-1 bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)]" />
-            {orderSearch && <button type="button" aria-label={t('Clear order search')} onClick={() => { setOrderSearch(''); setOrderPage(1) }} className="grid h-7 w-7 place-items-center rounded-full transition hover:bg-[#f7eee8]"><X size={14} /></button>}
+            {orderSearch && <button type="button" aria-label={t('Clear order search')} onClick={() => { setOrderSearch(''); setOrderPage(1) }} className="grid h-7 w-7 place-items-center rounded-full transition hover:bg-[var(--brand-primary-soft)]"><X size={14} /></button>}
           </label>
           <div className="mb-3 rounded-xl border border-[var(--border-default)] bg-[var(--bg-app)] p-3 text-xs leading-5 text-[var(--text-secondary)]">{t('Accept paid orders to move them into preparation. Delivery orders progress to')} <strong>{t('Out for delivery')}</strong>; {t('pickup orders progress to')} <strong>{t('Ready for pickup')}</strong>. {t('Decline requests cancellation; the server enforces its payment restrictions.')}</div>
           {ordersFetching && !ordersLoading && <p role="status" className="mb-3 flex items-center gap-2 text-[10px] font-medium text-[var(--text-secondary)]"><span className="h-3 w-3 rounded-full border-2 border-[var(--border-default)] border-t-[var(--brand-primary)] motion-safe:animate-spin" />{t('Refreshing orders')}</p>}
@@ -839,9 +839,9 @@ export default function StoreDashboardPage() {
             const statusStyle = orderStatusStyles[order.orderStatus] || { borderColor: 'var(--border-default)', backgroundColor: '#fff', badge: 'bg-[var(--surface-subtle)] text-[var(--text-secondary)]' }
             return <article key={order._id} style={{ borderColor: statusStyle.borderColor, borderLeftColor: statusStyle.borderColor, backgroundColor: statusStyle.backgroundColor, borderWidth: 2, borderLeftWidth: 6 }} className={`rounded-[18px] border p-4 transition-all duration-500 sm:p-5 ${motion === 'new' ? 'order-live-new shadow-[0_14px_42px_-24px_rgba(134,25,35,.55)]' : motion === 'updated' ? 'order-live-updated' : ''}`}>
               <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><p className="text-[10px] font-semibold uppercase tracking-[.12em] text-[var(--brand-primary)]">{t('Order')} #{order._id.slice(-8).toUpperCase()}</p><span className="rounded-full bg-[var(--brand-primary-soft)] px-2 py-1 text-[9px] font-bold uppercase tracking-[.08em] text-[var(--brand-primary)]">{t(order.orderType === 'pickup' ? 'Store pickup' : 'Delivery')}</span>{motion && <span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[.08em] ${motion === 'new' ? 'bg-[var(--status-danger-soft)] text-[var(--brand-primary)]' : 'bg-[var(--status-success-soft)] text-[var(--status-success)]'}`}>{t(motion === 'new' ? 'New order' : 'Just updated')}</span>}</div><h3 className="mt-1 text-sm font-semibold text-[var(--text-primary)]">{customer.name || t('Customer')} <span className="font-normal text-[var(--text-secondary)]">{customer.phone || ''}</span></h3><p className="mt-1 text-[10px] text-[var(--text-secondary)]">{new Date(order.createdAt).toLocaleString('en-IN')}</p>{order.orderType === 'pickup' ? <p className="mt-1 text-xs font-semibold text-[var(--brand-primary)]">{t('Pickup')}: {new Date(order.pickupAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })}</p> : <p className="mt-1 text-xs text-[var(--text-secondary)]">{order.deliveryAddress?.fullAddress} · {order.deliveryAddress?.pincode}</p>}</div><div className="text-right"><p className="text-base font-semibold">{formatPrice(order.totalAmount)}</p><p className="mt-1 text-[10px] capitalize text-[var(--text-secondary)]">{t('Payment')}: {t(order.paymentStatus)}</p></div></div>
-              <div className={`mt-3 space-y-1 border-t border-[var(--surface-subtle)] pt-3 ${motion ? 'order-items-highlight' : ''}`}>{order.items?.map((item, index) => <p key={`${item.productId}-${index}`} className={`rounded-lg px-2 py-1 text-xs text-[var(--text-secondary)] transition-colors ${motion ? 'bg-[#fff5ed] text-[var(--text-secondary)]' : ''}`}><span className="font-semibold">{t(item.productName)}</span> · {t(formatItemQuantity(item))}</p>)}</div>
+              <div className={`mt-3 space-y-1 border-t border-[var(--surface-subtle)] pt-3 ${motion ? 'order-items-highlight' : ''}`}>{order.items?.map((item, index) => <p key={`${item.productId}-${index}`} className={`rounded-lg px-2 py-1 text-xs text-[var(--text-secondary)] transition-colors ${motion ? 'bg-[var(--brand-primary-soft)] text-[var(--text-secondary)]' : ''}`}><span className="font-semibold">{t(item.productName)}</span> · {t(formatItemQuantity(item))}</p>)}</div>
               <div className="mt-4 flex flex-wrap items-center justify-between gap-2"><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold capitalize ${statusStyle.badge}`}>{t(order.orderStatus)}</span><div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => downloadInvoice(order)} disabled={Boolean(downloadingInvoiceId)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#dfe7dc] px-3 text-xs font-semibold text-[var(--status-success)] hover:bg-[var(--bg-app)] disabled:cursor-wait disabled:opacity-50"><FileText size={14} />{t(downloadingInvoiceId === order._id ? 'Preparing PDF…' : 'Download invoice')}</button>
+                <button type="button" onClick={() => downloadInvoice(order)} disabled={Boolean(downloadingInvoiceId)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--border-default)] px-3 text-xs font-semibold text-[var(--status-success)] hover:bg-[var(--status-success-soft)] disabled:cursor-wait disabled:opacity-50"><FileText size={14} />{t(downloadingInvoiceId === order._id ? 'Preparing PDF…' : 'Download invoice')}</button>
                 {order.orderStatus === 'placed' && <><button disabled={!paymentConfirmed || pendingAction === `${order._id}-packing`} title={!paymentConfirmed ? t('The API allows accepting an order only after payment is confirmed.') : undefined} onClick={() => changeOrderStatus(order, 'packing')} className="h-9 rounded-lg bg-[var(--brand-primary)] px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-45">{t(pendingAction === `${order._id}-packing` ? 'Accepting…' : paymentConfirmed ? 'Accept order' : 'Awaiting payment')}</button><button disabled={pendingAction === `${order._id}-cancelled`} onClick={() => changeOrderStatus(order, 'cancelled')} className="h-9 rounded-lg border border-[var(--border-default)] px-3 text-xs font-semibold text-[var(--text-secondary)] disabled:opacity-55">{t('Decline')}</button></>}
                 {['placed', 'packing'].includes(order.orderStatus) && order.paymentStatus === 'paid' && <button disabled={pendingAction === `${order._id}-refund`} onClick={() => requestOrderRefund(order)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-rose-200 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-55"><RotateCcw size={13} />{t(pendingAction === `${order._id}-refund` ? 'Requesting…' : 'Full refund')}</button>}
                 {next && <button disabled={pendingAction === `${order._id}-${next}`} onClick={() => changeOrderStatus(order, next)} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[var(--brand-primary)] px-3 text-xs font-semibold text-white disabled:opacity-55">{['delivered', 'picked up'].includes(next) ? <Check size={14} /> : <Truck size={14} />}{t(pendingAction === `${order._id}-${next}` ? 'Updating…' : next === 'delivered' ? 'Mark delivered' : next === 'picked up' ? 'Mark picked up' : next === 'ready for pickup' ? 'Mark ready for pickup' : 'Out for delivery')}</button>}
@@ -882,7 +882,7 @@ export default function StoreDashboardPage() {
             </div>
             {selectedDayTransactions.length ? <div className="dashboard-stagger overflow-hidden rounded-[18px] border border-[var(--border-default)] bg-white">
               <div className="hidden grid-cols-[1.3fr_1fr_1fr_1fr_auto] gap-3 border-b border-[var(--surface-subtle)] bg-[var(--bg-app)] px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)] sm:grid"><span>{t('Order / customer')}</span><span>{t('Payment reference')}</span><span>{t('Time')}</span><span>{t('Status')}</span><span className="text-right">{t('Amount')}</span></div>
-              {selectedDayTransactions.map((transaction) => <div key={transaction._id} className="grid gap-2 border-b border-[#f4eeea] px-4 py-3 last:border-0 transition-colors hover:bg-[var(--bg-app)] sm:grid-cols-[1.3fr_1fr_1fr_1fr_auto] sm:items-center sm:gap-3">
+              {selectedDayTransactions.map((transaction) => <div key={transaction._id} className="grid gap-2 border-b border-[var(--border-default)] px-4 py-3 last:border-0 transition-colors hover:bg-[var(--brand-primary-soft)] sm:grid-cols-[1.3fr_1fr_1fr_1fr_auto] sm:items-center sm:gap-3">
                 <div><p className="text-xs font-semibold">#{String(transaction.orderId?._id || transaction.orderId).slice(-8).toUpperCase()}</p><p className="mt-1 text-[10px] text-[var(--text-secondary)]">{transaction.customerName || t('Customer')}{transaction.customerPhone ? ` · ${transaction.customerPhone}` : ''}</p></div>
                 <p className="break-all font-mono text-[10px] text-[var(--text-secondary)]">{transaction.paymentId || transaction.razorpayOrderId}</p>
                 <time className="text-[11px] text-[var(--text-secondary)]">{new Date(transaction.timestamp).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</time>
@@ -958,7 +958,7 @@ export default function StoreDashboardPage() {
               </article>
             ))}
           </div>
-          <p className="mt-4 rounded-xl border border-[#e7d5cc] bg-[#fff9f6] p-3 text-xs leading-5 text-[var(--text-secondary)]">{t('Exports are scoped to your store. Customer phone numbers and delivery addresses are not included.')}</p>
+          <p className="mt-4 rounded-xl border border-[var(--border-default)] bg-[var(--bg-app)] p-3 text-xs leading-5 text-[var(--text-secondary)]">{t('Exports are scoped to your store. Customer phone numbers and delivery addresses are not included.')}</p>
         </>}
 
         {dashboardError && tab !== 'overview' && !dashboard && <p role="alert" className="mt-4 rounded-xl bg-[var(--status-danger-soft)] p-3 text-sm text-[var(--status-danger)]">{getErrorMessage(dashboardError)}</p>}

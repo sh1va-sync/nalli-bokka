@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nallibokka-shell-v1'
+const CACHE_NAME = 'zepionmart-shell-v1'
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -21,7 +21,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(
-        keys.filter((key) => key.startsWith('nallibokka-shell-') && key !== CACHE_NAME)
+        keys.filter((key) => key.startsWith('zepionmart-shell-') && key !== CACHE_NAME)
           .map((key) => caches.delete(key))
       ))
       .then(() => self.clients.claim())

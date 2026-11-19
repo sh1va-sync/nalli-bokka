@@ -65,12 +65,12 @@ function getCategorySubtitle(name) {
 
 /* ── category icon colors ───────────────────────── */
 const categoryIconColors = [
-  { bg: '#e9f3ec', fg: '#176149' },
-  { bg: '#fce8e6', fg: '#b42332' },
-  { bg: '#e3f1fa', fg: '#1a6cb0' },
-  { bg: '#fef3e2', fg: '#a16207' },
-  { bg: '#f3e8ff', fg: '#7c3aed' },
-  { bg: '#ecfdf5', fg: '#059669' },
+  { bg: '#EAF1FB', fg: '#0D47A1' },
+  { bg: '#FDEBEC', fg: '#E53935' },
+  { bg: '#FFF7D6', fg: '#172033' },
+  { bg: '#EAF4EC', fg: '#2E7D32' },
+  { bg: '#F5F7FA', fg: '#0D47A1' },
+  { bg: '#EAF4EC', fg: '#2E7D32' },
 ]
 
 /* ── trust badges ───────────────────────────────── */
@@ -123,35 +123,35 @@ export default function HomePage({ categoryScreen = false }) {
     <div className="customer-home mx-auto max-w-7xl pb-5 pt-0 sm:px-6 sm:pt-4 lg:px-8">
       {/* ── Search bar ──────────────────────────────── */}
       {/* <div className="px-4 pb-2 pt-3 sm:px-0">
-        <label className="customer-search mx-auto flex h-12 max-w-3xl items-center gap-3 rounded-2xl border border-[var(--border-default)] bg-[#f5f5f3] px-4 text-[var(--text-secondary)] focus-within:border-[var(--brand-primary)] focus-within:bg-white sm:h-14 sm:rounded-[18px]">
-          <Search size={19} strokeWidth={1.9} className="text-[#999]" />
+        <label className="customer-search mx-auto flex h-12 max-w-3xl items-center gap-3 rounded-2xl border border-[var(--border-default)] bg-[var(--bg-app)] px-4 text-[var(--text-secondary)] focus-within:border-[var(--brand-primary)] focus-within:bg-white sm:h-14 sm:rounded-[18px]">
+          <Search size={19} strokeWidth={1.9} className="text-[var(--text-secondary)]" />
           <input aria-label={t('Search products')} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('Search products')} className="w-full bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[#999] sm:text-[15px]" />
           {search && <button type="button" aria-label="Clear search" onClick={() => setSearch('')} className="shrink-0 text-xs font-semibold text-[var(--brand-primary)]">Clear</button>}
         </label>
       </div> */}
 
       {/* ── Sticky Search Bar ───────────────────────── */}
-      <div className="sticky top-[60px] z-40 border-b border-[#e7e9e2] bg-[#fffefa]/95 px-3 py-2 backdrop-blur-md sm:top-[80px] sm:px-0 sm:py-3">
+      <div className="sticky top-[60px] z-40 border-b border-[var(--border-default)] bg-white/95 px-3 py-2 backdrop-blur-md sm:top-[80px] sm:px-0 sm:py-3">
         {categoryScreen && <div className="mx-auto mb-2 max-w-3xl">
-          <Link to="/categories" className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#dce8d8] bg-white px-3 text-xs font-semibold text-[#286640] shadow-sm transition hover:bg-[#f2f7ee] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#39734b]">
+          <Link to="/categories" className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--border-default)] bg-white px-3 text-xs font-semibold text-[var(--brand-primary)] shadow-sm transition hover:bg-[var(--brand-primary-soft)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-primary)]">
             <ArrowLeft size={14} />{t('All categories')}
           </Link>
         </div>}
-        <label className="customer-search mx-auto flex h-12 max-w-3xl items-center gap-3 rounded-2xl border border-[#dfe5d8] bg-[#f5f6f0] px-4 text-[#687568] transition focus-within:border-[#39734b] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#39734b]/10 sm:h-14 sm:rounded-[18px]">
-          <Search size={20} strokeWidth={1.9} className="shrink-0 text-[#39734b]" />
+        <label className="customer-search mx-auto flex h-12 max-w-3xl items-center gap-3 rounded-2xl border border-[var(--border-default)] bg-[var(--bg-app)] px-4 text-[var(--text-secondary)] transition focus-within:border-[var(--brand-primary)] focus-within:bg-white focus-within:ring-2 focus-within:ring-[var(--brand-primary)]/10 sm:h-14 sm:rounded-[18px]">
+          <Search size={20} strokeWidth={1.9} className="shrink-0 text-[var(--brand-primary)]" />
           <input
             aria-label={t('Search products')}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={t('Search meat, vegetables, rice, eggs...')}
-            className="w-full bg-transparent text-sm text-[#203328] outline-none placeholder:text-[#8b9488] sm:text-[15px]"
+            className="w-full bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)] sm:text-[15px]"
           />
           {search && (
             <button
               type="button"
               aria-label={t('Clear search')}
               onClick={() => setSearch('')}
-              className="shrink-0 rounded-full px-2 py-1 text-xs font-bold text-[#39734b] hover:bg-[#e9f3ec]"
+              className="shrink-0 rounded-full px-2 py-1 text-xs font-bold text-[var(--brand-primary)] hover:bg-[var(--brand-primary-soft)]"
             >
               {t('Clear')}
             </button>
@@ -188,21 +188,21 @@ export default function HomePage({ categoryScreen = false }) {
               <div className="max-w-[65%] sm:max-w-[55%]">
                 <span className="text-[8px] font-bold uppercase tracking-[.18em] text-white/80 sm:text-[10px]">{t(activeHeroSlide.eyebrow)}</span>
                 <h1 className="mt-2 text-[1.4rem] font-bold leading-[1.1] tracking-[-.03em] text-white sm:mt-3 sm:text-[2.4rem]">
-                  {t(activeHeroSlide.title)}<span className="text-[#8cc61f]">{t(activeHeroSlide.titleAccent)}</span>
+                  {t(activeHeroSlide.title)}<span className="text-[var(--brand-accent)]">{t(activeHeroSlide.titleAccent)}</span>
                 </h1>
                 <p className="mt-2 text-[10px] leading-relaxed text-white/70 sm:mt-3 sm:text-sm">{t(activeHeroSlide.description)}</p>
                 <button
                   type="button"
                   onClick={() => navigate(activeHeroSlide.category ? `/categories/${encodeURIComponent(activeHeroSlide.category)}` : '/categories')}
-                  className="mt-3 inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-4 text-[11px] font-bold text-[#1d3028] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#e9f4e9] sm:mt-5 sm:h-11 sm:gap-2 sm:px-5 sm:text-xs"
+                  className="mt-3 inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-4 text-[11px] font-bold text-[var(--text-primary)] shadow-sm transition hover:-translate-y-0.5 hover:bg-[var(--brand-primary-soft)] sm:mt-5 sm:h-11 sm:gap-2 sm:px-5 sm:text-xs"
                 >
                   {t(activeHeroSlide.action)} <ArrowRight size={13} className="shrink-0" />
                 </button>
               </div>
 
               {/* Fresh Daily badge */}
-              <div className="absolute right-4 top-4 grid h-14 w-14 place-items-center rounded-full bg-[#8cc61f] text-center sm:right-8 sm:top-6 sm:h-16 sm:w-16">
-                <span className="text-[9px] font-bold leading-tight text-white sm:text-[10px]" style={{ whiteSpace: 'pre-line' }}>{t(activeHeroSlide.badge)}</span>
+              <div className="absolute right-4 top-4 grid h-14 w-14 place-items-center rounded-full bg-[var(--brand-accent)] text-center text-[var(--text-primary)] sm:right-8 sm:top-6 sm:h-16 sm:w-16">
+                <span className="text-[9px] font-bold leading-tight text-[var(--text-primary)] sm:text-[10px]" style={{ whiteSpace: 'pre-line' }}>{t(activeHeroSlide.badge)}</span>
               </div>
             </div>
 
@@ -218,7 +218,7 @@ export default function HomePage({ categoryScreen = false }) {
           {/* <div className="no-scrollbar mt-4 flex gap-0 overflow-x-auto px-4 sm:mt-5 sm:gap-3 sm:px-0">
             {trustBadges.map((badge) => (
               <div key={badge.title} className="flex flex-1 shrink-0 items-center gap-2 rounded-xl px-2 py-2.5 sm:gap-3 sm:rounded-2xl sm:border sm:border-[var(--border-default)] sm:bg-white sm:px-4 sm:py-3">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#e9f3ec] text-[var(--brand-primary)] sm:h-10 sm:w-10">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--brand-primary-soft)] text-[var(--brand-primary)] sm:h-10 sm:w-10">
                   <badge.icon size={15} strokeWidth={1.8} className="sm:h-[18px] sm:w-[18px]" />
                 </span>
                 <span className="min-w-0">
@@ -234,16 +234,16 @@ export default function HomePage({ categoryScreen = false }) {
           {trustBadges.map((badge) => (
             <div
               key={badge.title}
-              className="trust-benefit-card flex min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border border-[#dce8d8] bg-[#f2f7ee] px-2 py-3 text-center sm:flex-row sm:justify-start sm:gap-3 sm:px-4 sm:py-4 sm:text-left"
+              className="trust-benefit-card flex min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border border-[var(--border-default)] bg-[var(--brand-primary-soft)] px-2 py-3 text-center sm:flex-row sm:justify-start sm:gap-3 sm:px-4 sm:py-4 sm:text-left"
             >
-              <span className="trust-benefit-icon grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-[#286640] shadow-sm sm:h-11 sm:w-11">
+              <span className="trust-benefit-icon grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-[var(--brand-primary)] shadow-sm sm:h-11 sm:w-11">
                 <badge.icon size={19} strokeWidth={1.9} />
               </span>
               <span className="min-w-0">
-                <span className="block text-[10px] font-extrabold leading-tight text-[#203328] sm:text-xs">
+                <span className="block text-[10px] font-extrabold leading-tight text-[var(--text-primary)] sm:text-xs">
                   {t(badge.title)}
                 </span>
-                <span className="mt-1 block text-[9px] leading-tight text-[#627264] sm:text-[11px]">
+                <span className="mt-1 block text-[9px] leading-tight text-[var(--text-secondary)] sm:text-[11px]">
                   {t(badge.sub)}
                 </span>
               </span>
@@ -273,7 +273,7 @@ export default function HomePage({ categoryScreen = false }) {
                 {homeCategories.map((item, index) => {
                   const iconColor = categoryIconColors[index % categoryIconColors.length]
                   return (
-                    <Link key={item.id} to={`/categories/${encodeURIComponent(item.id)}`} className="category-tile group min-w-0 overflow-hidden rounded-[14px] border border-[var(--border-default)] bg-white text-left shadow-[0_3px_12px_-8px_rgba(17,44,31,.18)] transition duration-200 hover:-translate-y-0.5 hover:border-[var(--brand-secondary)] hover:shadow-[0_8px_20px_-12px_rgba(17,44,31,.3)] sm:rounded-[20px]">
+                    <Link key={item.id} to={`/categories/${encodeURIComponent(item.id)}`} className="category-tile group min-w-0 overflow-hidden rounded-[14px] border border-[var(--border-default)] bg-white text-left shadow-[0_3px_12px_-8px_rgba(13,71,161,.16)] transition duration-200 hover:-translate-y-0.5 hover:border-[var(--brand-primary)] hover:shadow-[0_8px_20px_-12px_rgba(13,71,161,.24)] sm:rounded-[20px]">
                       <span className="block aspect-[1.15] overflow-hidden sm:aspect-[1.3]" style={{ backgroundColor: categoryTints[index % categoryTints.length] }}>
                         <CategoryPhoto category={item.label} imageUrl={item.imageUrl} placeholderOnly className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.05]" />
                       </span>
@@ -363,7 +363,7 @@ export default function HomePage({ categoryScreen = false }) {
             <ArrowDownWideNarrow size={16} strokeWidth={1.8} />
             <span className="shrink-0 text-xs font-semibold text-[var(--text-secondary)]">Sort by</span>
             <select aria-label="Sort products" value={sort} onChange={(event) => setSort(event.target.value)}
-className="shrink-0 rounded-full border border-[#d6e3d3] bg-[#f0f6ed] px-4 py-2.5 text-xs font-bold text-[#315c3d] shadow-sm transition hover:border-[#39734b] hover:bg-[#dfeedd] hover:text-[#203328] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#39734b] sm:px-4 sm:py-2.5 sm:text-xs"
+className="shrink-0 rounded-full border border-[var(--border-default)] bg-[var(--bg-app)] px-4 py-2.5 text-xs font-bold text-[var(--brand-primary)] shadow-sm transition hover:border-[var(--brand-primary)] hover:bg-[var(--brand-primary-soft)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] sm:px-4 sm:py-2.5 sm:text-xs"
 >
               <option value="recommended">Recommended</option>
               <option value="price-low">Price: low to high</option>

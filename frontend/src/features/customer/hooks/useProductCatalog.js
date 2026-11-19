@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux'
 import { useGetProductCategoriesQuery, useGetProductsQuery } from '../../api/api.js'
 import { getProductStoreId } from '../utils.js'
 
-const categoryTints = ['#edf5e9', '#fff2e3', '#fcebea', '#eaf3f8', '#f5f0e7']
+const categoryTints = ['#EAF1FB', '#FFF7D6', '#FDEBEC', '#EAF4EC', '#F5F7FA']
 
 export function formatCategoryLabel(name) {
   return name.split(/\s+/).map((word) => word[0]?.toUpperCase() + word.slice(1)).join(' ')

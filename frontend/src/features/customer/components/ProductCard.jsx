@@ -145,17 +145,17 @@ export default function ProductCard({ product }) {
 
   return (
     <>
-      <article className={`product-card group flex h-full flex-col overflow-hidden rounded-[20px] border bg-white p-0 shadow-[0_5px_18px_-14px_rgba(23,55,39,.34)] transition-[transform,box-shadow,border-color] duration-300 sm:rounded-[23px] ${soldOut ? 'product-card-sold-out border-[#e7b5b8]' : 'border-[var(--border-default)]'}`}>
-        <div className="product-card-media relative aspect-[1.08/1] overflow-hidden bg-[#f0efe8]">
+      <article className={`product-card group flex h-full flex-col overflow-hidden rounded-[20px] border bg-white p-0 shadow-[0_5px_18px_-14px_rgba(13,71,161,.22)] transition-[transform,box-shadow,border-color] duration-300 sm:rounded-[23px] ${soldOut ? 'product-card-sold-out border-[var(--status-danger)]/30' : 'border-[var(--border-default)]'}`}>
+        <div className="product-card-media relative aspect-[1.08/1] overflow-hidden bg-[var(--bg-app)]">
           {product.imageUrl && !imageFailed
             ? <img src={product.imageUrl} alt={t(product.productName)} loading="lazy" className={`product-card-image h-full w-full object-cover ${soldOut ? 'brightness-[.62] saturate-[.8]' : ''}`} onError={() => setImageFailed(true)} />
             : <img src={getCategoryPhoto(product.productType)} alt="" loading="lazy" className={`product-card-image h-full w-full object-cover ${soldOut ? 'brightness-[.62] saturate-[.8]' : ''}`} />}
           <span className="product-card-image-shade pointer-events-none absolute inset-0" aria-hidden="true" />
-          {soldOut && <span className="absolute inset-x-2 bottom-2 rounded-lg bg-[#b42332]/95 px-2 py-1.5 text-center text-[10px] font-bold text-white shadow-sm">{t('Sold out for today')}</span>}
+          {soldOut && <span className="absolute inset-x-2 bottom-2 rounded-lg bg-[var(--brand-offer)]/95 px-2 py-1.5 text-center text-[10px] font-bold text-white shadow-sm">{t('Sold out for today')}</span>}
         </div>
         <div className="product-card-body px-2 pb-2 pt-2 sm:px-2.5 sm:pb-2.5">
           <h3 className="line-clamp-2 text-[13px] font-bold leading-[1.35] tracking-[-.015em] text-[var(--text-primary)] sm:text-sm">{t(product.productName)}</h3>
-          <p className={`mt-1 text-[14px] font-bold tracking-[-.025em] sm:text-[15px] ${soldOut ? 'text-[#b42332]' : 'text-[var(--brand-primary)]'}`}>{t(getPriceRange(product))}</p>
+          <p className={`mt-1 text-[14px] font-bold tracking-[-.025em] sm:text-[15px] ${soldOut ? 'text-[var(--status-danger)]' : 'text-[var(--brand-primary)]'}`}>{t(getPriceRange(product))}</p>
           {/* <p className="mt-0.5 text-[9px] leading-3 text-[var(--text-secondary)]">{t(product.packs?.length ? 'Price varies by pack' : 'Price varies by quantity')}</p> */}
           <button
             onClick={() => { setCounts({}); setError(''); setOptionsOpen(true) }}
@@ -175,7 +175,7 @@ export default function ProductCard({ product }) {
               <p className="mt-1 text-sm font-medium text-[var(--text-secondary)]">{t(getPriceRange(product))}</p>
               <p className="mt-2 text-[10px] font-semibold uppercase tracking-[.14em] text-[var(--text-secondary)]">{t('Choose quantity')}</p>
             </div>
-            <button onClick={() => setOptionsOpen(false)} aria-label={t('Close quantity selection')} className="ml-3 rounded-full p-1.5 text-[var(--text-secondary)] hover:bg-[#f2f1ed]"><X size={18} /></button>
+            <button onClick={() => setOptionsOpen(false)} aria-label={t('Close quantity selection')} className="ml-3 rounded-full p-1.5 text-[var(--text-secondary)] hover:bg-[var(--bg-app)]"><X size={18} /></button>
           </div>
           <div className="flex-1 space-y-2 overflow-y-auto bg-[#faf9f7] px-4 py-3">
             {options.map((option) => <SelectionOption

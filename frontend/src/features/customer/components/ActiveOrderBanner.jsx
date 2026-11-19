@@ -106,11 +106,11 @@ export default function ActiveOrderBanner({ order }) {
         to={`/orders?order=${order._id}`}
         aria-label={`${t('Track order')} ${orderNumber}: ${t(config.title)}`}
         className="group relative block overflow-hidden rounded-2xl
-          border border-[#D8E8D8] bg-white
-          shadow-[0_4px_18px_-12px_rgba(23,63,50,0.3)]
+          border border-[var(--border-default)] bg-white
+          shadow-[0_4px_18px_-12px_rgba(13,71,161,0.22)]
           transition-all duration-200
           hover:border-[var(--brand-secondary)]
-          hover:shadow-[0_8px_24px_-14px_rgba(23,63,50,0.3)]
+          hover:shadow-[0_8px_24px_-14px_rgba(13,71,161,0.22)]
           focus-visible:outline-none focus-visible:ring-2
           focus-visible:ring-[var(--brand-primary)]"
       >
@@ -126,7 +126,7 @@ export default function ActiveOrderBanner({ order }) {
 
             <span className="absolute -right-1 -top-1 grid h-4 w-4
               place-items-center rounded-full border-2 border-white
-              bg-[#8ABF79]">
+              bg-[var(--brand-accent)]">
               <Check size={9} strokeWidth={3} />
             </span>
           </span>
@@ -139,7 +139,7 @@ export default function ActiveOrderBanner({ order }) {
                 {t(isPickup ? 'Pickup order' : 'Order update')}
               </span>
 
-              <span className="rounded-full bg-[#EAF3EA] px-2 py-0.5
+              <span className="rounded-full bg-[var(--brand-primary-soft)] px-2 py-0.5
                 text-[10px] font-semibold capitalize
                 text-[var(--brand-primary)]">
                 {t(config.title)}
@@ -182,7 +182,7 @@ export default function ActiveOrderBanner({ order }) {
               className={`h-1 flex-1 overflow-hidden rounded-full ${
                 index <= safeStage
                   ? 'bg-[var(--brand-primary)]'
-                  : 'bg-[#E6EDE5]'
+                  : 'bg-[var(--border-default)]'
               }`}
               aria-hidden="true"
             />

@@ -34,10 +34,10 @@ export default function StoreLoginPage() {
   }
 
   return <main className="grid min-h-screen place-items-center bg-[var(--bg-app)] px-4 py-10">
-    <section className="w-full max-w-md rounded-[24px] border border-[var(--border-default)] bg-white p-6 shadow-[0_18px_55px_-38px_rgba(70,31,27,.38)] sm:p-8">
+    <section className="w-full max-w-md rounded-[24px] border border-[var(--border-default)] bg-white p-6 shadow-[0_18px_55px_-38px_rgba(13,71,161,.30)] sm:p-8">
       <div className="flex items-center justify-between gap-3"><Link to="/" className="text-xs font-medium text-[var(--brand-primary)] hover:text-[var(--brand-primary)]">← {t('Customer storefront')}</Link><LanguageSwitcher /></div>
       <div className="mt-7 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-subtle)] text-[var(--brand-primary)]"><Store size={22} /></div>
-      <p className="mt-5 text-[10px] font-semibold uppercase tracking-[.18em] text-[var(--brand-primary)]">{t('NalliBokka store')}</p>
+      <p className="mt-5 text-[10px] font-semibold uppercase tracking-[.18em] text-[var(--brand-primary)]">{t('ZepionMart store')}</p>
       <h1 className="mt-1 font-display text-3xl font-medium tracking-[-.035em] text-[var(--text-primary)]">{t('Welcome back')}</h1>
       <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">{t('Sign in to manage your store, orders and inventory.')}</p>
       <form onSubmit={submit} className="mt-6 space-y-4">

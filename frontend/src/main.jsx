@@ -10,7 +10,7 @@ import { LanguageProvider } from './features/i18n/LanguageProvider.jsx'
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/service-worker.js').catch((error) => {
-      console.error('Could not register the NalliBokka service worker.', error)
+      console.error('Could not register the ZepionMart service worker.', error)
     })
   }, { once: true })
 }

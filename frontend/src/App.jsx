@@ -142,20 +142,20 @@ function App() {
       </main>
       {cartCount > 0 && !isStoreRoute && !['/cart', '/checkout'].includes(location.pathname) && <Link
         to="/cart"
-        className="customer-cart-shortcut fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 flex h-[56px] items-center justify-between gap-3 rounded-2xl border border-[#dce8dd] bg-[#fffefa] px-4 text-[var(--text-primary)] shadow-[0_10px_28px_-12px_rgba(34,70,47,.26)] transition hover:border-[#bdd6c2] hover:bg-white md:hidden"
+        className="customer-cart-shortcut fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 flex h-[56px] items-center justify-between gap-3 rounded-2xl border border-[var(--border-default)] bg-white px-4 text-[var(--text-primary)] shadow-[0_10px_28px_-12px_rgba(13,71,161,.20)] transition hover:border-[var(--brand-primary)] hover:bg-white md:hidden"
         aria-label={`${t('Proceed to cart')}, ${cartCount} ${t(cartCount === 1 ? 'item' : 'items')}`}
       >
         <span className="flex min-w-0 items-center gap-2.5">
-          <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#e8f2e8] text-[var(--brand-primary)]">
+          <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]">
             <ShoppingBasket size={17} strokeWidth={2} />
-            <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-[#c45a3d] px-1 text-[9px] font-bold text-white">{cartCount > 99 ? '99+' : cartCount}</span>
+            <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-[var(--brand-offer)] px-1 text-[9px] font-bold text-white">{cartCount > 99 ? '99+' : cartCount}</span>
           </span>
-          <span className="truncate text-sm font-semibold text-[#35413a]">{cartCount} {t(cartCount === 1 ? 'item' : 'items')} {t('in your cart')}</span>
+          <span className="truncate text-sm font-semibold text-[var(--text-primary)]">{cartCount} {t(cartCount === 1 ? 'item' : 'items')} {t('in your cart')}</span>
         </span>
         <span className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[var(--brand-primary)] px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[var(--brand-primary-hover)]">{t('Proceed to cart')} <ArrowRight size={15} /></span>
       </Link>}
       <footer className="border-t border-[var(--border-default)] bg-[var(--bg-app)] px-5 py-7 text-center text-xs text-[var(--text-secondary)]">
-        {t('Fresh from your neighbourhood.')} <span className="font-semibold text-[var(--brand-primary)]">NalliBokka.</span>
+        {t('Fresh from your neighbourhood.')} <span className="font-semibold text-[var(--brand-primary)]">ZepionMart.</span>
       </footer>
       {!isStoreRoute && <PwaInstallPrompt />}
       <nav className="customer-bottom-nav fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-[var(--border-default)] bg-white/95 pt-2 text-[10px] font-medium text-[var(--text-secondary)] backdrop-blur md:hidden" aria-label={t('Main navigation')}>
@@ -168,7 +168,7 @@ function App() {
           <span>{t('Categories')}</span>
         </NavLink>
         <NavLink to="/cart" aria-label={`${t('Cart')}${cartCount ? `, ${cartCount} ${t('items')}` : ''}`} className={({ isActive }) => `customer-bottom-nav-item relative py-1 ${isActive ? 'is-active' : ''} ${selectedStoreIsClosed ? 'pointer-events-none opacity-40' : ''}`}>
-          <span className="customer-bottom-nav-icon"><ShoppingBasket size={19} strokeWidth={1.9} />{cartCount > 0 && <span className="absolute right-[calc(50%-18px)] top-0 grid h-4 min-w-4 place-items-center rounded-full bg-[#8cc61f] px-1 text-[9px] font-bold text-white">{cartCount > 99 ? '99+' : cartCount}</span>}</span>
+          <span className="customer-bottom-nav-icon"><ShoppingBasket size={19} strokeWidth={1.9} />{cartCount > 0 && <span className="absolute right-[calc(50%-18px)] top-0 grid h-4 min-w-4 place-items-center rounded-full bg-[var(--brand-accent)] px-1 text-[9px] font-bold text-[var(--text-primary)]">{cartCount > 99 ? '99+' : cartCount}</span>}</span>
           <span>{t('Cart')}</span>
         </NavLink>
         {token

@@ -59,12 +59,12 @@ export default function StoreTransactionDetailPage() {
     return <Navigate to="/store/login" replace />
   }
 
-  return <div className="min-h-screen bg-[#f1f1ed] text-[var(--text-primary)]">
-    <header className="sticky top-0 z-20 border-b border-[#e5e4de] bg-[#f1f1ed]/95 backdrop-blur">
+      return <div className="min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
+    <header className="sticky top-0 z-20 border-b border-[var(--border-default)] bg-white/95 backdrop-blur">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <Link to="/store" className="flex items-center gap-3">
           <img src="/nallibokka-logo.png" alt="" className="h-9 w-9 object-contain" />
-          <span><span className="block text-sm font-semibold">NalliBokka</span><span className="block text-[10px] text-[var(--text-tertiary)]">{t('Transaction investigation')}</span></span>
+          <span><span className="block text-sm font-semibold">ZepionMart</span><span className="block text-[10px] text-[var(--text-tertiary)]">{t('Transaction investigation')}</span></span>
         </Link>
         <LanguageSwitcher compact />
       </div>
@@ -99,7 +99,7 @@ export default function StoreTransactionDetailPage() {
             <DetailField label="Refund request ID" value={transaction.refundRequestId} mono />
             <DetailField label="Refund requested at" value={formatDateTime(transaction.refundRequestedAt)} />
           </div>
-          {transaction.status === 'failed' && <p className="mt-3 rounded-xl border border-[#ead8cf] bg-[#fff9f6] p-3 text-xs leading-5 text-[var(--text-secondary)]">{t('Gateway decline details are not retained by the app. Use the payment reference above to inspect the attempt in Razorpay.')}</p>}
+          {transaction.status === 'failed' && <p className="mt-3 rounded-xl border border-[var(--status-danger)]/20 bg-[var(--status-danger-soft)] p-3 text-xs leading-5 text-[var(--status-danger)]">{t('Gateway decline details are not retained by the app. Use the payment reference above to inspect the attempt in Razorpay.')}</p>}
         </DetailSection>
 
         <DetailSection title="Customer and fulfillment" icon={UserRound}>
@@ -130,7 +130,7 @@ export default function StoreTransactionDetailPage() {
 
         <DetailSection title="Related payment attempts" icon={CreditCard}>
           {transaction.relatedTransactions?.length ? <div className="space-y-2">
-            {transaction.relatedTransactions.map((attempt) => <article key={attempt._id} className={`rounded-xl border p-3 ${attempt._id === transaction._id ? 'border-[var(--brand-primary)] bg-[#fff9f6]' : 'border-[var(--border-default)] bg-[var(--bg-app)]'}`}>
+            {transaction.relatedTransactions.map((attempt) => <article key={attempt._id} className={`rounded-xl border p-3 ${attempt._id === transaction._id ? 'border-[var(--brand-primary)] bg-[var(--brand-primary-soft)]' : 'border-[var(--border-default)] bg-[var(--bg-app)]'}`}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div><p className="text-xs font-semibold">{t(attempt.status)} · {formatPrice(attempt.amount)}{attempt._id === transaction._id ? ` · ${t('Current transaction')}` : ''}</p><p className="mt-1 text-[10px] text-[var(--text-secondary)]">{formatDateTime(attempt.timestamp)}</p></div>
                 <Link to={`/store/transactions/${attempt._id}?returnTo=${encodeURIComponent(returnTo)}`} aria-label={t('View related transaction details')} className="inline-flex items-center gap-1 text-[10px] font-semibold text-[var(--brand-primary)]">{t('Details')} <ChevronRight size={12} /></Link>

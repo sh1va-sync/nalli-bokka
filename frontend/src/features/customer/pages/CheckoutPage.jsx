@@ -126,7 +126,7 @@ export default function CheckoutPage({ onLogin, onOpenCart, onToast }) {
 
       <div className="mt-6 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-6">
         <div className="space-y-4">
-          <section className="rounded-[22px] border border-[var(--border-default)] bg-white p-4 shadow-[0_8px_24px_-22px_rgba(17,44,31,.45)] sm:p-6">
+          <section className="rounded-[22px] border border-[var(--border-default)] bg-white p-4           shadow-[0_8px_24px_-22px_rgba(13,71,161,.22)] sm:p-6">
             <StepHeading number="1" title="Delivery method" description="Choose how you’d like to receive your order." />
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {[
@@ -146,7 +146,7 @@ export default function CheckoutPage({ onLogin, onOpenCart, onToast }) {
           </section>
 
           {orderType === 'delivery' ? (
-            <section className="rounded-[22px] border border-[var(--border-default)] bg-white p-4 shadow-[0_8px_24px_-22px_rgba(17,44,31,.45)] sm:p-6">
+            <section className="rounded-[22px] border border-[var(--border-default)] bg-white p-4             shadow-[0_8px_24px_-22px_rgba(13,71,161,.22)] sm:p-6">
               <StepHeading
                 number="2"
                 title="Delivery address"
@@ -178,7 +178,7 @@ export default function CheckoutPage({ onLogin, onOpenCart, onToast }) {
               )}
             </section>
           ) : (
-            <section className="rounded-[22px] border border-[var(--border-default)] bg-white p-4 shadow-[0_8px_24px_-22px_rgba(17,44,31,.45)] sm:p-6">
+            <section className="rounded-[22px] border border-[var(--border-default)] bg-white p-4             shadow-[0_8px_24px_-22px_rgba(13,71,161,.22)] sm:p-6">
               <StepHeading number="2" title="Store pickup" description="Choose a date and collection start time." />
               {!selectedStore?._id && <p role="alert" className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{t('Select a store before choosing pickup.')}</p>}
               <label className="mt-4 block max-w-sm text-xs font-bold text-[var(--text-secondary)]">
@@ -213,7 +213,7 @@ export default function CheckoutPage({ onLogin, onOpenCart, onToast }) {
             </section>
           )}
 
-          <section className="rounded-[22px] border border-[var(--border-default)] bg-white p-4 shadow-[0_8px_24px_-22px_rgba(17,44,31,.45)] sm:p-6">
+          <section className="rounded-[22px] border border-[var(--border-default)] bg-white p-4           shadow-[0_8px_24px_-22px_rgba(13,71,161,.22)] sm:p-6">
             <StepHeading number="3" title="Payment method" description="Pay securely online with Razorpay." />
             <div className="mt-4 space-y-2">
               <label className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-3 transition sm:p-4 ${paymentMethod === 'upi' ? 'border-[var(--brand-primary)] bg-[var(--brand-primary-soft)] shadow-[inset_0_0_0_1px_var(--brand-primary)]' : 'border-[var(--border-default)] hover:border-[var(--brand-secondary)]'}`}>
@@ -237,7 +237,7 @@ export default function CheckoutPage({ onLogin, onOpenCart, onToast }) {
           </section>
         </div>
 
-        <aside className="h-fit rounded-[22px] border border-[var(--border-default)] bg-white p-4 shadow-[0_8px_24px_-22px_rgba(17,44,31,.45)] sm:p-6 lg:sticky lg:top-28">
+        <aside className="h-fit rounded-[22px] border border-[var(--border-default)] bg-white p-4         shadow-[0_8px_24px_-22px_rgba(13,71,161,.22)] sm:p-6 lg:sticky lg:top-28">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg font-extrabold tracking-tight text-[var(--text-primary)]">{t('Order summary')}</h2>
             <span className="text-xs text-[var(--text-secondary)]">{items.length} {t(items.length === 1 ? 'item' : 'items')}</span>
@@ -277,7 +277,7 @@ export default function CheckoutPage({ onLogin, onOpenCart, onToast }) {
         </aside>
       </div>
 
-      <div className="fixed inset-x-0 bottom-16 z-40 border-t border-[var(--border-default)] bg-white/95 px-4 py-3 shadow-[0_-8px_24px_-20px_rgba(17,44,31,.5)] backdrop-blur lg:hidden">
+      <div className="fixed inset-x-0 bottom-16 z-40 border-t border-[var(--border-default)] bg-white/95 px-4 py-3       shadow-[0_-8px_24px_-20px_rgba(13,71,161,.24)] backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
           <span className="min-w-0">
             <span className="block text-[10px] font-semibold text-[var(--text-secondary)]">{t('Total amount')}</span>

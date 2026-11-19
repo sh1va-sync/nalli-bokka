@@ -43,7 +43,7 @@ export function createInvoicePdf(order) {
       margins: { top: 48, right: 48, bottom: 54, left: 48 },
       info: {
         Title: `Invoice ${invoiceNumber(order)}`,
-        Author: printable(order.storeId?.storeName || 'NalliBokka'),
+        Author: printable(order.storeId?.storeName || 'ZepionMart'),
         Subject: `Order invoice ${invoiceNumber(order)}`
       }
     });
@@ -70,7 +70,7 @@ export function createInvoicePdf(order) {
 
     document.rect(0, 0, document.page.width, 9).fill(colors.brand);
     document.fillColor(colors.brand).font('Helvetica-Bold').fontSize(20)
-      .text(printable(order.storeId?.storeName || 'NalliBokka'), left, 43, { width: 270 });
+      .text(printable(order.storeId?.storeName || 'ZepionMart'), left, 43, { width: 270 });
     document.fillColor(colors.muted).font('Helvetica').fontSize(9)
       .text(printable(order.storeId?.location), left, 70, { width: 270 });
     document.fillColor(colors.ink).font('Helvetica-Bold').fontSize(20)

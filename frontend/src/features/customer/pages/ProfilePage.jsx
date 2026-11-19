@@ -84,23 +84,14 @@ export default function ProfilePage() {
   }
 
   return <div className="mx-auto max-w-6xl px-4 pb-10 pt-5 sm:px-6 sm:pt-8 lg:px-8">
-    {/* <header className="relative isolate mb-5 overflow-hidden rounded-[24px] bg-gradient-to-r from-[#edf5ee] via-[#eaf4eb] to-[#e1efe4] px-5 py-6 sm:mb-7 sm:rounded-[30px] sm:px-8 sm:py-8">
-      <img src="/hero/green-market.svg" alt="" className="pointer-events-none absolute -right-7 bottom-0 h-[118%] w-[54%] object-contain object-right-bottom opacity-80 sm:right-0 sm:h-[125%] sm:w-[42%]" />
-      <div className="relative z-10 max-w-[70%]">
-        <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[var(--brand-primary)] sm:text-xs">{t('Your NalliBokka account')}</p>
-        <h1 className="mt-1 text-3xl font-black tracking-[-.045em] text-[var(--text-primary)] sm:mt-2 sm:text-5xl">{t('My profile')}</h1>
-        <p className="mt-2 text-xs text-[var(--text-secondary)] sm:text-base">{t('Manage your details and delivery addresses.')}</p>
-        <Link to="/orders" className="mt-4 inline-flex h-9 items-center gap-2 rounded-full bg-white/80 px-4 text-xs font-bold text-[var(--brand-primary)] shadow-sm transition hover:bg-white sm:mt-5 sm:h-11 sm:text-sm">{t('View my orders')} <ArrowRight size={16} /></Link>
-      </div>
-    </header> */}
     {error && <p role="alert" className="mb-5 rounded-xl bg-rose-50 p-4 text-sm text-rose-800">{getErrorMessage(error)}</p>}
     {isLoading ? <div className="mt-6"><CookingLoader label={t('Getting your account ready…')} /></div> : <div className="grid gap-5 lg:grid-cols-[.9fr_1.1fr]">
-        <section className="rounded-[24px] border border-[var(--border-default)] bg-white p-4 shadow-[0_8px_24px_-20px_rgba(17,44,31,.38)] sm:rounded-[26px] sm:p-6">
+        <section className="rounded-[24px] border border-[var(--border-default)] bg-white p-4 shadow-[0_8px_24px_-20px_rgba(13,71,161,.20)] sm:rounded-[26px] sm:p-6">
           <div className="flex items-center gap-3">
             <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]"><UserRound size={22} /></span>
             <div><h2 className="text-lg font-extrabold text-[var(--text-primary)] sm:text-xl">{t('Personal details')}</h2><p className="text-xs text-[var(--text-secondary)] sm:text-sm">{t('Your account information')}</p></div>
           </div>
-          <div className="mt-5 rounded-2xl bg-[#f2f7f2] p-4">
+          <div className="mt-5 rounded-2xl bg-[var(--brand-primary-soft)] p-4">
             <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">{t('Phone')}</span>
             <span className="mt-1 block text-sm font-bold text-[var(--brand-primary)]">{profile?.phone || cachedUser?.phone || '—'}</span>
             <span className="mt-1 block text-[10px] leading-4 text-[var(--text-secondary)]">{t('Your sign-in number can’t be changed here.')}</span>
@@ -121,16 +112,16 @@ export default function ProfilePage() {
           </div>
           <button onClick={logout} className="mt-4 h-11 w-full rounded-xl border border-[var(--border-default)] text-sm font-semibold text-[var(--text-secondary)] transition hover:border-[var(--brand-secondary)] hover:bg-[var(--bg-app)]">{t('Sign out')}</button>
         </section>
-      <section className="rounded-[24px] border border-[var(--border-default)] bg-white p-4 shadow-[0_8px_24px_-20px_rgba(17,44,31,.38)] sm:rounded-[26px] sm:p-6">
+      <section className="rounded-[24px] border border-[var(--border-default)] bg-white p-4 shadow-[0_8px_24px_-20px_rgba(13,71,161,.20)] sm:rounded-[26px] sm:p-6">
         <div className="flex items-center gap-3">
           <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]"><MapPin size={21} /></span>
           <div><h2 className="text-lg font-extrabold text-[var(--text-primary)] sm:text-xl">{t('Delivery addresses')}</h2><p className="text-xs text-[var(--text-secondary)] sm:text-sm">{t('Saved spots for your fresh deliveries.')}</p></div>
         </div>
         <div className="mt-4 space-y-2">
           {(profile?.addresses || []).map((savedAddress) => <div key={savedAddress._id} className="flex items-start gap-3 rounded-2xl border border-[var(--border-default)] bg-white p-4 transition hover:border-[var(--brand-secondary)]"><span className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]"><MapPin size={18} /></span><div className="min-w-0 flex-1"><p className="text-sm font-extrabold text-[var(--text-primary)]">{t(savedAddress.label)}</p><p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">{savedAddress.fullAddress}{savedAddress.landmark ? ` · ${savedAddress.landmark}` : ''}</p><p className="text-xs font-semibold text-[var(--text-secondary)]">{savedAddress.pincode}</p></div><button disabled={deletingId === savedAddress._id} onClick={() => removeAddress(savedAddress._id)} aria-label={`${t('Delete')} ${t(savedAddress.label)} ${t('address')}`} className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[var(--text-secondary)] transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"><Trash2 size={16} /></button></div>)}
-          {!profile?.addresses?.length && <p className="rounded-2xl bg-[#f2f7f2] p-4 text-sm text-[var(--text-secondary)]">{t('No saved addresses yet. Add one below for a quicker checkout.')}</p>}
+          {!profile?.addresses?.length && <p className="rounded-2xl bg-[var(--bg-app)] p-4 text-sm text-[var(--text-secondary)]">{t('No saved addresses yet. Add one below for a quicker checkout.')}</p>}
         </div>
-        <form onSubmit={saveAddress} className="mt-5 rounded-2xl bg-[#f5f8f4] p-4 sm:mt-6 sm:p-5">
+        <form onSubmit={saveAddress} className="mt-5 rounded-2xl bg-[var(--bg-app)] p-4 sm:mt-6 sm:p-5">
           <h3 className="flex items-center gap-2 text-sm font-extrabold text-[var(--text-primary)] sm:text-base"><span className="grid h-8 w-8 place-items-center rounded-full bg-white text-[var(--brand-primary)]"><Plus size={17} /></span> {t('Add a new address')}</h3>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <label className="text-xs font-bold text-[var(--brand-primary)]">{t('LABEL')}<input required maxLength={40} value={address.label} onChange={(event) => setAddress({ ...address, label: event.target.value })} placeholder={t('Home')} className="mt-1.5 h-11 w-full rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm font-normal text-[var(--text-primary)] outline-none transition focus:border-[var(--brand-primary)] focus:ring-4 focus:ring-[var(--brand-primary-soft)]" /></label>

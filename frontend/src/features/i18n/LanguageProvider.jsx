@@ -16,11 +16,11 @@ export function LanguageProvider({ children }) {
 
   useEffect(() => {
     document.documentElement.lang = language === 'te' ? 'te' : 'en'
-    document.title = translate('NalliBokka — Fresh, fast, local', language)
+    document.title = translate('ZepionMart — Fresh, fast, local', language)
     const description = document.querySelector('meta[name="description"]')
     if (description) {
       description.content = translate(
-        'Fresh groceries, fruits, vegetables and meat delivered from NalliBokka.',
+        'Fresh groceries, fruits, vegetables and meat delivered from ZepionMart.',
         language,
       )
     }

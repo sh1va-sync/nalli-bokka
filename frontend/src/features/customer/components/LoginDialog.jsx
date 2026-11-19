@@ -93,7 +93,7 @@ export default function LoginDialog({ open, reason, onClose, onSignedIn }) {
       <section className="customer-dialog-panel relative mx-auto w-full max-w-md rounded-t-[24px] bg-[var(--bg-app)] p-6 shadow-2xl sm:rounded-[24px] sm:p-8">
         <button className="absolute right-5 top-5 rounded-full p-2 text-[var(--text-secondary)] hover:bg-[var(--surface-subtle)]" onClick={closeDialog} aria-label={t('Close sign in')}><X size={19} /></button>
         <span className="mb-5 grid h-11 w-11 place-items-center rounded-full bg-[var(--status-danger-soft)] text-[var(--brand-primary)]">{step === 'phone' ? <Phone size={19} /> : <ShieldCheck size={20} />}</span>
-        <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[var(--text-secondary)]">{t('NalliBokka account')}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[.17em] text-[var(--text-secondary)]">{t('ZepionMart account')}</p>
         <h2 id="login-title" className="mt-1 font-display text-2xl font-medium text-[var(--text-primary)]">{t(step === 'phone' ? 'Good food starts here' : step === 'code' ? 'Check your messages' : 'Create your account')}</h2>
         <p className="mt-2 text-sm leading-6 text-slate-500">{step === 'phone' ? t(reason || 'Sign in with your phone number. We’ll send you a one-time code.') : step === 'code' ? `${t('Enter the verification code sent to')} ${normalizedPhone}.` : t('Your phone number is verified. Add your name to finish creating your account.')}</p>
         {step === 'phone' ? (

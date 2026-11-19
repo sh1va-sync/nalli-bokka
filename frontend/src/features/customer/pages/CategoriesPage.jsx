@@ -7,7 +7,7 @@ import CategoryPhoto from '../components/CategoryPhoto.jsx'
 import { formatCategoryLabel } from '../hooks/useProductCatalog.js'
 import { useTranslation } from '../../i18n/LanguageContext.js'
 
-const categoryTints = ['#edf5e9', '#fff2e3', '#fcebea', '#eaf3f8', '#f5f0e7']
+const categoryTints = ['#EAF1FB', '#FFF7D6', '#FDEBEC', '#EAF4EC', '#F5F7FA']
 
 export default function CategoriesPage() {
   const t = useTranslation()
@@ -46,7 +46,7 @@ export default function CategoriesPage() {
         <p className="mt-2 text-base text-[var(--text-secondary)] sm:text-2xl">{t('Fresh picks for every meal.')}</p>
       </header>
 
-      <label className="flex h-14 items-center gap-3 rounded-[20px] border border-[var(--border-default)] bg-white px-4 text-[var(--text-secondary)] shadow-[0_6px_20px_-15px_rgba(18,49,37,.35)] transition focus-within:border-[var(--brand-secondary)] focus-within:shadow-[0_0_0_4px_rgba(23,97,73,.08)] sm:h-[76px] sm:gap-4 sm:rounded-[26px] sm:px-7">
+      <label className="flex h-14 items-center gap-3 rounded-[20px] border border-[var(--border-default)] bg-white px-4 text-[var(--text-secondary)] shadow-[0_6px_20px_-15px_rgba(13,71,161,.18)] transition focus-within:border-[var(--brand-primary)] focus-within:shadow-[0_0_0_4px_rgba(13,71,161,.08)] sm:h-[76px] sm:gap-4 sm:rounded-[26px] sm:px-7">
         <Search size={24} strokeWidth={1.8} className="shrink-0" />
         <input aria-label={t('Search categories')} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`${t('Search')} ${categories.length} ${t('categories')}`} className="w-full bg-transparent text-base text-[var(--text-primary)] outline-none placeholder:text-[var(--text-secondary)] sm:text-2xl" />
       </label>
@@ -54,7 +54,7 @@ export default function CategoriesPage() {
       {error && <p role="alert" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[var(--status-danger-soft)] p-3 text-sm text-[var(--status-danger)]"><span>{t('We couldn’t load categories from the store.')}</span><button type="button" onClick={refetch} className="font-bold underline">{t('Try again')}</button></p>}
       {isLoading && <p role="status" className="mt-5 text-sm text-[var(--text-secondary)]">{t('Loading categories…')}</p>}
       {!isLoading && !error && filteredCategories.length > 0 && <div className="category-grid-enter mt-5 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-5 lg:grid-cols-3">
-        {filteredCategories.map((category) => <Link key={category.id} to={`/categories/${encodeURIComponent(category.id)}`} className="group min-w-0 overflow-hidden rounded-[20px] border border-[var(--border-default)] bg-white shadow-[0_8px_24px_-20px_rgba(17,44,31,.45)] transition duration-200 hover:-translate-y-0.5 hover:border-[var(--brand-secondary)] hover:shadow-[0_14px_28px_-20px_rgba(17,44,31,.42)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-primary)] sm:rounded-[26px]">
+        {filteredCategories.map((category) => <Link key={category.id} to={`/categories/${encodeURIComponent(category.id)}`} className="group min-w-0 overflow-hidden rounded-[20px] border border-[var(--border-default)] bg-white shadow-[0_8px_24px_-20px_rgba(13,71,161,.22)] transition duration-200 hover:-translate-y-0.5 hover:border-[var(--brand-primary)] hover:shadow-[0_14px_28px_-20px_rgba(13,71,161,.26)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-primary)] sm:rounded-[26px]">
           <span className="block aspect-[1.48] overflow-hidden" style={{ backgroundColor: category.tint }}>
             <CategoryPhoto category={category.label} imageUrl={category.imageUrl} placeholderOnly className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" />
           </span>

@@ -68,11 +68,11 @@ export default function Header({ cartCount, onOpenCart, onChooseStore, onLogin, 
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-2.5 sm:px-6 sm:py-3.5 lg:px-8">
         {/* Logo */}
-        <Link to="/" className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2.5" aria-label={`NalliBokka ${t('Home')}`}>
-          <img src="/nallibokka-logo.png" alt="" className="h-10 w-10 shrink-0 object-contain sm:h-13 sm:w-13" />
+        <Link to="/" className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2.5" aria-label={`ZepionMart ${t('Home')}`}>
+          {/* <img src="/zm-logo.png" alt="" className="h-10 w-10 shrink-0 object-contain sm:h-13 sm:w-13" /> */}
           <span className="min-w-0 leading-tight">
-            <span className="block truncate text-[18px] font-bold tracking-[-.04em] text-[var(--brand-primary)] sm:text-[22px]">NalliBokka</span>
-            <span className="block truncate text-[8px] font-semibold tracking-[.04em] text-[var(--text-secondary)] sm:text-[9px] sm:tracking-[.08em]">Mana oori angadi</span>
+            <img src="/zepionmart-logo.png" alt="ZepionMart" className="h-10 w-[130px] object-contain object-left sm:h-10 sm:w-[2000px]" />
+            {/* <span className="block truncate text-[8px] font-semibold tracking-[.04em] text-[var(--text-secondary)] sm:text-[9px] sm:tracking-[.08em]">Mana oori angadi</span> */}
           </span>
         </Link>
 
@@ -80,7 +80,7 @@ export default function Header({ cartCount, onOpenCart, onChooseStore, onLogin, 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           {/* Notification bell */}
           {user && <div ref={notificationMenuRef} className="relative">
-            <button type="button" aria-label={`${t(notificationsOpen ? 'Close notifications' : 'Open notifications')}${unreadCount ? `, ${unreadCount} ${t('unread notifications')}` : ''}`} aria-expanded={notificationsOpen} aria-controls="customer-notifications-panel" aria-haspopup="dialog" onClick={() => { setNotificationActionError(''); setOpenNotificationsForUser((openUserId) => openUserId === user._id ? null : user._id) }} className={`relative grid h-10 w-10 shrink-0 place-items-center rounded-full border transition ${notificationsOpen ? 'border-[var(--brand-secondary)] bg-[var(--brand-primary-soft)] text-[var(--brand-primary)] shadow-sm' : 'border-[#e7e3d9] text-[var(--text-secondary)] hover:bg-[var(--brand-primary-soft)]'}`}>
+            <button type="button" aria-label={`${t(notificationsOpen ? 'Close notifications' : 'Open notifications')}${unreadCount ? `, ${unreadCount} ${t('unread notifications')}` : ''}`} aria-expanded={notificationsOpen} aria-controls="customer-notifications-panel" aria-haspopup="dialog" onClick={() => { setNotificationActionError(''); setOpenNotificationsForUser((openUserId) => openUserId === user._id ? null : user._id) }} className={`relative grid h-10 w-10 shrink-0 place-items-center rounded-full border transition ${notificationsOpen ? 'border-[var(--brand-primary)] bg-[var(--brand-primary-soft)] text-[var(--brand-primary)] shadow-sm' : 'border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--brand-primary-soft)]'}`}>
               <Bell size={18} className={notificationsOpen ? 'scale-110 transition-transform' : 'transition-transform'} />
               {unreadCount > 0 && <span className="absolute -right-1 -top-1 grid min-h-4 min-w-4 place-items-center rounded-full bg-[var(--brand-primary)] px-1 text-[9px] font-bold text-white">{unreadCount > 99 ? '99+' : unreadCount}</span>}
             </button>
@@ -113,8 +113,8 @@ export default function Header({ cartCount, onOpenCart, onChooseStore, onLogin, 
           </div>}
 
           {/* Store selector pill */}
-          <button onClick={onChooseStore} aria-label={t('Choose store')} className="flex h-9 w-[108px] min-w-0 items-center gap-1 rounded-full border border-[#b8d7c2] bg-[#e7f3e9] px-2 text-left sm:w-auto sm:max-w-[220px] sm:gap-2 sm:px-3">
-            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#d3e9d8] text-[var(--brand-primary)] sm:h-6 sm:w-6"><MapPin size={12} strokeWidth={2.2} /></span>
+          <button onClick={onChooseStore} aria-label={t('Choose store')} className="flex h-9 w-[108px] min-w-0 items-center gap-1 rounded-full border border-[var(--brand-primary)]/20 bg-[var(--brand-primary-soft)] px-2 text-left sm:w-auto sm:max-w-[220px] sm:gap-2 sm:px-3">
+            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--brand-primary)] text-white sm:h-6 sm:w-6"><MapPin size={12} strokeWidth={2.2} /></span>
             <span className="flex min-w-0 flex-1 items-center gap-0.5 text-[11px] font-semibold text-[var(--brand-primary)] sm:text-sm"><span className="min-w-0 flex-1 truncate">{selectedStore?.location ? capitalizeFirstLetter(selectedStore.location) : t('Choose store')}</span><ChevronDown size={12} className="shrink-0" /></span>
           </button>
 
@@ -130,7 +130,7 @@ export default function Header({ cartCount, onOpenCart, onChooseStore, onLogin, 
           <button disabled={selectedStore?.isOpen === false} onClick={onOpenCart} aria-label={t('Open basket')} className="ml-0 hidden h-10 shrink-0 items-center gap-2 rounded-full border border-[var(--border-default)] bg-white px-3 text-xs font-semibold text-[var(--text-primary)] transition hover:border-[var(--brand-primary)] hover:bg-[var(--brand-primary-soft)] disabled:cursor-not-allowed disabled:opacity-40 sm:flex sm:px-3.5 md:ml-0">
             <ShoppingBasket size={17} strokeWidth={1.7} />
             <span className="hidden sm:inline">{t('Basket')}</span>
-            <span className="grid min-w-5 place-items-center rounded-full bg-[#f2e0dc] px-1 text-[10px] font-semibold text-[var(--brand-primary)]">{cartCount}</span>
+            <span className="grid min-w-5 place-items-center rounded-full bg-[var(--brand-accent)] px-1 text-[10px] font-bold text-[var(--text-primary)]">{cartCount}</span>
           </button>
         </div>
       </div>

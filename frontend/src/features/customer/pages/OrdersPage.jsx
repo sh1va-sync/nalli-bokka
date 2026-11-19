@@ -39,8 +39,8 @@ function OrderProgress({ status, orderType = 'delivery', statusHistory = [], cre
     <h2 className="mb-5 text-lg font-extrabold tracking-tight text-[var(--text-primary)] sm:text-2xl">{t('Order progress')}</h2>
     <div className="grid grid-cols-4">
       {stages.map((stage, index) => <div key={stage} className="relative flex flex-col items-center text-center">
-        {index < stages.length - 1 && <span className={`absolute left-1/2 top-[18px] h-[3px] w-full ${index < activeIndex ? 'bg-[#8bc5a2]' : 'bg-[var(--border-default)]'}`} />}
-        <span className={`relative z-10 grid h-9 w-9 place-items-center rounded-full border-2 sm:h-11 sm:w-11 ${index <= activeIndex ? 'border-[#176149] bg-[#176149] text-white' : 'border-[#c9dfce] bg-white text-transparent'}`}>{index <= activeIndex && <Check size={19} strokeWidth={2.5} />}</span>
+        {index < stages.length - 1 && <span className={`absolute left-1/2 top-[18px] h-[3px] w-full ${index < activeIndex ? 'bg-[var(--brand-primary)]' : 'bg-[var(--border-default)]'}`} />}
+        <span className={`relative z-10 grid h-9 w-9 place-items-center rounded-full border-2 sm:h-11 sm:w-11 ${index <= activeIndex ? 'border-[var(--brand-primary)] bg-[var(--brand-primary)] text-white' : 'border-[var(--border-default)] bg-white text-transparent'}`}>{index <= activeIndex && <Check size={19} strokeWidth={2.5} />}</span>
         <span className={`mt-2 px-0.5 text-[9px] leading-4 sm:text-sm ${index <= activeIndex ? 'font-bold text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>{t(stage)}</span>
         {index <= activeIndex && formatStageDate(stage) && <time className="mt-1 px-0.5 text-[8px] leading-3 text-[var(--text-secondary)] sm:text-[10px]">{formatStageDate(stage)}</time>}
       </div>)}
@@ -193,7 +193,7 @@ export default function OrdersPage() {
         key: payment.keyId,
         amount: payment.amount,
         currency: payment.currency,
-        name: 'NalliBokka',
+        name: 'ZepionMart',
         description: `Order ${order._id}`,
         order_id: payment.razorpayOrderId,
         theme: { color: 'var(--brand-primary)' },
@@ -221,11 +221,11 @@ export default function OrdersPage() {
     <div className="mx-auto max-w-6xl px-3.5 py-4 sm:px-6 sm:py-8 lg:px-8">
       <button type="button" onClick={() => setSearchParams({})} className="inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-bold text-[var(--brand-primary)] shadow-sm transition hover:bg-[var(--brand-primary-soft)]"><ArrowLeft size={17} />{t('All orders')}</button>
       {detailLoading ? <p className="mt-8 text-sm text-slate-500">{t('Loading your order…')}</p> : detailError ? <p role="alert" className="mt-5 rounded-xl bg-rose-50 p-4 text-sm text-rose-800">{t(getErrorMessage(detailError))}</p> : order && <>
-        <section className="relative isolate mt-4 min-h-[205px] overflow-hidden rounded-[26px] border border-[#e2eee4] bg-gradient-to-r from-[#edf6ee] via-[#e9f4eb] to-[#e0efe2] px-5 py-5 sm:min-h-[260px] sm:rounded-[30px] sm:px-8 sm:py-7">
+        <section className="relative isolate mt-4 min-h-[205px] overflow-hidden rounded-[26px] border border-[var(--border-default)] bg-gradient-to-r from-[var(--brand-primary-soft)] via-white to-[#FFF7D6] px-5 py-5 sm:min-h-[260px] sm:rounded-[30px] sm:px-8 sm:py-7">
           <img src="/hero/green-market.svg" alt="" className="pointer-events-none absolute -right-12 bottom-0 z-0 h-[92%] w-[60%] object-contain object-right-bottom opacity-70 sm:right-0 sm:h-full sm:w-[47%]" />
           <div className="relative z-10 max-w-[66%] sm:max-w-[62%]">
-            <p className="inline-flex rounded-full border border-[#c7e0cc] bg-white/55 px-3 py-1 text-xs font-extrabold text-[var(--text-primary)] sm:text-base">Order #{orderIdLabel}</p>
-            <h1 className="mt-3 text-[26px] font-black leading-[1.08] tracking-tight text-[#103c30] sm:mt-4 sm:text-4xl">{orderHeadline}</h1>
+            <p className="inline-flex rounded-full border border-[var(--border-default)] bg-white/55 px-3 py-1 text-xs font-extrabold text-[var(--text-primary)] sm:text-base">Order #{orderIdLabel}</p>
+            <h1 className="mt-3 text-[26px] font-black leading-[1.08] tracking-tight text-[var(--text-primary)] sm:mt-4 sm:text-4xl">{orderHeadline}</h1>
             <p className="mt-2 max-w-md text-sm leading-5 text-[var(--text-secondary)] sm:mt-3 sm:text-lg sm:leading-7">{orderDescription}</p>
             <p className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-[var(--text-secondary)] sm:mt-6 sm:text-base"><CalendarDays size={17} className="shrink-0 text-[var(--brand-primary)]" />{orderDate}</p>
           </div>
@@ -250,7 +250,7 @@ export default function OrdersPage() {
             {reorderResult.skippedItems?.length > 0 && <ul className="mt-2 list-inside list-disc">{reorderResult.skippedItems.map((item, index) => <li key={`${item.productName}-${index}`}>{t(item.productName)}: {t(item.reason)}</li>)}</ul>}
             {reorderResult.addedItems > 0 && <Link to="/cart" className="mt-2 inline-flex font-bold underline">{t('View cart')} <ArrowRight size={14} className="ml-1" /></Link>}
           </div>}
-          <div className="rounded-[22px] border border-[var(--border-default)] bg-white p-4 shadow-[0_8px_24px_-22px_rgba(27,61,44,0.3)] sm:p-6">
+          <div className="rounded-[22px] border border-[var(--border-default)] bg-white p-4           shadow-[0_8px_24px_-22px_rgba(13,71,161,.22)] sm:p-6">
             <div className="divide-y divide-[var(--border-default)]">
               {order.items?.map((item, index) => {
                 const product = typeof item.productId === 'object' ? item.productId : null
@@ -278,7 +278,7 @@ export default function OrdersPage() {
               <div className="flex justify-between gap-4 text-[var(--text-secondary)]"><span>{t('Items total')}</span><span className="font-semibold text-[var(--text-primary)]">{formatPrice(order.totalAmount)}</span></div>
               <div className="flex items-center justify-between gap-4 rounded-2xl bg-[var(--brand-primary-soft)] px-3.5 py-3 sm:px-4">
                 <div><p className="font-extrabold text-[var(--text-primary)]">{t(order.paymentStatus === 'paid' ? 'Total paid' : ['refund_pending', 'refunded', 'refund_failed'].includes(order.paymentStatus) ? 'Refund status' : 'Order total')}</p><p className="mt-0.5 text-xs capitalize text-[var(--text-secondary)]">{t(order.paymentStatus.replaceAll('_', ' '))}</p></div>
-                <span className="text-xl font-black text-[#103c30] sm:text-2xl">{formatPrice(order.totalAmount)}</span>
+                <span className="text-xl font-black text-[var(--text-primary)] sm:text-2xl">{formatPrice(order.totalAmount)}</span>
               </div>
             </div>
             {order.paymentStatus === 'paid' && <button type="button" onClick={() => downloadInvoice(order)} disabled={Boolean(downloadingInvoiceId)} className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-xs font-semibold text-[var(--brand-primary)] transition hover:bg-[var(--brand-primary-soft)] disabled:cursor-wait disabled:opacity-50"><ArrowDownToLine size={16} />{t(downloadingInvoiceId === order._id ? 'Preparing invoice…' : 'Download invoice')}</button>}
@@ -321,7 +321,7 @@ export default function OrdersPage() {
 
   return <>
     <div className="mx-auto max-w-5xl px-4 py-5 sm:px-6 sm:py-9 lg:px-8">
-    <section className="relative isolate overflow-hidden rounded-[24px] border border-[#e6e9df] bg-gradient-to-r from-[#f7f8f2] via-[#f2f6ee] to-[#e6f0e5] px-5 py-6 sm:rounded-[30px] sm:px-9 sm:py-8">
+    <section className="relative isolate overflow-hidden rounded-[24px] border border-[var(--border-default)] bg-gradient-to-r from-[var(--brand-primary-soft)] via-white to-[#FFF7D6] px-5 py-6 sm:rounded-[30px] sm:px-9 sm:py-8">
       <img src="/categories/meat.png" alt="" className="pointer-events-none absolute right-0 top-0 z-0 h-full w-[45%] object-cover opacity-25 [mask-image:linear-gradient(to_right,transparent_0%,black_55%)] sm:w-[38%]" />
       <div className="relative z-10">
         <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[var(--brand-primary)]">{t('Made fresh, delivered with care')}</p>
@@ -339,7 +339,7 @@ export default function OrdersPage() {
         ? `${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 1 }).format(itemQuantity)} kg`
         : `${orderItems.length} ${t(orderItems.length === 1 ? 'item' : 'items')}`
       const paymentLabel = item.paymentStatus === 'paid' ? t('Paid') : t(item.paymentStatus.replaceAll('_', ' '))
-      return <article key={item._id} className="rounded-[22px] border border-[var(--border-default)] bg-white p-4 shadow-[0_8px_24px_-22px_rgba(27,55,39,.45)] transition hover:border-[#cbdccf] hover:shadow-[0_12px_30px_-22px_rgba(27,55,39,.5)] sm:rounded-[26px] sm:p-6">
+      return <article key={item._id} className="rounded-[22px] border border-[var(--border-default)] bg-white p-4 shadow-[0_8px_24px_-22px_rgba(13,71,161,.20)] transition hover:border-[var(--brand-primary)] hover:shadow-[0_12px_30px_-22px_rgba(13,71,161,.24)] sm:rounded-[26px] sm:p-6">
       <button type="button" onClick={() => setSearchParams({ order: item._id })} className="order-card-trigger block w-full text-left">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -355,7 +355,7 @@ export default function OrdersPage() {
               const imageUrl = orderItem.imageUrl || product?.imageUrl || getCategoryPhoto(orderItem.productType || product?.productType || '')
               return <img key={`${orderItem.productName}-${index}`} src={imageUrl} alt="" loading="lazy" className="h-[58px] w-[58px] rounded-xl object-cover sm:h-[72px] sm:w-[72px]" />
             })}
-            {orderItems.length > 3 && <span className="grid h-[58px] w-[48px] place-items-center rounded-xl bg-[#f3f5ef] text-sm font-semibold text-[var(--text-secondary)] sm:h-[72px] sm:w-[58px]">+{orderItems.length - 3}</span>}
+            {orderItems.length > 3 && <span className="grid h-[58px] w-[48px] place-items-center rounded-xl bg-[var(--bg-app)] text-sm font-semibold text-[var(--text-secondary)] sm:h-[72px] sm:w-[58px]">+{orderItems.length - 3}</span>}
           </div>
           <div className={`flex min-w-0 items-center gap-3 ${orderItems.length > 3 ? '' : 'flex-1'}`}>
             <div className="min-w-0 flex-1">
