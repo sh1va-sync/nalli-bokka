@@ -1,8 +1,9 @@
+import { settleOptimistic } from './optimistic.js'
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 
-const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL
+const configuredBaseUrl = import.meta.env?.VITE_API_BASE_URL
 const usesLocalApi = /^https?:\/\/(localhost|127\.0\.0\.1):3000\/api\/?$/.test(configuredBaseUrl || '')
-const baseUrl = ((import.meta.env.DEV && usesLocalApi) ? '/api' : configuredBaseUrl || '/api').replace(/\/$/, '')
+export const baseUrl = ((import.meta.env?.DEV && usesLocalApi) ? '/api' : configuredBaseUrl || '/api').replace(/\/$/, '')
 
 function updateCartTotal(cart) {
   const items = cart.data?.items
@@ -16,9 +17,7 @@ function updateCartTotal(cart) {
 function updateCachedQueries(dispatch, getState, endpointName, update) {
   const queries = Object.values(getState().api.queries || {})
     .filter((query) => query.endpointName === endpointName)
-  for (const query of queries) {
-    dispatch(api.util.updateQueryData(endpointName, query.originalArgs, update))
-  }
+  return queries.map((query) => dispatch(api.util.updateQueryData(endpointName, query.originalArgs, update)))
 }
 
 function addOptimisticCartItem(cart, body, product) {
@@ -275,13 +274,14 @@ export const api = createApi({
     clearCart: builder.mutation({
       query: () => ({ url: '/cart/items', method: 'DELETE' }),
       invalidatesTags: ['Cart'],
-      onQueryStarted(_arg, { dispatch }) {
-        dispatch(api.util.updateQueryData('getCart', undefined, (cart) => {
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        const patch = dispatch(api.util.updateQueryData('getCart', undefined, (cart) => {
           if (!cart.data) return
           cart.data.items = []
           cart.data.total = 0
           cart.data.hasUnavailableItems = false
         }))
+        await settleOptimistic(queryFulfilled, [patch])
       },
     }),
     createCheckoutPayment: builder.mutation({
@@ -384,13 +384,15 @@ export const api = createApi({
     setStoreProductStock: builder.mutation({
       query: ({ productId, inStock }) => ({ url: `/store/products/${productId}/stock`, method: 'PATCH', body: { inStock } }),
       invalidatesTags: ['StoreProducts', 'Products', 'StoreDashboard', 'StoreAudit'],
-      onQueryStarted({ productId, inStock }, { dispatch, getState }) {
+      async onQueryStarted({ productId, inStock }, { dispatch, getState, queryFulfilled }) {
+        const patches = []
         for (const endpointName of ['getStoreProducts', 'getProducts']) {
-          updateCachedQueries(dispatch, getState, endpointName, (result) => {
+          patches.push(...updateCachedQueries(dispatch, getState, endpointName, (result) => {
             const product = result.data?.find(({ _id }) => _id === productId)
             if (product) product.inStock = inStock
-          })
+          }))
         }
+        await settleOptimistic(queryFulfilled, patches)
       },
     }),
     deleteStoreProduct: builder.mutation({
@@ -410,11 +412,12 @@ export const api = createApi({
     updateStoreOrderStatus: builder.mutation({
       query: ({ orderId, orderStatus }) => ({ url: `/store/orders/${orderId}/status`, method: 'PATCH', body: { orderStatus } }),
       invalidatesTags: ['StoreOrders', 'StoreDashboard', 'StoreTransactions', 'StoreAudit'],
-      onQueryStarted({ orderId, orderStatus }, { dispatch, getState }) {
-        updateCachedQueries(dispatch, getState, 'getStoreOrders', (result) => {
+      async onQueryStarted({ orderId, orderStatus }, { dispatch, getState, queryFulfilled }) {
+        const patches = updateCachedQueries(dispatch, getState, 'getStoreOrders', (result) => {
           const order = result.data?.find(({ _id }) => _id === orderId)
           if (order) order.orderStatus = orderStatus
         })
+        await settleOptimistic(queryFulfilled, patches)
       },
     }),
     refundStoreOrder: builder.mutation({
@@ -448,17 +451,19 @@ export const api = createApi({
         body: { isOpen },
       }),
       invalidatesTags: ['StoreMe', 'Stores', 'StoreDashboard', 'StoreAudit'],
-      onQueryStarted(isOpen, { dispatch, getState }) {
-        dispatch(api.util.updateQueryData('getStoreMe', undefined, (result) => {
+      async onQueryStarted(isOpen, { dispatch, getState, queryFulfilled }) {
+        const patches = []
+        patches.push(dispatch(api.util.updateQueryData('getStoreMe', undefined, (result) => {
           if (result.account) result.account.isOpen = isOpen
-        }))
-        dispatch(api.util.updateQueryData('getMe', undefined, (result) => {
+        })))
+        patches.push(dispatch(api.util.updateQueryData('getMe', undefined, (result) => {
           if (result.account) result.account.isOpen = isOpen
-        }))
-        updateCachedQueries(dispatch, getState, 'getStores', (result) => {
+        })))
+        patches.push(...updateCachedQueries(dispatch, getState, 'getStores', (result) => {
           const store = result.data?.find(({ _id }) => _id === getState().storeAuth.store?.id)
           if (store) store.isOpen = isOpen
-        })
+        }))
+        await settleOptimistic(queryFulfilled, patches)
       },
     }),
     updateStoreHours: builder.mutation({

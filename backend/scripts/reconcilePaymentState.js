@@ -6,12 +6,17 @@ import Transaction from '../src/models/Transaction.js';
 import getRazorpayClient from '../src/services/razorpay.js';
 import {
   applyRefundResult,
+  dispatchRefund,
   completeCheckoutAttempt,
   settleTransaction
 } from '../src/controllers/paymentController.js';
 
 const minimumAgeMinutes = Number(process.env.RECONCILE_MIN_AGE_MINUTES || 10);
 const batchSize = 100;
+
+export function reconciliationRecords(model, filter) {
+  return model.find(filter).sort({ _id: 1 }).cursor({ batchSize });
+}
 
 if (!Number.isInteger(minimumAgeMinutes) || minimumAgeMinutes < 1 || minimumAgeMinutes > 1440) {
   throw new Error('RECONCILE_MIN_AGE_MINUTES must be an integer between 1 and 1440');
@@ -81,15 +86,22 @@ async function findPendingRefund(transaction, razorpay) {
     return razorpay.refunds.fetch(transaction.refundId);
   }
   if (!transaction.paymentId) return null;
-  const refundsResponse = await razorpay.payments.fetchMultipleRefund(transaction.paymentId, { count: 100 });
-  return (refundsResponse.items || []).find(refund => (
-    refund.notes?.refundRequestId === transaction.refundRequestId
-  )) || null;
+  for (let skip = 0; ; skip += 100) {
+    const response = await razorpay.payments.fetchMultipleRefund(transaction.paymentId, { count: 100, skip });
+    const items = response.items || [];
+    const match = items.find(refund => refund.notes?.refundRequestId === transaction.refundRequestId);
+    if (match) return match;
+    if (items.length < 100) return null;
+  }
 }
 
 export async function reconcileRefund(transaction, razorpay) {
   const refund = await findPendingRefund(transaction, razorpay);
-  if (!refund) return 'pending';
+  if (!refund) {
+    if (transaction.refundIdempotent) return dispatchRefund(transaction, razorpay);
+    if (transaction.paymentId) throw new Error('Legacy refund has no provider record; operator investigation required');
+    return 'pending';
+  }
   if (
     refund.payment_id !== transaction.paymentId
     || refund.amount !== Math.round(transaction.amount * 100)
@@ -117,29 +129,28 @@ async function run() {
   const before = new Date(Date.now() - minimumAgeMinutes * 60 * 1000);
   const counters = { paymentPaid: 0, paymentFailed: 0, refundProcessed: 0, refundFailed: 0, stillPending: 0, errors: 0 };
 
-  const pendingAttempts = await CheckoutAttempt.find({ status: 'pending', createdAt: { $lte: before } })
-    .sort({ createdAt: 1 })
-    .limit(batchSize);
-  const createdTransactions = await Transaction.find({ status: 'created', timestamp: { $lte: before } })
-    .sort({ timestamp: 1 })
-    .limit(batchSize);
-  const pendingRefunds = await Transaction.find({
+  const pendingAttempts = reconciliationRecords(CheckoutAttempt, { status: { $in: ['pending', 'failed'] }, createdAt: { $lte: before } });
+  const createdTransactions = reconciliationRecords(Transaction, { status: { $in: ['created', 'failed'] }, timestamp: { $lte: before } });
+  const pendingRefunds = reconciliationRecords(Transaction, {
     refundStatus: 'pending',
     $or: [
       { refundRequestedAt: { $lte: before } },
       { refundRequestedAt: { $exists: false }, timestamp: { $lte: before } }
     ]
-  })
-    .sort({ refundRequestedAt: 1 })
-    .limit(batchSize);
+  });
+  let scanned = 0;
 
   for (const [type, records] of [['checkoutAttempt', pendingAttempts], ['transaction', createdTransactions]]) {
-    for (const record of records) {
+    for await (const record of records) {
+      scanned += 1;
       try {
         const result = await reconcilePayment(record, type, razorpay);
         if (result === 'paid') counters.paymentPaid += 1;
         else if (result === 'failed') counters.paymentFailed += 1;
-        else counters.stillPending += 1;
+        else {
+          counters.stillPending += 1;
+          console.warn(JSON.stringify({ event: 'payment.reconciliation.pending', recordId: String(record._id), recordType: type }));
+        }
       } catch (error) {
         counters.errors += 1;
         console.error(JSON.stringify({
@@ -154,12 +165,16 @@ async function run() {
     }
   }
 
-  for (const transaction of pendingRefunds) {
+  for await (const transaction of pendingRefunds) {
+    scanned += 1;
     try {
       const result = await reconcileRefund(transaction, razorpay);
       if (result === 'processed') counters.refundProcessed += 1;
       else if (result === 'failed') counters.refundFailed += 1;
-      else counters.stillPending += 1;
+      else {
+        counters.stillPending += 1;
+        console.warn(JSON.stringify({ event: 'refund.reconciliation.pending', transactionId: String(transaction._id) }));
+      }
     } catch (error) {
       counters.errors += 1;
       console.error(JSON.stringify({
@@ -176,7 +191,7 @@ async function run() {
     timestamp: new Date().toISOString(),
     level: counters.errors ? 'error' : 'info',
     event: 'payment.reconciliation.completed',
-    scanned: pendingAttempts.length + createdTransactions.length + pendingRefunds.length,
+    scanned,
     minimumAgeMinutes,
     ...counters
   }));

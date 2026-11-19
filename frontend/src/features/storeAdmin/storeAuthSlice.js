@@ -4,7 +4,7 @@ import { readStoredJson } from '../../app/persistence.js'
 const storeAuthSlice = createSlice({
   name: 'storeAuth',
   initialState: {
-    token: localStorage.getItem('nalli-store-token') || null,
+    token: sessionStorage.getItem('nalli-store-token') || null,
     store: readStoredJson('nalli-store-account'),
   },
   reducers: {

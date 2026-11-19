@@ -34,6 +34,7 @@ function App() {
     cartCount,
     selectedStore,
     startupRequestsLoading,
+    storesUnavailable,
     selectedStoreIsClosed,
     storeOpen,
     setStoreOpen,
@@ -93,6 +94,8 @@ function App() {
       </Routes>
     </Suspense>
   </div>
+
+  if (storesUnavailable) return <StorePicker open onClose={() => {}} />
 
   return (
     <div id="customer-app" className="min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
@@ -184,7 +187,7 @@ function App() {
       <div className="pointer-events-none fixed right-3 top-3 z-[80] max-h-[calc(100vh-1.5rem)] w-[min(24rem,calc(100vw-1.5rem))] space-y-3 overflow-y-auto sm:right-5 sm:top-5">
         {toasts.map((toast) => <Toast key={toast.id} toast={toast} onDismiss={dismissToast} />)}
       </div>
-      <StorePicker open={storeOpen || selectedStoreIsClosed} onClose={() => setStoreOpen(false)} />
+      <StorePicker open={storeOpen || selectedStoreIsClosed || storesUnavailable} onClose={() => setStoreOpen(false)} />
       <LoginDialog open={loginOpen || Boolean(sessionNotice)} reason={sessionNotice || loginReason} onClose={() => { setLoginOpen(false); dispatch(clearSessionNotice()); if (!token) setLoginReturnTo('') }} onSignedIn={handleSignedIn} />
       <CartDrawer
         open={cartOpen && !selectedStoreIsClosed && location.pathname !== '/cart'}

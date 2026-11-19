@@ -1,0 +1,456 @@
+
+> express-mvc-api@1.0.0 test
+> node --test
+
+TAP version 13
+# {"timestamp":"2026-11-07T09:08:20.279Z","level":"info","event":"http.request.completed","requestId":"cfcaf10f-5d58-4111-a810-064e27a58df2","method":"GET","path":"/api/health","statusCode":200,"durationMs":19.86}
+# Subtest: health endpoint responds without MongoDB
+ok 1 - health endpoint responds without MongoDB
+  ---
+  duration_ms: 129.6712
+  ...
+# {"timestamp":"2026-11-07T09:08:20.331Z","level":"error","event":"http.request.completed","requestId":"22ed327a-ee42-47ab-be48-d32d8a0a8089","method":"GET","path":"/api/health/ready","statusCode":503,"durationMs":2.33}
+# Subtest: readiness endpoint reports unavailable when MongoDB is disconnected
+ok 2 - readiness endpoint reports unavailable when MongoDB is disconnected
+  ---
+  duration_ms: 13.9674
+  ...
+# Subtest: HTTP requests emit structured console logs without query strings
+ok 3 - HTTP requests emit structured console logs without query strings
+  ---
+  duration_ms: 8.4794
+  ...
+# {"timestamp":"2026-11-07T09:08:20.368Z","level":"warn","event":"http.request.completed","requestId":"927028a8-fd72-4208-be9e-303c05e1fb7e","method":"GET","path":"/api/products","statusCode":400,"durationMs":21.71}
+# {"timestamp":"2026-11-07T09:08:20.390Z","level":"warn","event":"http.request.completed","requestId":"cdf0b291-cab8-4ad4-b5a0-b548106f95d2","method":"GET","path":"/api/stores/not-an-object-id","statusCode":400,"durationMs":5.72}
+# Subtest: invalid query and route parameters return structured validation errors
+ok 4 - invalid query and route parameters return structured validation errors
+  ---
+  duration_ms: 49.8643
+  ...
+# {"timestamp":"2026-11-07T09:08:20.400Z","level":"warn","event":"http.request.completed","requestId":"4c60a19c-a03b-44bd-b2ca-de51f6a5f3d6","method":"GET","path":"/api/cart","statusCode":401,"durationMs":2.71}
+# {"timestamp":"2026-11-07T09:08:20.436Z","level":"warn","event":"http.request.completed","requestId":"79e9e823-fa2e-483d-a379-083695f4b435","method":"GET","path":"/api/cart","statusCode":403,"durationMs":7.56}
+# Subtest: authentication is required and roles are enforced
+ok 5 - authentication is required and roles are enforced
+  ---
+  duration_ms: 45.5203
+  ...
+# {"timestamp":"2026-11-07T09:08:20.444Z","level":"warn","event":"http.request.completed","requestId":"5ea40b4b-6fa7-4baa-9abb-2d80930c313a","method":"GET","path":"/api/users/me/notifications","statusCode":401,"durationMs":2.08}
+# Subtest: customer notification endpoints require a customer token
+ok 6 - customer notification endpoints require a customer token
+  ---
+  duration_ms: 7.6209
+  ...
+# {"timestamp":"2026-11-07T09:08:20.462Z","level":"warn","event":"http.request.completed","requestId":"664891bf-adb1-4e6d-b08f-e34135af2a0a","method":"GET","path":"/api/orders/507f1f77bcf86cd799439011/invoice","statusCode":401,"durationMs":10.95}
+# {"timestamp":"2026-11-07T09:08:20.472Z","level":"warn","event":"http.request.completed","requestId":"d868fa14-8c8d-4c10-b4fd-ae089da292cf","method":"GET","path":"/api/store/orders/507f1f77bcf86cd799439011/invoice","statusCode":401,"durationMs":3.15}
+# Subtest: invoice downloads require an authenticated customer or store
+ok 7 - invoice downloads require an authenticated customer or store
+  ---
+  duration_ms: 27.1915
+  ...
+# {"timestamp":"2026-11-07T09:08:20.480Z","level":"warn","event":"http.request.completed","requestId":"6310b15e-0096-4e43-a3e6-341f2412339d","method":"GET","path":"/api/store/product-categories","statusCode":401,"durationMs":2.83}
+# {"timestamp":"2026-11-07T09:08:20.534Z","level":"warn","event":"http.request.completed","requestId":"c6e52e14-fc03-427e-8c8c-d9f19fc4ff66","method":"POST","path":"/api/store/product-categories","statusCode":401,"durationMs":43.95}
+# {"timestamp":"2026-11-07T09:08:20.538Z","level":"warn","event":"http.request.completed","requestId":"72749c41-aed1-4918-b2dc-d865d7dd1a56","method":"DELETE","path":"/api/store/product-categories/dry%20fruits","statusCode":401,"durationMs":1.93}
+# Subtest: product category management endpoints require a store token
+ok 8 - product category management endpoints require a store token
+  ---
+  duration_ms: 67.1473
+  ...
+# {"timestamp":"2026-11-07T09:08:20.629Z","level":"info","event":"http.request.completed","requestId":"ffdbd28d-64a3-4c20-9fe1-2300947af95a","method":"GET","path":"/api/orders/507f1f77bcf86cd799439011/invoice","statusCode":200,"durationMs":82.02}
+# Subtest: customer invoice download is scoped to the authenticated user
+ok 9 - customer invoice download is scoped to the authenticated user
+  ---
+  duration_ms: 101.2877
+  ...
+# {"timestamp":"2026-11-07T09:08:20.658Z","level":"info","event":"http.request.completed","requestId":"a7b6df86-4e7b-4082-950b-fcb2fb4805c4","method":"GET","path":"/api/store/orders/507f1f77bcf86cd799439011/invoice","statusCode":200,"durationMs":7.42}
+# Subtest: store invoice download is scoped to the authenticated store
+ok 10 - store invoice download is scoped to the authenticated store
+  ---
+  duration_ms: 17.4108
+  ...
+# Subtest: OTP request schemas require an E.164 phone and a six-digit code
+ok 11 - OTP request schemas require an E.164 phone and a six-digit code
+  ---
+  duration_ms: 3.9798
+  ...
+# {"timestamp":"2026-11-07T09:08:20.683Z","level":"info","event":"http.request.completed","requestId":"f466a5af-55e2-4886-a64c-6c3800fcc511","method":"POST","path":"/api/auth/users/otp/send","statusCode":200,"durationMs":12.64}
+# Subtest: OTP send routes through Renflair and persists only a short-lived hash
+ok 12 - OTP send routes through Renflair and persists only a short-lived hash
+  ---
+  duration_ms: 21.6319
+  ...
+# {"timestamp":"2026-11-07T09:08:20.701Z","level":"error","event":"http.request.failed","requestId":"0bef3e42-1385-4eb6-a997-cec7925bcadf","method":"POST","path":"/api/auth/users/otp/send","statusCode":502,"message":"Renflair SMS provider did not confirm delivery","stack":"Error: Renflair SMS provider did not confirm delivery\\n    at Object.sendOtp (file:///C:/Users/shiva/OneDrive/Documents/Nalli%20bokka/backend/src/services/renflairSms.js:62:13)\\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\\n    at async sendUserOtp (file:///C:/Users/shiva/OneDrive/Documents/Nalli%20bokka/backend/src/controllers/authController.js:110:5)"}
+# {"timestamp":"2026-11-07T09:08:20.703Z","level":"error","event":"http.request.completed","requestId":"0bef3e42-1385-4eb6-a997-cec7925bcadf","method":"POST","path":"/api/auth/users/otp/send","statusCode":502,"durationMs":5.81}
+# Subtest: OTP send rejects provider failure and cleans up its challenge
+ok 13 - OTP send rejects provider failure and cleans up its challenge
+  ---
+  duration_ms: 18.2211
+  ...
+# {"timestamp":"2026-11-07T09:08:20.719Z","level":"info","event":"http.request.completed","requestId":"26f11a30-6538-4cfd-8665-302ed4f97e35","method":"POST","path":"/api/auth/users/verify","statusCode":200,"durationMs":7.11}
+# Subtest: valid OTP authenticates existing customers and consumes the challenge
+ok 14 - valid OTP authenticates existing customers and consumes the challenge
+  ---
+  duration_ms: 17.4688
+  ...
+# {"timestamp":"2026-11-07T09:08:20.739Z","level":"info","event":"http.request.completed","requestId":"b14aa6fc-ba74-4da6-9db1-d9d807174721","method":"POST","path":"/api/auth/users/verify","statusCode":200,"durationMs":10.67}
+# Subtest: valid OTP returns a registration token for first-time customers
+ok 15 - valid OTP returns a registration token for first-time customers
+  ---
+  duration_ms: 19.8887
+  ...
+# {"timestamp":"2026-11-07T09:08:20.750Z","level":"warn","event":"http.request.completed","requestId":"12818d93-0267-4d76-bdf8-6923ed2b13c8","method":"POST","path":"/api/auth/users/verify","statusCode":401,"durationMs":2.96}
+# Subtest: incorrect OTP returns unauthorized and increments the attempt count
+ok 16 - incorrect OTP returns unauthorized and increments the attempt count
+  ---
+  duration_ms: 9.8629
+  ...
+# {"timestamp":"2026-11-07T09:08:20.759Z","level":"warn","event":"http.request.completed","requestId":"95fefc33-6c65-4ae7-8807-7f82008f345d","method":"POST","path":"/api/auth/users/otp","statusCode":404,"durationMs":1.59}
+# {"timestamp":"2026-11-07T09:08:20.767Z","level":"warn","event":"http.request.completed","requestId":"042062d1-ae41-4074-af4e-1eb6a04a493a","method":"POST","path":"/api/auth/stores/login","statusCode":400,"durationMs":3.87}
+# Subtest: legacy OTP endpoint remains unavailable and store login validation is unchanged
+ok 17 - legacy OTP endpoint remains unavailable and store login validation is unchanged
+  ---
+  duration_ms: 16.8448
+  ...
+# Subtest: dashboard period boundaries must be supplied together in chronological order
+ok 18 - dashboard period boundaries must be supplied together in chronological order
+  ---
+  duration_ms: 3.6818
+  ...
+# Subtest: store transaction list validates investigation filters and sorting
+ok 19 - store transaction list validates investigation filters and sorting
+  ---
+  duration_ms: 3.154
+  ...
+# Subtest: store report exports require a type and paired date boundaries
+ok 20 - store report exports require a type and paired date boundaries
+  ---
+  duration_ms: 1.992
+  ...
+# Subtest: new customer registration requires the verification token and name
+ok 21 - new customer registration requires the verification token and name
+  ---
+  duration_ms: 2.3359
+  ...
+# {"timestamp":"2026-11-07T09:08:20.794Z","level":"warn","event":"http.request.completed","requestId":"00badb55-fd95-4b3c-9b2b-b34a53235e80","method":"POST","path":"/api/payments/razorpay/webhook","statusCode":400,"durationMs":4.57}
+# Subtest: Razorpay webhook requires its event ID after signature verification
+ok 22 - Razorpay webhook requires its event ID after signature verification
+  ---
+  duration_ms: 14.1868
+  ...
+# Subtest: product payloads no longer accept image URLs and keep pricing validation
+ok 23 - product payloads no longer accept image URLs and keep pricing validation
+  ---
+  duration_ms: 11.0428
+  ...
+# {"timestamp":"2026-11-07T09:08:20.817Z","level":"warn","event":"http.request.completed","requestId":"6c8364bb-1a8e-4ad2-a722-46c0cf2f24f5","method":"GET","path":"/api/not-a-route","statusCode":404,"durationMs":1.02}
+# Subtest: unknown API paths return 404
+ok 24 - unknown API paths return 404
+  ---
+  duration_ms: 19.0191
+  ...
+# Subtest: invoice PDF contains a valid PDF document with invoice metadata
+ok 25 - invoice PDF contains a valid PDF document with invoice metadata
+  ---
+  duration_ms: 186.6134
+  ...
+# Subtest: all twelve Mongoose models use their intended collections
+ok 26 - all twelve Mongoose models use their intended collections
+  ---
+  duration_ms: 4.6852
+  ...
+# Subtest: store audit events keep only action metadata and expire after one year
+ok 27 - store audit events keep only action metadata and expire after one year
+  ---
+  duration_ms: 32.0162
+  ...
+# Subtest: store password is excluded from normal queries and JSON serialization
+ok 28 - store password is excluded from normal queries and JSON serialization
+  ---
+  duration_ms: 4.4912
+  ...
+# Subtest: store contact numbers are optional and length bounded
+ok 29 - store contact numbers are optional and length bounded
+  ---
+  duration_ms: 9.8881
+  ...
+# Subtest: store provisioning captures every persisted store field and applies schema defaults
+ok 30 - store provisioning captures every persisted store field and applies schema defaults
+  ---
+  duration_ms: 4.0471
+  ...
+# Subtest: store provisioning rejects invalid operational fields before saving
+ok 31 - store provisioning rejects invalid operational fields before saving
+  ---
+  duration_ms: 1.0992
+  ...
+# Subtest: order notifications are user-scoped, unread by default, and unique per order status
+ok 32 - order notifications are user-scoped, unread by default, and unique per order status
+  ---
+  duration_ms: 3.6726
+  ...
+# Subtest: product validation enforces weight and pack pricing modes
+ok 33 - product validation enforces weight and pack pricing modes
+  ---
+  duration_ms: 41.2244
+  ...
+# Subtest: server recalculates weight, piece, and pack prices
+ok 34 - server recalculates weight, piece, and pack prices
+  ---
+  duration_ms: 1.8951
+  ...
+# Subtest: cart does not store a total and order total is derived from snapshot line prices
+ok 35 - cart does not store a total and order total is derived from snapshot line prices
+  ---
+  duration_ms: 14.1134
+  ...
+# Subtest: pickup slots are 30-minute future windows within store hours in India time
+ok 36 - pickup slots are 30-minute future windows within store hours in India time
+  ---
+  duration_ms: 2.8054
+  ...
+# Subtest: product multipart data parses JSON and validates uploaded image signatures
+ok 37 - product multipart data parses JSON and validates uploaded image signatures
+  ---
+  duration_ms: 4.7616
+  ...
+# Subtest: product multipart data rejects invalid JSON and spoofed image types
+ok 38 - product multipart data rejects invalid JSON and spoofed image types
+  ---
+  duration_ms: 0.7695
+  ...
+# Subtest: product creation requires an uploaded image file
+ok 39 - product creation requires an uploaded image file
+  ---
+  duration_ms: 0.6228
+  ...
+# Subtest: category image upload identifies missing Cloudinary settings without exposing values
+ok 40 - category image upload identifies missing Cloudinary settings without exposing values
+  ---
+  duration_ms: 4.7064
+  ...
+# {"timestamp":"2026-11-07T09:08:26.460Z","level":"warn","event":"http.request.completed","requestId":"28e32985-afc0-46c2-9a09-cdb0393f25a0","method":"POST","path":"/api/store/product-categories","statusCode":400,"durationMs":107.76}
+# {"timestamp":"2026-11-07T09:08:26.575Z","level":"info","event":"http.request.completed","requestId":"c4e5e0a9-7cf3-40ae-9cdd-6880b87ca4db","method":"POST","path":"/api/store/product-categories","statusCode":201,"durationMs":84.16}
+# {"timestamp":"2026-11-07T09:08:26.670Z","level":"info","event":"http.request.completed","requestId":"3c461b73-c8b6-46b8-805c-4fb1190ccc84","method":"POST","path":"/api/store/products","statusCode":201,"durationMs":77.65}
+# {"timestamp":"2026-11-07T09:08:26.709Z","level":"warn","event":"http.request.completed","requestId":"7ee3584d-0c8c-4100-ad6d-3b74847fb9d5","method":"DELETE","path":"/api/store/product-categories/pet%20supplies","statusCode":409,"durationMs":33.93}
+# {"timestamp":"2026-11-07T09:08:28.124Z","level":"warn","event":"http.request.completed","requestId":"549ab6f0-29e6-477f-8d78-120af5f566a3","method":"DELETE","path":"/api/store/product-categories/pet%20supplies","statusCode":404,"durationMs":11.24}
+# {"timestamp":"2026-11-07T09:08:28.164Z","level":"info","event":"http.request.completed","requestId":"f901c59d-9cb9-47e6-8928-b023d2c3c4e4","method":"POST","path":"/api/store/products","statusCode":201,"durationMs":33.53}
+# {"timestamp":"2026-11-07T09:08:28.200Z","level":"warn","event":"http.request.completed","requestId":"c6cf5b90-4269-4e45-bdf7-d30a0f354681","method":"DELETE","path":"/api/store/product-categories/meat","statusCode":409,"durationMs":31.83}
+# {"timestamp":"2026-11-07T09:08:28.226Z","level":"info","event":"http.request.completed","requestId":"2cdaaef1-067d-4954-baa2-81c583e87acf","method":"GET","path":"/api/store/products","statusCode":200,"durationMs":21.89}
+# {"timestamp":"2026-11-07T09:08:28.274Z","level":"info","event":"http.request.completed","requestId":"dd6b4ee5-2e0d-43a8-abc8-954ec25caf30","method":"PATCH","path":"/api/store/products/6aeeea8a9a181467c7800764/stock","statusCode":200,"durationMs":41.81}
+# {"timestamp":"2026-11-07T09:08:28.313Z","level":"info","event":"http.request.completed","requestId":"849922c9-bbd7-48ba-bb59-4c56f35df43e","method":"GET","path":"/api/products","statusCode":200,"durationMs":34.38}
+# {"timestamp":"2026-11-07T09:08:28.337Z","level":"info","event":"http.request.completed","requestId":"dccac04c-dd21-4447-9df9-b17c03824e5e","method":"GET","path":"/api/products/6aeeea8a9a181467c7800764","statusCode":200,"durationMs":19.58}
+# {"timestamp":"2026-11-07T09:08:28.350Z","level":"info","event":"http.request.completed","requestId":"d0b34a8f-524f-4b2d-8633-b2ea81853094","method":"GET","path":"/api/products/categories","statusCode":200,"durationMs":10.78}
+# {"timestamp":"2026-11-07T09:08:28.365Z","level":"info","event":"http.request.completed","requestId":"893c84cd-2439-4f17-982d-c58cce1a9693","method":"GET","path":"/api/products/categories","statusCode":200,"durationMs":9.94}
+# {"timestamp":"2026-11-07T09:08:28.414Z","level":"info","event":"http.request.completed","requestId":"8b17546d-8eb6-47e5-a17c-51015af0d974","method":"DELETE","path":"/api/store/product-categories/fruit","statusCode":200,"durationMs":45.25}
+# {"timestamp":"2026-11-07T09:08:28.439Z","level":"info","event":"http.request.completed","requestId":"45725b2f-640d-4ef7-8659-e857b00a80ae","method":"GET","path":"/api/store/product-categories","statusCode":200,"durationMs":22.5}
+# {"timestamp":"2026-11-07T09:08:28.447Z","level":"info","event":"http.request.completed","requestId":"26f15edd-b18f-457b-b542-23927c94e177","method":"GET","path":"/api/products/categories","statusCode":200,"durationMs":5.08}
+# {"timestamp":"2026-11-07T09:08:28.504Z","level":"info","event":"http.request.completed","requestId":"a352a3fb-df77-4cb5-887c-1f487ea89ed1","method":"POST","path":"/api/store/product-categories","statusCode":201,"durationMs":53.29}
+# {"timestamp":"2026-11-07T09:08:28.522Z","level":"info","event":"http.request.completed","requestId":"30209235-91e0-483c-8d98-269811b912fb","method":"GET","path":"/api/store/product-categories","statusCode":200,"durationMs":16.37}
+# {"timestamp":"2026-11-07T09:08:28.544Z","level":"warn","event":"http.request.completed","requestId":"717fa04b-0c14-406d-a12e-407c30afa1a0","method":"POST","path":"/api/store/product-categories","statusCode":409,"durationMs":17.41}
+# {"timestamp":"2026-11-07T09:08:30.312Z","level":"error","event":"cloudinary.product_image.delete.failed","errorType":"Error"}
+# {"timestamp":"2026-11-07T09:08:30.312Z","level":"error","event":"cloudinary.product_image.delete_after_product_removal.failed","publicId":"6aeeea899a181467c7800759/f9506467-01ba-4820-84f9-ee959847217a-2","message":"Could not remove the product image from Cloudinary."}
+# {"timestamp":"2026-11-07T09:08:30.313Z","level":"info","event":"http.request.completed","requestId":"1f8b00a7-7815-4047-bab0-b2ae128a1811","method":"DELETE","path":"/api/store/products/6aeeea8a9a181467c7800764","statusCode":204,"durationMs":1766.23}
+# {"timestamp":"2026-11-07T09:08:30.341Z","level":"info","event":"http.request.completed","requestId":"d280cedf-2990-4adc-8536-708205861059","method":"DELETE","path":"/api/store/product-categories/pet%20supplies","statusCode":200,"durationMs":26.41}
+# Subtest: store-created categories persist and support custom product pricing and inventory filters
+ok 41 - store-created categories persist and support custom product pricing and inventory filters
+  ---
+  duration_ms: 7654.2421
+  ...
+# {"timestamp":"2026-11-07T09:08:31.600Z","level":"info","event":"http.request.completed","requestId":"136f0cd9-c9bc-4569-ab0c-cd19ee23d16d","method":"GET","path":"/api/orders/6aeeea8f9a181467c78007a5","statusCode":200,"durationMs":25.99}
+# {"timestamp":"2026-11-07T09:08:31.632Z","level":"info","event":"http.request.completed","requestId":"229b5319-cec0-4475-b0cb-e3545e74e6fb","method":"DELETE","path":"/api/store/products/6aeeea8f9a181467c78007a3","statusCode":204,"durationMs":29.28}
+# {"timestamp":"2026-11-07T09:08:31.661Z","level":"info","event":"http.request.completed","requestId":"8c49d874-23ca-4c6d-ba51-09efc3a3bcd5","method":"GET","path":"/api/orders","statusCode":200,"durationMs":24.71}
+# {"timestamp":"2026-11-07T09:08:31.685Z","level":"info","event":"http.request.completed","requestId":"59640886-32a7-473e-835f-cbb4e1be0ac8","method":"GET","path":"/api/orders/6aeeea8f9a181467c78007a5","statusCode":200,"durationMs":20.97}
+# Subtest: deleted inventory products retain their image on historical customer orders
+ok 42 - deleted inventory products retain their image on historical customer orders
+  ---
+  duration_ms: 1327.2661
+  ...
+# {"timestamp":"2026-11-07T09:08:32.869Z","level":"warn","event":"http.request.completed","requestId":"28dab298-a3bc-4108-abeb-38cb63f99f6a","method":"PATCH","path":"/api/store/minimum-order","statusCode":400,"durationMs":6.93}
+# {"timestamp":"2026-11-07T09:08:32.894Z","level":"info","event":"http.request.completed","requestId":"9b7e7e9d-14ab-4a95-a7a2-921990e99754","method":"PATCH","path":"/api/store/minimum-order","statusCode":200,"durationMs":21.98}
+# {"timestamp":"2026-11-07T09:08:32.902Z","level":"info","event":"http.request.completed","requestId":"03d78f0e-dc5e-4977-b801-1c1b857dcd50","method":"GET","path":"/api/stores/6aeeea8f9a181467c78007ba","statusCode":200,"durationMs":5.5}
+# {"timestamp":"2026-11-07T09:08:32.932Z","level":"warn","event":"http.request.completed","requestId":"3c5900dd-8fc5-45a2-b37a-dd64d3ef8e12","method":"POST","path":"/api/payments/razorpay/order","statusCode":400,"durationMs":26.24}
+# {"timestamp":"2026-11-07T09:08:32.960Z","level":"info","event":"http.request.completed","requestId":"adb9e913-66f5-4194-a04a-9895feb41a1e","method":"PATCH","path":"/api/store/minimum-order","statusCode":200,"durationMs":22.22}
+# Subtest: store minimum order setting is public and enforced before creating checkout payment
+ok 43 - store minimum order setting is public and enforced before creating checkout payment
+  ---
+  duration_ms: 1275.0132
+  ...
+# {"timestamp":"2026-11-07T09:08:32.968Z","level":"info","event":"http.request.completed","requestId":"33ce0acb-a0c7-43d7-b079-6eafaef699f9","method":"GET","path":"/api/health/ready","statusCode":200,"durationMs":1.42}
+# {"timestamp":"2026-11-07T09:08:34.897Z","level":"info","event":"http.request.completed","requestId":"8a01007c-aaf6-4ce4-b4ae-415936fa0faf","method":"POST","path":"/api/payments/razorpay/order","statusCode":201,"durationMs":438.81}
+# Subtest: customer purchase, payment, and store status notification flow works end to end
+    # Subtest: order status history records initial and subsequent status changes
+    ok 1 - order status history records initial and subsequent status changes
+      ---
+      duration_ms: 1007.0392
+      ...
+# {"timestamp":"2026-11-07T09:08:35.034Z","level":"info","event":"http.request.completed","requestId":"f2d9266a-8b32-46e7-a8e9-1b1d142b9ff5","method":"POST","path":"/api/payments/razorpay/razorpay_order_test_1/failed","statusCode":200,"durationMs":122.24}
+# {"timestamp":"2026-11-07T09:08:35.884Z","level":"info","event":"http.request.completed","requestId":"4b84dcdd-563c-4977-8f97-4c0122a8d212","method":"POST","path":"/api/payments/razorpay/order","statusCode":201,"durationMs":432.45}
+# {"timestamp":"2026-11-07T09:08:35.932Z","level":"info","event":"http.request.completed","requestId":"30faa429-dabb-4a4b-9679-cc5756eae2b6","method":"POST","path":"/api/payments/razorpay/webhook","statusCode":200,"durationMs":42.7}
+# {"timestamp":"2026-11-07T09:08:35.956Z","level":"info","event":"http.request.completed","requestId":"8024f96f-67a4-4f77-8302-27b539f895b4","method":"POST","path":"/api/cart/reorder/6aeeea939a181467c7800811","statusCode":200,"durationMs":29.54}
+# {"timestamp":"2026-11-07T09:08:35.984Z","level":"warn","event":"http.request.completed","requestId":"75a96617-5866-4d56-a968-39ee469bca54","method":"POST","path":"/api/cart/reorder/6aeeea939a181467c7800811","statusCode":404,"durationMs":9.07}
+    # Subtest: customer reorder adds available items at current pricing and skips unavailable items
+    ok 2 - customer reorder adds available items at current pricing and skips unavailable items
+      ---
+      duration_ms: 1063.5598
+      ...
+# {"timestamp":"2026-11-07T09:08:36.108Z","level":"info","event":"http.request.completed","requestId":"24c54ab3-f906-4f1c-9d30-7261cf7c52a4","method":"POST","path":"/api/payments/razorpay/order","statusCode":201,"durationMs":151.67}
+# {"timestamp":"2026-11-07T09:08:37.298Z","level":"info","event":"http.request.completed","requestId":"4f6131a3-6572-4319-bdfc-114512cc199c","method":"POST","path":"/api/payments/razorpay/verify","statusCode":200,"durationMs":880.24}
+# {"timestamp":"2026-11-07T09:08:37.947Z","level":"info","event":"http.request.completed","requestId":"7037ef7b-3528-44cd-aefb-44b3b96166c8","method":"GET","path":"/api/store/reports/export","statusCode":200,"durationMs":127.67}
+# {"timestamp":"2026-11-07T09:08:38.306Z","level":"info","event":"http.request.completed","requestId":"2fe29636-c1af-45f2-b926-7fd00c5991c4","method":"GET","path":"/api/store/reports/export","statusCode":200,"durationMs":151.41}
+# {"timestamp":"2026-11-07T09:08:38.472Z","level":"info","event":"http.request.completed","requestId":"23004bc5-d8dd-4026-a2c4-82d01403fca0","method":"PATCH","path":"/api/store/orders/6aeeea949a181467c7800830/status","statusCode":200,"durationMs":58.14}
+# {"timestamp":"2026-11-07T09:08:38.499Z","level":"info","event":"http.request.completed","requestId":"ed60dbac-e663-4bc4-9ed1-a5cd7b895791","method":"POST","path":"/api/store/transactions/6aeeea969a181467c780084b/notes","statusCode":201,"durationMs":36.87}
+# {"timestamp":"2026-11-07T09:08:38.527Z","level":"info","event":"http.request.completed","requestId":"bf849e7c-8c6d-4168-95f8-1f07fa209754","method":"GET","path":"/api/users/me/notifications","statusCode":200,"durationMs":26.37}
+# {"timestamp":"2026-11-07T09:08:38.561Z","level":"info","event":"http.request.completed","requestId":"160a0d88-158c-4a92-9d64-e76dcf1ebc51","method":"GET","path":"/api/users/me/notifications","statusCode":200,"durationMs":22.75}
+# {"timestamp":"2026-11-07T09:08:38.571Z","level":"warn","event":"http.request.completed","requestId":"dfd9fc50-4a6d-43c4-a6a8-2b0b3c3d20aa","method":"POST","path":"/api/store/transactions/6aeeea969a181467c780084b/notes","statusCode":404,"durationMs":38.97}
+# {"timestamp":"2026-11-07T09:08:38.593Z","level":"warn","event":"http.request.completed","requestId":"cf65daca-f115-404c-a759-6aa4680a0df0","method":"PATCH","path":"/api/users/me/notifications/6aeeea969a181467c7800849/read","statusCode":404,"durationMs":20.77}
+# {"timestamp":"2026-11-07T09:08:38.614Z","level":"info","event":"http.request.completed","requestId":"1287431a-def0-4ed7-b506-502ec52fd61c","method":"PATCH","path":"/api/users/me/notifications/6aeeea969a181467c7800849/read","statusCode":200,"durationMs":13.35}
+# {"timestamp":"2026-11-07T09:08:38.623Z","level":"info","event":"http.request.completed","requestId":"e95076d0-642b-4c0b-9310-b21c0f56cf10","method":"GET","path":"/api/store/transactions/6aeeea969a181467c780084b","statusCode":200,"durationMs":36.95}
+    # Subtest: store dispute notes are scoped to the owning store and returned in transaction details
+    ok 3 - store dispute notes are scoped to the owning store and returned in transaction details
+      ---
+      duration_ms: 2634.4986
+      ...
+# {"timestamp":"2026-11-07T09:08:38.677Z","level":"info","event":"http.request.completed","requestId":"bcd89e04-3d2e-4000-ac56-d470dd570632","method":"PATCH","path":"/api/store/orders/6aeeea949a181467c7800830/status","statusCode":200,"durationMs":47.49}
+# {"timestamp":"2026-11-07T09:08:38.691Z","level":"info","event":"http.request.completed","requestId":"4e023575-9a32-4de8-a8b1-4343bd53055a","method":"PATCH","path":"/api/users/me/notifications/read-all","statusCode":200,"durationMs":11.71}
+# {"timestamp":"2026-11-07T09:08:38.728Z","level":"info","event":"http.request.completed","requestId":"5328c830-ba72-4d91-a595-5ef46a651ee9","method":"PATCH","path":"/api/store/products/6aeeea929a181467c78007dd/stock","statusCode":200,"durationMs":30.99}
+# {"timestamp":"2026-11-07T09:08:38.777Z","level":"info","event":"http.request.completed","requestId":"e114e253-02f2-48aa-9383-1b0475ee107f","method":"POST","path":"/api/payments/razorpay/order","statusCode":201,"durationMs":29.24}
+# {"timestamp":"2026-11-07T09:08:38.811Z","level":"info","event":"http.request.completed","requestId":"fcbb0476-f8d9-4ba3-a13e-a77c70bf2651","method":"PATCH","path":"/api/store/status","statusCode":200,"durationMs":30.64}
+# {"timestamp":"2026-11-07T09:08:38.846Z","level":"warn","event":"http.request.completed","requestId":"e762ffb4-d76f-4154-bc2d-a9058e224b2a","method":"POST","path":"/api/payments/razorpay/order","statusCode":409,"durationMs":26.2}
+# {"timestamp":"2026-11-07T09:08:38.875Z","level":"warn","event":"http.request.completed","requestId":"b64f5286-0668-492f-8bd9-63b99ee75e19","method":"POST","path":"/api/payments/razorpay/order","statusCode":409,"durationMs":25.74}
+# {"timestamp":"2026-11-07T09:08:38.937Z","level":"info","event":"http.request.completed","requestId":"0645daae-62ad-4fb0-b316-c811eb6dbf1f","method":"POST","path":"/api/payments/razorpay/verify","statusCode":200,"durationMs":48.64}
+# {"timestamp":"2026-11-07T09:08:38.979Z","level":"info","event":"http.request.completed","requestId":"332b803a-eee8-4295-a7a5-cc86e07e2b77","method":"PATCH","path":"/api/store/status","statusCode":200,"durationMs":20.87}
+# {"timestamp":"2026-11-07T09:08:39.036Z","level":"info","event":"http.request.completed","requestId":"6e640b26-2df3-4347-888e-4870b9d34a59","method":"GET","path":"/api/store/orders","statusCode":200,"durationMs":37.35}
+# {"timestamp":"2026-11-07T09:08:39.064Z","level":"info","event":"http.request.completed","requestId":"6a203c69-8ba0-490b-957e-82a0a508dbd0","method":"GET","path":"/api/store/orders","statusCode":200,"durationMs":25.73}
+# {"timestamp":"2026-11-07T09:08:39.095Z","level":"info","event":"http.request.completed","requestId":"c8a6465b-2fad-460a-ac67-591103b2fc1e","method":"GET","path":"/api/store/orders","statusCode":200,"durationMs":28.18}
+# {"timestamp":"2026-11-07T09:08:39.116Z","level":"info","event":"http.request.completed","requestId":"fcf14e31-3bc3-4dfa-a259-97a179ba0ff1","method":"GET","path":"/api/store/orders","statusCode":200,"durationMs":19.49}
+# {"timestamp":"2026-11-07T09:08:39.138Z","level":"info","event":"http.request.completed","requestId":"14ff85ac-fb00-4cd4-abf6-748b247868a8","method":"GET","path":"/api/store/orders","statusCode":200,"durationMs":19.79}
+# {"timestamp":"2026-11-07T09:08:39.167Z","level":"info","event":"http.request.completed","requestId":"897999cb-b255-4013-afea-8c4b210d10e2","method":"GET","path":"/api/store/orders","statusCode":200,"durationMs":25.54}
+    1..3
+ok 44 - customer purchase, payment, and store status notification flow works end to end
+  ---
+  duration_ms: 6206.7091
+  ...
+# {"timestamp":"2026-11-07T09:08:40.651Z","level":"warn","event":"http.request.completed","requestId":"551a1c0b-ea38-443c-a211-d1bb82a73f75","method":"PATCH","path":"/api/store/hours","statusCode":400,"durationMs":5.15}
+# {"timestamp":"2026-11-07T09:08:40.749Z","level":"info","event":"http.request.completed","requestId":"a19aeb84-245b-412e-9c5d-bcff886e6b3d","method":"PATCH","path":"/api/store/hours","statusCode":200,"durationMs":96.24}
+# {"timestamp":"2026-11-07T09:08:40.764Z","level":"info","event":"http.request.completed","requestId":"6e16daa0-9768-41e7-90e8-4f9f28dc251f","method":"GET","path":"/api/stores/6aeeea979a181467c78008c4/pickup-slots","statusCode":200,"durationMs":12.19}
+# {"timestamp":"2026-11-07T09:08:40.828Z","level":"info","event":"http.request.completed","requestId":"2fb7304e-09c6-4062-907a-dfdf956554a9","method":"PATCH","path":"/api/store/orders/6aeeea989a181467c78008ce/status","statusCode":200,"durationMs":46.3}
+# {"timestamp":"2026-11-07T09:08:40.874Z","level":"info","event":"http.request.completed","requestId":"ad252845-681a-423b-9fa3-fa4480713f72","method":"PATCH","path":"/api/store/orders/6aeeea989a181467c78008ce/status","statusCode":200,"durationMs":43.76}
+# {"timestamp":"2026-11-07T09:08:40.904Z","level":"info","event":"http.request.completed","requestId":"f362c95b-5076-4dc7-b2ed-81bb58a9b73f","method":"PATCH","path":"/api/store/orders/6aeeea989a181467c78008ce/status","statusCode":200,"durationMs":26.92}
+# {"timestamp":"2026-11-07T09:08:40.951Z","level":"info","event":"http.request.completed","requestId":"ac156644-3e6e-4d0a-99a1-0a91f3d89db8","method":"GET","path":"/api/store/orders","statusCode":200,"durationMs":42.36}
+# {"timestamp":"2026-11-07T09:08:40.976Z","level":"info","event":"http.request.completed","requestId":"be45c6b1-4b7d-4b5a-96f3-ca8d5da1bb3a","method":"GET","path":"/api/orders","statusCode":200,"durationMs":21.55}
+# Subtest: store hours generate pickup slots and pickup orders use pickup-specific status transitions
+ok 45 - store hours generate pickup slots and pickup orders use pickup-specific status transitions
+  ---
+  duration_ms: 1808.7691
+  ...
+# {"timestamp":"2026-11-07T09:08:42.497Z","level":"info","event":"http.request.completed","requestId":"851a2c4d-8a63-4382-81c2-eed9a32731d6","method":"GET","path":"/api/stores/6aeeea989a181467c78008eb/pickup-slots","statusCode":200,"durationMs":39.16}
+# {"timestamp":"2026-11-07T09:08:42.646Z","level":"info","event":"http.request.completed","requestId":"cfbc27e4-ac09-4d7e-85e8-c26989b4d8b7","method":"POST","path":"/api/payments/razorpay/order","statusCode":201,"durationMs":146.52}
+# {"timestamp":"2026-11-07T09:08:42.722Z","level":"info","event":"http.request.completed","requestId":"294bcffe-a608-49f1-8b81-bff125207059","method":"POST","path":"/api/payments/razorpay/callback","statusCode":303,"durationMs":59.85}
+# Subtest: mobile Razorpay callback verifies payment and redirects to the created order
+ok 46 - mobile Razorpay callback verifies payment and redirects to the created order
+  ---
+  duration_ms: 1751.8892
+  ...
+# {"timestamp":"2026-11-07T09:08:46.031Z","level":"warn","event":"http.request.completed","requestId":"9f6fe12a-3f16-4e88-8f8d-b9a722330f6b","method":"POST","path":"/api/store/orders/6aeeea9d9a181467c7800915/refund","statusCode":404,"durationMs":15.22}
+# {"timestamp":"2026-11-07T09:08:46.041Z","level":"warn","event":"http.request.completed","requestId":"972c01d3-27cd-4973-8846-7e7517fa8af7","method":"POST","path":"/api/store/orders/6aeeea9d9a181467c7800915/refund","statusCode":400,"durationMs":5.2}
+# {"timestamp":"2026-11-07T09:08:46.238Z","level":"info","event":"http.request.completed","requestId":"eb2118bd-3e0f-4a1d-bde7-72d19fe2bd1a","method":"POST","path":"/api/store/orders/6aeeea9d9a181467c7800915/refund","statusCode":202,"durationMs":191.83}
+# {"timestamp":"2026-11-07T09:08:46.268Z","level":"info","event":"http.request.completed","requestId":"c3cba1f8-c23b-4bfc-9cb6-a0e8f796b38b","method":"GET","path":"/api/store/audit-events","statusCode":200,"durationMs":13.16}
+# {"timestamp":"2026-11-07T09:08:46.289Z","level":"info","event":"http.request.completed","requestId":"e9912f6f-b92c-413f-8cfe-2fdbd9823632","method":"GET","path":"/api/store/audit-events","statusCode":200,"durationMs":18.42}
+# {"timestamp":"2026-11-07T09:08:46.346Z","level":"info","event":"http.request.completed","requestId":"c34a4d45-4606-40ad-999f-3a8039687a3e","method":"GET","path":"/api/orders/6aeeea9d9a181467c7800915","statusCode":200,"durationMs":54.58}
+# {"timestamp":"2026-11-07T09:08:46.434Z","level":"info","event":"http.request.completed","requestId":"5a8e0384-77b5-4717-8884-a1dc5749593d","method":"POST","path":"/api/store/orders/6aeeea9d9a181467c7800915/refund","statusCode":202,"durationMs":84.78}
+# {"timestamp":"2026-11-07T09:08:46.459Z","level":"warn","event":"http.request.completed","requestId":"97c0741b-40db-4aea-990d-30a1c1ef414a","method":"PATCH","path":"/api/store/orders/6aeeea9d9a181467c7800915/status","statusCode":409,"durationMs":21.64}
+# {"timestamp":"2026-11-07T09:08:46.483Z","level":"warn","event":"http.request.completed","requestId":"06e5623f-b5cb-4df0-b4f1-5d58f086be79","method":"POST","path":"/api/orders/6aeeea9d9a181467c7800915/payment","statusCode":409,"durationMs":22.43}
+# {"timestamp":"2026-11-07T09:08:46.498Z","level":"warn","event":"http.request.completed","requestId":"ba2fcaaf-6597-44c0-aa07-dcd3339bd25c","method":"POST","path":"/api/orders/6aeeea9d9a181467c7800915/cancel","statusCode":409,"durationMs":12.34}
+# {"timestamp":"2026-11-07T09:08:46.789Z","level":"info","event":"http.request.completed","requestId":"7669918e-a4e2-478c-99b6-bacda687449b","method":"POST","path":"/api/payments/razorpay/webhook","statusCode":200,"durationMs":277.56}
+# {"timestamp":"2026-11-07T09:08:46.848Z","level":"info","event":"http.request.completed","requestId":"4e9ce1a5-aa00-4b9b-84a9-81d54a38d425","method":"GET","path":"/api/orders/6aeeea9d9a181467c7800915","statusCode":200,"durationMs":38.02}
+# {"timestamp":"2026-11-07T09:08:46.873Z","level":"info","event":"http.request.completed","requestId":"2c7cdb35-0dcd-45df-947c-aacdd0f7f5f1","method":"POST","path":"/api/payments/razorpay/webhook","statusCode":200,"durationMs":15.42}
+# {"timestamp":"2026-11-07T09:08:46.966Z","level":"info","event":"http.request.completed","requestId":"abad78a9-b378-452c-9bb7-8765ba346b8a","method":"POST","path":"/api/store/orders/6aeeea9e9a181467c780094e/refund","statusCode":202,"durationMs":64.71}
+# {"timestamp":"2026-11-07T09:08:47.024Z","level":"info","event":"http.request.completed","requestId":"d0963c1d-e158-447d-9e57-46ce6257ef61","method":"POST","path":"/api/payments/razorpay/webhook","statusCode":200,"durationMs":45.55}
+# {"timestamp":"2026-11-07T09:08:47.074Z","level":"info","event":"http.request.completed","requestId":"2a407991-cbab-4019-9900-0b4a652e3084","method":"POST","path":"/api/store/orders/6aeeea9e9a181467c780094e/refund","statusCode":200,"durationMs":29}
+# Subtest: store refunds are scoped, full, single-request, and settled by deduplicated webhooks
+ok 47 - store refunds are scoped, full, single-request, and settled by deduplicated webhooks
+  ---
+  duration_ms: 4345.2361
+  ...
+# {"timestamp":"2026-11-07T09:08:49.159Z","level":"warn","event":"http.request.completed","requestId":"95173fd4-36fc-4b57-85c5-91a46af88cef","method":"POST","path":"/api/cart/items/bulk","statusCode":400,"durationMs":14.7}
+# {"timestamp":"2026-11-07T09:08:49.190Z","level":"info","event":"http.request.completed","requestId":"4207e8ef-801f-4f0f-929d-426cae45058f","method":"POST","path":"/api/cart/items/bulk","statusCode":201,"durationMs":25.32}
+# {"timestamp":"2026-11-07T09:08:49.213Z","level":"info","event":"http.request.completed","requestId":"e7e53949-e72a-43f1-a3b8-4c7eef64f1f5","method":"DELETE","path":"/api/cart/items","statusCode":204,"durationMs":21.1}
+# {"timestamp":"2026-11-07T09:08:49.225Z","level":"info","event":"http.request.completed","requestId":"0a701907-caa8-4bae-81a4-463fd037186f","method":"GET","path":"/api/cart","statusCode":200,"durationMs":9.68}
+# Subtest: bulk cart updates validate all selections and clear the cart in one request
+ok 48 - bulk cart updates validate all selections and clear the cart in one request
+  ---
+  duration_ms: 2150.6426
+  ...
+# Subtest: payment reconciliation leaves an open payment attempt pending
+ok 49 - payment reconciliation leaves an open payment attempt pending
+  ---
+  duration_ms: 3.2328
+  ...
+# Subtest: payment reconciliation rejects provider orders with a mismatched amount
+ok 50 - payment reconciliation rejects provider orders with a mismatched amount
+  ---
+  duration_ms: 1.7826
+  ...
+# Subtest: refund reconciliation leaves a provider refund not yet created as pending
+ok 51 - refund reconciliation leaves a provider refund not yet created as pending
+  ---
+  duration_ms: 0.9875
+  ...
+# Subtest: refund reconciliation rejects a refund for another payment
+ok 52 - refund reconciliation rejects a refund for another payment
+  ---
+  duration_ms: 0.7659
+  ...
+# Subtest: checkout evidence survives past one day and still settles after a browser failure
+ok 53 - checkout evidence survives past one day and still settles after a browser failure
+  ---
+  duration_ms: 2694.6492
+  ...
+# Subtest: startup migration removes only the obsolete checkout TTL and can run twice
+ok 54 - startup migration removes only the obsolete checkout TTL and can run twice
+  ---
+  duration_ms: 193.8711
+  ...
+# Subtest: reconciliation scans past 100 unresolved records without starvation
+ok 55 - reconciliation scans past 100 unresolved records without starvation
+  ---
+  duration_ms: 444.5678
+  ...
+# Subtest: refund reservation survives interrupted dispatch and reuses its idempotency key
+ok 56 - refund reservation survives interrupted dispatch and reuses its idempotency key
+  ---
+  duration_ms: 91.9526
+  ...
+# Subtest: rate-limit counters are shared across store instances and concurrent requests
+ok 57 - rate-limit counters are shared across store instances and concurrent requests
+  ---
+  duration_ms: 61.5815
+  ...
+# {"timestamp":"2026-11-07T09:08:28.915Z","level":"info","event":"http.request.completed","requestId":"2c68670b-be21-447f-a507-43e1da3b551c","method":"POST","path":"/api/auth/logout","statusCode":204,"durationMs":30.61}
+# {"timestamp":"2026-11-07T09:08:28.949Z","level":"warn","event":"http.request.completed","requestId":"fcde85dc-b8e6-443b-b02d-cf4ecad68f9a","method":"POST","path":"/api/auth/logout","statusCode":401,"durationMs":14.15}
+# {"timestamp":"2026-11-07T09:08:28.962Z","level":"warn","event":"http.request.completed","requestId":"c9e262f5-18da-4d03-8988-419f8eac8117","method":"GET","path":"/api/auth/me","statusCode":401,"durationMs":5.04}
+# Subtest: logout revokes a token across requests and tokens older than an hour are rejected
+ok 58 - logout revokes a token across requests and tokens older than an hour are rejected
+  ---
+  duration_ms: 116.6643
+  ...
+# {"timestamp":"2026-11-07T09:08:30.975Z","level":"info","event":"http.request.completed","requestId":"e3bcb84e-f08b-4531-9ccb-1d7bc0c1817b","method":"POST","path":"/api/auth/stores/login","statusCode":200,"durationMs":1137.06}
+# {"timestamp":"2026-11-07T09:08:32.202Z","level":"warn","event":"http.request.completed","requestId":"264844cf-4c6f-4ca9-9c4c-f707fc833d6c","method":"GET","path":"/api/auth/me","statusCode":401,"durationMs":9.18}
+# Subtest: changing a store password revokes previously issued sessions
+ok 59 - changing a store password revokes previously issued sessions
+  ---
+  duration_ms: 3239.9936
+  ...
+# Subtest: refund transport sends a request-scoped provider idempotency header
+ok 60 - refund transport sends a request-scoped provider idempotency header
+  ---
+  duration_ms: 84.3352
+  ...
+1..60
+# tests 63
+# suites 0
+# pass 63
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 34461.3075

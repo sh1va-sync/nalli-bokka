@@ -4,6 +4,9 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: [{ find: /^lottie-web(?:\/build\/player\/lottie_svg\.js)?$/, replacement: 'lottie-web/build/player/lottie_light.js' }],
+  },
   server: {
     host: true,
     proxy: {

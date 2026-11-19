@@ -1,40 +1,3 @@
-// import { Router } from 'express';
-// import { rateLimit } from 'express-rate-limit';
-// import {
-//   completeUserRegistration,
-//   getCurrentAccount,
-//   loginStore,
-//   sendUserOtp,
-//   verifyUserOtp
-// } from '../controllers/authController.js';
-// import authenticate from '../middleware/authenticate.js';
-// import validate from '../middleware/validate.js';
-// import { schemas } from '../validation/schemas.js';
-
-// const router = Router();
-// const customerAuthLimiter = rateLimit({
-//   windowMs: 10 * 60 * 1000,
-//   limit: 5,
-//   standardHeaders: 'draft-8',
-//   legacyHeaders: false,
-//   message: { error: 'Too many verification attempts; try again later' }
-// });
-// const loginLimiter = rateLimit({
-//   windowMs: 15 * 60 * 1000,
-//   limit: 10,
-//   standardHeaders: 'draft-8',
-//   legacyHeaders: false,
-//   message: { error: 'Too many login attempts; try again later' }
-// });
-
-// router.post('/users/otp/send', customerAuthLimiter, validate(schemas.sendOtp), sendUserOtp);
-// router.post('/users/verify', customerAuthLimiter, validate(schemas.verifyOtp), verifyUserOtp);
-// router.post('/users/register', customerAuthLimiter, validate(schemas.completeUserRegistration), completeUserRegistration);
-// router.post('/stores/login', loginLimiter, validate(schemas.storeLogin), loginStore);
-// router.get('/me', authenticate(), getCurrentAccount);
-
-// export default router;
-
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
 
@@ -46,14 +9,21 @@ import {
   verifyUserOtp
 } from '../controllers/authController.js';
 
+import MongoRateLimitStore from '../services/mongoRateLimitStore.js';
+import RevokedToken from '../models/RevokedToken.js';
 import authenticate from '../middleware/authenticate.js';
 import validate from '../middleware/validate.js';
 import { schemas } from '../validation/schemas.js';
 
 const router = Router();
+function limiter(name, options) {
+  const useMongo = process.env.RATE_LIMIT_STORE === 'mongo' || process.env.NODE_ENV === 'production';
+  return rateLimit({ ...options, ...(useMongo ? { store: new MongoRateLimitStore(name) } : {}) });
+}
+
 
 // OTP sending: IP-based protection
-const sendOtpIpLimiter = rateLimit({
+const sendOtpIpLimiter = limiter('sendOtpIpLimiter', {
   windowMs: 10 * 60 * 1000,
   limit: 10,
   standardHeaders: 'draft-8',
@@ -64,7 +34,7 @@ const sendOtpIpLimiter = rateLimit({
 });
 
 // OTP sending: Phone-based protection
-const sendOtpPhoneLimiter = rateLimit({
+const sendOtpPhoneLimiter = limiter('sendOtpPhoneLimiter', {
   windowMs: 60 * 60 * 1000,
   limit: 5,
   keyGenerator: (req) => `phone:${req.body.phone}`,
@@ -76,7 +46,7 @@ const sendOtpPhoneLimiter = rateLimit({
 });
 
 // Prevent repeated OTP requests within a short interval
-const sendOtpCooldownLimiter = rateLimit({
+const sendOtpCooldownLimiter = limiter('sendOtpCooldownLimiter', {
   windowMs: 60 * 1000,
   limit: 1,
   keyGenerator: (req) => `phone:${req.body.phone}`,
@@ -88,7 +58,7 @@ const sendOtpCooldownLimiter = rateLimit({
 });
 
 // OTP verification: IP-based protection
-const verifyOtpIpLimiter = rateLimit({
+const verifyOtpIpLimiter = limiter('verifyOtpIpLimiter', {
   windowMs: 10 * 60 * 1000,
   limit: 20,
   standardHeaders: 'draft-8',
@@ -99,7 +69,7 @@ const verifyOtpIpLimiter = rateLimit({
 });
 
 // OTP verification: Phone-based protection
-const verifyOtpPhoneLimiter = rateLimit({
+const verifyOtpPhoneLimiter = limiter('verifyOtpPhoneLimiter', {
   windowMs: 10 * 60 * 1000,
   limit: 10,
   keyGenerator: (req) => `phone:${req.body.phone}`,
@@ -111,7 +81,7 @@ const verifyOtpPhoneLimiter = rateLimit({
 });
 
 // Registration protection
-const registrationLimiter = rateLimit({
+const registrationLimiter = limiter('registrationLimiter', {
   windowMs: 15 * 60 * 1000,
   limit: 10,
   standardHeaders: 'draft-8',
@@ -122,7 +92,7 @@ const registrationLimiter = rateLimit({
 });
 
 // Store login protection
-const loginLimiter = rateLimit({
+const loginLimiter = limiter('loginLimiter', {
   windowMs: 15 * 60 * 1000,
   limit: 10,
   standardHeaders: 'draft-8',
@@ -172,4 +142,11 @@ router.get(
   getCurrentAccount
 );
 
+router.post('/logout', authenticate(), async (req, res) => {
+  if (req.auth.jti) {
+    await RevokedToken.updateOne({ _id: req.auth.jti },
+      { $set: { expiresAt: new Date(req.auth.exp * 1000) } }, { upsert: true });
+  }
+  res.status(204).end();
+});
 export default router;

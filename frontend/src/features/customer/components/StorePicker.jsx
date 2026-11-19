@@ -19,6 +19,13 @@ export default function StorePicker({ open, onClose }) {
   const [switchingStoreId, setSwitchingStoreId] = useState('')
   const [switchError, setSwitchError] = useState('')
   const { data, error, isLoading, isFetching, refetch } = useGetStoresQuery({ limit: 100, search: search || undefined }, { skip: !open })
+  const {
+    data: directoryResponse,
+    isLoading: directoryLoading,
+    error: directoryError,
+    isFetching: directoryFetching,
+    refetch: refetchDirectory,
+  } = useGetStoresQuery({ limit: 100 }, { skip: !open })
   const { data: cartResponse, error: cartError, isFetching: cartFetching, refetch: refetchCart } = useGetCartQuery(undefined, { skip: !open || !token })
   const [clearCart] = useClearCartMutation()
   if (!open) return null
@@ -26,7 +33,10 @@ export default function StorePicker({ open, onClose }) {
   const stores = data?.data || []
   const cartItems = cartResponse?.data?.items || []
   const hasBasketItems = cartItems.length > 0 || guestItems.length > 0
-  const noStoresAvailable = !isLoading && !error && stores.length === 0 && !search.trim()
+  const noStoresAvailable = !directoryLoading
+    && !directoryError
+    && Array.isArray(directoryResponse?.data)
+    && directoryResponse.data.length === 0
 
   async function chooseStore(store) {
     if (store.isOpen === false || switchingStoreId || (token && (cartFetching || cartError))) return
@@ -55,15 +65,14 @@ export default function StorePicker({ open, onClose }) {
         <section className="relative w-full max-w-md rounded-[28px] border border-[var(--border-default)] bg-white px-6 py-10 text-center shadow-[0_24px_70px_-35px_rgba(23,97,73,.35)] sm:px-10 sm:py-12">
           <div className="absolute right-4 top-4 flex items-center gap-2">
             <LanguageSwitcher />
-            {selectedStore && <button type="button" className="rounded-full p-2 text-[var(--text-secondary)] transition hover:bg-[var(--brand-primary-soft)]" onClick={onClose} aria-label={t('Close')}><X size={19} /></button>}
           </div>
           <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]">
             <Store size={29} strokeWidth={1.7} aria-hidden="true" />
           </span>
           <h1 id="no-stores-title" className="mt-5 text-2xl font-extrabold tracking-tight text-[var(--text-primary)]">{t('No stores available')}</h1>
           <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-[var(--text-secondary)]">{t('There are no stores available right now. Please try again later.')}</p>
-          <button type="button" onClick={refetch} disabled={isFetching} className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[var(--brand-primary)] px-5 text-sm font-bold text-white transition hover:bg-[var(--brand-primary-hover)] disabled:cursor-wait disabled:opacity-60">
-            <RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />{t(isFetching ? 'Checking stores…' : 'Try again')}
+          <button type="button" onClick={refetchDirectory} disabled={directoryFetching} className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[var(--brand-primary)] px-5 text-sm font-bold text-white transition hover:bg-[var(--brand-primary-hover)] disabled:cursor-wait disabled:opacity-60">
+            <RefreshCw size={16} className={directoryFetching ? 'animate-spin' : ''} />{t(directoryFetching ? 'Checking stores…' : 'Try again')}
           </button>
         </section>
       </div>

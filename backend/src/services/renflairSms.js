@@ -1,127 +1,3 @@
-// import AppError from '../utils/AppError.js';
-
-// const renflairEndpoint = 'https://sms.renflair.in/V1.php';
-
-// const renflairSms = {
-//   async sendOtp(phone, code) {
-//     const apiKey = process.env.RENFLAIR_API_KEY?.trim();
-//     if (!apiKey) {
-//       throw new AppError(503, 'Renflair SMS is not configured');
-//     }
-
-//     const url = new URL(renflairEndpoint);
-//     url.searchParams.set('API', apiKey);
-//     url.searchParams.set('PHONE', phone);
-//     url.searchParams.set('OTP', code);
-
-//     let response;
-//     try {
-//       response = await fetch(url, {
-//         method: 'GET',
-//         headers: { accept: 'application/json' },
-//         signal: AbortSignal.timeout(10000)
-//       });
-//     } catch {
-//       throw new AppError(502, 'Unable to contact Renflair SMS provider');
-//     }
-
-//     if (!response.ok) {
-//       throw new AppError(502, 'Renflair SMS provider rejected the request');
-//     }
-
-//     let result;
-//     try {
-//       result = await response.json();
-//     } catch {
-//       throw new AppError(502, 'Renflair SMS provider returned an invalid response');
-//     }
-
-//     if (result?.status !== 'SUCCESS') {
-//       throw new AppError(502, 'Renflair SMS provider did not confirm delivery');
-//     }
-//   }
-// };
-
-// export default renflairSms;
-
-
-
-// import AppError from '../utils/AppError.js';
-
-// const renflairEndpoint = 'https://sms.renflair.in/V1.php';
-
-// const renflairSms = {
-//   async sendOtp(phone, code) {
-//     const apiKey = process.env.RENFLAIR_API_KEY?.trim();
-
-//     if (!apiKey) {
-//       throw new AppError(503, 'Renflair SMS is not configured');
-//     }
-
-//     const url = new URL(renflairEndpoint);
-
-//     url.searchParams.set('API', apiKey);
-//     url.searchParams.set('PHONE', phone);
-//     url.searchParams.set('OTP', code);
-
-//     let response;
-
-//     try {
-//       response = await fetch(url, {
-//         method: 'GET',
-//         headers: {
-//           accept: 'application/json'
-//         },
-//         signal: AbortSignal.timeout(10000)
-//       });
-//     } catch {
-//       throw new AppError(
-//         502,
-//         'Unable to contact Renflair SMS provider'
-//       );
-//     }
-
-//     if (!response.ok) {
-//       throw new AppError(
-//         502,
-//         'Renflair SMS provider rejected the request'
-//       );
-//     }
-
-//     let result;
-
-//     try {
-//       const body = await response.text();
-//       result = JSON.parse(body);
-//     } catch {
-//       throw new AppError(
-//         502,
-//         'Renflair SMS provider returned an invalid response'
-//       );
-//     }
-
-//     // Accept documented/recognized explicit success indicators.
-//     const status = String(result?.status ?? '').toUpperCase();
-
-//     const successful =
-//       status === 'SUCCESS' ||
-//       result?.success === true;
-
-//     if (!successful) {
-//       throw new AppError(
-//         502,
-//         'Renflair SMS provider did not confirm the request'
-//       );
-//     }
-
-//     return result;
-//   }
-// };
-
-// export default renflairSms;
-
-
-
 import AppError from '../utils/AppError.js';
 
 const renflairEndpoint = 'https://sms.renflair.in/V1.php';
@@ -166,15 +42,9 @@ const renflairSms = {
         headers: { accept: 'application/json' },
         signal: AbortSignal.timeout(15000)
       });
-    } catch (error) {
-      console.error('Renflair connection error:', error.message);
+    } catch {
       throw new AppError(502, 'Unable to contact Renflair SMS provider');
     }
-
-    const body = await response.text();
-
-    console.log('Renflair HTTP status:', response.status);
-    console.log('Renflair response:', body);
 
     if (!response.ok) {
       throw new AppError(502, 'Renflair SMS request failed');
@@ -183,13 +53,14 @@ const renflairSms = {
     let result;
 
     try {
-      result = JSON.parse(body);
+      result = await response.json();
     } catch {
       throw new AppError(502, 'Renflair returned an invalid response');
     }
 
-    // Diagnostic mode: inspect the actual provider response.
-    // Add the documented success condition after confirming its format.
+    if (result?.status !== 'SUCCESS') {
+      throw new AppError(502, 'Renflair SMS provider did not confirm delivery');
+    }
     return result;
   }
 };

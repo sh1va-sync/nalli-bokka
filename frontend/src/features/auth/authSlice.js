@@ -1,7 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit'
 import { readStoredJson } from '../../app/persistence.js'
 
-const storedToken = localStorage.getItem('nalli-token')
+const storedToken = sessionStorage.getItem('nalli-token')
 const storedUser = readStoredJson('nalli-user')
 
 const authSlice = createSlice({

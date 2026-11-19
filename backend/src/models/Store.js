@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
+import RevokedToken from './RevokedToken.js';
 
 const storeSchema = new mongoose.Schema({
   storeName: {
@@ -90,6 +91,11 @@ storeSchema.pre('save', async function hashPassword() {
   }
 
   this.password = await bcrypt.hash(this.password, 12);
+  if (!this.isNew) {
+    await RevokedToken.updateOne({ _id: `account:store:${this._id}` }, { $set: {
+      revokedBefore: new Date(), expiresAt: new Date(Date.now() + 60 * 60 * 1000)
+    } }, { upsert: true, session: this.$session() });
+  }
 });
 
 storeSchema.methods.comparePassword = function comparePassword(candidate) {
@@ -99,35 +105,3 @@ storeSchema.methods.comparePassword = function comparePassword(candidate) {
 const Store = mongoose.model('Store', storeSchema);
 
 export default Store;
-
-
-// import mongoose from 'mongoose';
-// import bcrypt from 'bcryptjs';
-
-// const storeSchema = new mongoose.Schema(
-//   {
-//     storeName: { type: String, required: true, trim: true },
-//     username: { type: String, required: true, unique: true, lowercase: true, trim: true },
-//     // select: false -> the password is never returned unless you ask for it with .select('+password')
-//     password: { type: String, required: true, minlength: 8, select: false },
-//     location: {
-//       address: { type: String, required: true, trim: true },
-//       latitude: Number,
-//       longitude: Number,
-//     },
-//   },
-//   { timestamps: true }
-// );
-
-// // Hash the password before saving (only when it was set or changed)
-// storeSchema.pre('save', async function () {
-//   if (!this.isModified('password')) return;
-//   this.password = await bcrypt.hash(this.password, 10);
-// });
-
-// // Use for store login: const store = await Store.findOne({ username }).select('+password');
-// storeSchema.methods.comparePassword = function (candidatePassword) {
-//   return bcrypt.compare(candidatePassword, this.password);
-// };
-
-// export default mongoose.model('Store', storeSchema);

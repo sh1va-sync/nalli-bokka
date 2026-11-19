@@ -88,7 +88,7 @@ before(async () => {
     currency: 'INR',
     status: 'captured'
   });
-  razorpay.payments.refund = async (paymentId, params) => ({
+  razorpay.payments.refundIdempotent = async (paymentId, params) => ({
     id: `refund_${paymentId}`,
     payment_id: paymentId,
     amount: params.amount,
@@ -1331,7 +1331,7 @@ test('store refunds are scoped, full, single-request, and settled by deduplicate
   const { order, transaction } = await createPaidOrder('processed');
   let providerCalls = 0;
   const razorpay = getRazorpayClient();
-  razorpay.payments.refund = async (paymentId, params) => {
+  razorpay.payments.refundIdempotent = async (paymentId, params) => {
     providerCalls += 1;
     assert.match(paymentId, /^razorpay_payment_/);
     assert.equal(params.amount, 40000);

@@ -1,24 +1,3 @@
-// import mongoose from 'mongoose';
-
-// const addressSchema = new mongoose.Schema({
-//   label: { type: String, trim: true, default: 'Home' }, // Home, Work, etc.
-//   fullAddress: { type: String, required: true, trim: true },
-//   landmark: { type: String, trim: true },
-//   pincode: { type: String, required: true, trim: true },
-// });
-
-// const userSchema = new mongoose.Schema(
-//   {
-//     name: { type: String, required: true, trim: true },
-//     phone: { type: String, required: true, unique: true, trim: true },
-//     email: { type: String, lowercase: true, trim: true },
-//     addresses: [addressSchema], // a user can save several addresses
-//   },
-//   { timestamps: true }
-// );
-
-// export default mongoose.model('User', userSchema);
-
 import mongoose from 'mongoose';
 
 const addressSchema = new mongoose.Schema({

@@ -175,6 +175,7 @@ export async function refundStoreOrder(req, res) {
           refundStatus: 'pending',
           refundRequestId: requestId,
           refundRequestedAt: new Date(),
+          refundIdempotent: true,
           timestamp: new Date()
         }
       }, { session });
@@ -205,6 +206,7 @@ export async function refundStoreOrder(req, res) {
       );
       transaction.refundStatus = 'pending';
       transaction.refundRequestId = requestId;
+      transaction.refundIdempotent = true;
       reservation = { transaction, existing: false };
     });
   } finally {
@@ -217,13 +219,23 @@ export async function refundStoreOrder(req, res) {
   }
 
   const { transaction } = reservation;
+  await dispatchRefund(transaction, razorpay);
+  const updatedTransaction = await Transaction.findById(transaction._id);
+  const response = refundResponse(updatedTransaction, transaction.orderId);
+  return res.status(response.refundStatus === 'pending' ? 202 : 200).json({ data: response });
+}
+
+export async function dispatchRefund(transaction, razorpay = getRazorpayClient()) {
+  if (!transaction.refundIdempotent || !transaction.refundRequestId || !transaction.paymentId) {
+    throw new AppError(409, 'Legacy refund requires provider investigation before resubmission');
+  }
   const amount = Math.round(transaction.amount * 100);
   let refund;
   try {
-    refund = await razorpay.payments.refund(transaction.paymentId, {
+    refund = await razorpay.payments.refundIdempotent(transaction.paymentId, {
       amount,
       notes: { refundRequestId: transaction.refundRequestId }
-    });
+    }, transaction.refundRequestId);
   } catch {
     throw new AppError(502, 'The order was cancelled, but the refund status could not be confirmed. The refund remains pending; do not retry it.');
   }
@@ -243,9 +255,7 @@ export async function refundStoreOrder(req, res) {
       ? 'failed'
       : 'pending';
   await applyRefundResult(transaction._id, transaction.refundRequestId, refund, refundStatus);
-  const updatedTransaction = await Transaction.findById(transaction._id);
-  const response = refundResponse(updatedTransaction, transaction.orderId);
-  return res.status(response.refundStatus === 'pending' ? 202 : 200).json({ data: response });
+  return refundStatus;
 }
 
 export async function settleTransaction(transaction, status, paymentId, session = null) {
@@ -560,11 +570,13 @@ export async function markCheckoutPaymentFailed(req, res) {
   if (attempt.status === 'paid') {
     throw new AppError(409, 'Payment is already confirmed');
   }
-  if (attempt.status !== 'failed') {
-    attempt.status = 'failed';
-    await attempt.save();
-  }
-  res.json({ data: { status: attempt.status, orderCreated: false } });
+  // A browser failure can race a captured-payment webhook. Never overwrite paid.
+  const result = await CheckoutAttempt.updateOne(
+    { _id: attempt._id, status: { $ne: 'paid' } },
+    { $set: { status: 'failed' } }
+  );
+  if (!result.matchedCount) throw new AppError(409, 'Payment is already confirmed');
+  res.json({ data: { status: 'failed', orderCreated: false } });
 }
 
 export async function completeCheckoutAttempt(attemptId, paymentId, session) {

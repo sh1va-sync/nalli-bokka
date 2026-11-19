@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "nodemon src/server.js",
+    "start": "node src/server.js",
     "dev": "nodemon --watch src src/server.js",
     "create-store": "node scripts/createStore.js",
     "reconcile-payments": "node scripts/reconcilePaymentState.js",
+    "revoke-sessions": "node scripts/revokeSessions.js",
     "test": "node --test"
   },
   "dependencies": {

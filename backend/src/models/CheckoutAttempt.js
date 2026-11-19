@@ -120,7 +120,8 @@ const checkoutAttemptSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 checkoutAttemptSchema.index({ userId: 1, idempotencyKey: 1 }, { unique: true });
-checkoutAttemptSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 });
+// Financial evidence must survive delayed callbacks and provider recovery.
+checkoutAttemptSchema.index({ status: 1, createdAt: 1 });
 
 const CheckoutAttempt = mongoose.model('CheckoutAttempt', checkoutAttemptSchema);
 

@@ -2,6 +2,8 @@
 
 Express 5 REST API using MongoDB/Mongoose, Renflair SMS for customer phone verification, JWT bearer tokens, and Razorpay for payments.
 
+See [fixes and rollout](../fixes-and-rollout.md) for payment recovery, index migration, proxy and shared-rate-limit configuration, and session revocation. Access tokens now expire after one hour; `JWT_EXPIRES_IN` no longer extends this limit. Customers and stores sign in again after expiry.
+
 ## Setup
 
 Requirements: Node.js 18+, npm, MongoDB, a Renflair SMS API key for customer OTP delivery, Cloudinary credentials for product image uploads, and Razorpay credentials for live payment flows.
@@ -46,7 +48,7 @@ The script prompts for every Store schema field: store identity and location, bo
 - Customer OTP: the API generates and verifies codes and uses Renflair to deliver SMS. Existing customers sign in immediately; first-time customers complete registration with the short-lived verification token and a required name.
 - Order invoices: customers and store admins can download a PDF for their own order. The PDF is generated once from the saved order details and stored with that order for consistent future downloads.
 - Store login: use the provisioned store `username` and password.
-- Authenticated endpoints take `Authorization: Bearer <token>`. Tokens are role-scoped (`user` or `store`) and expire after `JWT_EXPIRES_IN` (default `7d`).
+- Authenticated endpoints take `Authorization: Bearer <token>`. Tokens are role-scoped (`user` or `store`) and expire after one hour. `POST /api/auth/logout` revokes the current session. Store password changes through the model save path revoke previous store sessions; trusted operators can run `npm run revoke-sessions -- <user|store> <account-id>`.
 - OTP send/verification/registration and store login are rate-limited. OTP challenges are stored as hashes and expire after five minutes.
 
 ## Console logging

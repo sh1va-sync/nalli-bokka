@@ -92,8 +92,17 @@ export function useCustomerAppState() {
   ].sort((first, second) => new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime())[0]
 
   const activeOrdersError = placedOrdersError || packingOrdersError || deliveryOrdersError || pickupOrdersError
+  const storesUnavailable = !storesError
+    && Array.isArray(storesResponse?.data)
+    && storesResponse.data.length === 0
 
   useEffect(() => {
+    if (isStoreRoute || storesLoading || !storesResponse?.data) return
+    if (storesUnavailable) {
+      if (selectedStore) dispatch(setSelectedStore(null))
+      return
+    }
+
     const latestStore = storesResponse?.data?.find(({ _id }) => _id === selectedStore?._id)
     if (!latestStore) return
     if (
@@ -104,7 +113,7 @@ export function useCustomerAppState() {
     ) {
       dispatch(setSelectedStore({ ...selectedStore, ...latestStore }))
     }
-  }, [dispatch, selectedStore, storesResponse])
+  }, [dispatch, isStoreRoute, selectedStore, storesLoading, storesResponse, storesUnavailable])
 
   useEffect(() => {
     if (isStoreRoute) return
@@ -214,6 +223,7 @@ export function useCustomerAppState() {
     cartItems,
     cartCount,
     selectedStoreIsClosed,
+    storesUnavailable,
     activeOrder,
     activeOrdersError,
     startupRequestsLoading: storesLoading

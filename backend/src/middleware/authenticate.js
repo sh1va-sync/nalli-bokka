@@ -1,8 +1,9 @@
 import jwt from 'jsonwebtoken';
+import RevokedToken from '../models/RevokedToken.js';
 import AppError from '../utils/AppError.js';
 
 function authenticate(requiredRole) {
-  return (req, _res, next) => {
+  return async (req, _res, next) => {
     const authorization = req.get('authorization');
     const token = authorization?.startsWith('Bearer ')
       ? authorization.slice(7)
@@ -17,22 +18,34 @@ function authenticate(requiredRole) {
       return next(new AppError(500, 'Authentication is not configured'));
     }
 
+    let payload;
     try {
-      const payload = jwt.verify(token, secret, {
+      payload = jwt.verify(token, secret, {
         algorithms: ['HS256'],
-        issuer: 'nalli-bokka-api'
+        issuer: 'nalli-bokka-api',
+        maxAge: '1h'
       });
-      if (typeof payload !== 'object' || !payload.sub || !payload.role) {
+    } catch {
+      return next(new AppError(401, 'Invalid or expired authentication token'));
+    }
+    try {
+      if (typeof payload !== 'object' || !payload.sub || !['user', 'store'].includes(payload.role)) {
         return next(new AppError(401, 'Invalid authentication token'));
       }
       if (requiredRole && payload.role !== requiredRole) {
         return next(new AppError(403, 'You are not allowed to access this resource'));
       }
 
-      req.auth = { id: payload.sub, role: payload.role };
+      if (payload.jti && await RevokedToken.exists({ $or: [
+        { _id: payload.jti },
+        { _id: `account:${payload.role}:${payload.sub}`, revokedBefore: { $gte: new Date(payload.sessionStartedAt || payload.iat * 1000) } }
+      ] })) {
+        return next(new AppError(401, 'Session has ended; sign in again'));
+      }
+      req.auth = { id: payload.sub, role: payload.role, jti: payload.jti, exp: payload.exp };
       return next();
-    } catch {
-      return next(new AppError(401, 'Invalid or expired authentication token'));
+    } catch (error) {
+      return next(error);
     }
   };
 }

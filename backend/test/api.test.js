@@ -256,16 +256,16 @@ test('OTP send routes through Renflair and persists only a short-lived hash', as
     const response = await fetch(`${baseUrl}/auth/users/otp/send`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ phone: '+15551234567' })
+      body: JSON.stringify({ phone: '+919876543210' })
     });
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { message: 'Verification code sent' });
     assert.equal(providerUrl.origin, 'https://sms.renflair.in');
     assert.equal(providerUrl.pathname, '/V1.php');
     assert.equal(providerUrl.searchParams.get('API'), 'test-renflair-key');
-    assert.equal(providerUrl.searchParams.get('PHONE'), '+15551234567');
+    assert.equal(providerUrl.searchParams.get('PHONE'), '9876543210');
     assert.match(providerUrl.searchParams.get('OTP'), /^\d{6}$/);
-    assert.deepEqual(savedChallenge.filter, { phone: '+15551234567' });
+    assert.deepEqual(savedChallenge.filter, { phone: '+919876543210' });
     assert.equal(savedChallenge.update.$set.attemptsUsed, 0);
     assert.match(savedChallenge.update.$set.codeHash, /^[\da-f]{64}$/);
     assert.notEqual(savedChallenge.update.$set.codeHash, providerUrl.searchParams.get('OTP'));
@@ -280,11 +280,14 @@ test('OTP send routes through Renflair and persists only a short-lived hash', as
   }
 });
 
-test('OTP send rejects Renflair responses without SUCCESS and does not persist a challenge', async () => {
+test('OTP send rejects provider failure and cleans up its challenge', async () => {
   const originalFetch = globalThis.fetch;
   const originalApiKey = process.env.RENFLAIR_API_KEY;
   const originalFindOneAndUpdate = OtpChallenge.findOneAndUpdate;
   let persisted = false;
+  let deleted = false;
+  const originalDeleteOne = OtpChallenge.deleteOne;
+  OtpChallenge.deleteOne = async () => { deleted = true; return {}; };
   process.env.RENFLAIR_API_KEY = 'test-renflair-key';
   OtpChallenge.findOneAndUpdate = async () => {
     persisted = true;
@@ -301,12 +304,14 @@ test('OTP send rejects Renflair responses without SUCCESS and does not persist a
     const response = await fetch(`${baseUrl}/auth/users/otp/send`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ phone: '+15551234567' })
+      body: JSON.stringify({ phone: '+919876543211' })
     });
     assert.equal(response.status, 502);
     assert.equal((await response.json()).error, 'Renflair SMS provider did not confirm delivery');
-    assert.equal(persisted, false);
+    assert.equal(persisted, true);
+    assert.equal(deleted, true);
   } finally {
+    OtpChallenge.deleteOne = originalDeleteOne;
     globalThis.fetch = originalFetch;
     OtpChallenge.findOneAndUpdate = originalFindOneAndUpdate;
     if (originalApiKey === undefined) delete process.env.RENFLAIR_API_KEY;

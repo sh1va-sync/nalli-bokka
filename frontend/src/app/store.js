@@ -1,21 +1,34 @@
 import { configureStore, createListenerMiddleware, isAnyOf } from '@reduxjs/toolkit'
 import { setupListeners } from '@reduxjs/toolkit/query'
-import { api } from '../features/api/api.js'
+import { api, baseUrl } from '../features/api/api.js'
 import authReducer, { setUser, signedIn, signedOut } from '../features/auth/authSlice.js'
 import storeReducer, { setSelectedStore } from '../features/store/storeSlice.js'
 import cartReducer, { addGuestItem, clearGuestCart, removeGuestItem, updateGuestItem } from '../features/cart/cartSlice.js'
 import storeAuthReducer, { storeSignedIn, storeSignedOut } from '../features/storeAdmin/storeAuthSlice.js'
 
+// Older releases saved credentials persistently. Require a fresh sign-in.
+localStorage.removeItem('nalli-token')
+localStorage.removeItem('nalli-store-token')
 const persistence = createListenerMiddleware()
+persistence.startListening({
+  matcher: isAnyOf(signedOut, storeSignedOut),
+  effect: (action, listenerApi) => {
+    const previous = listenerApi.getOriginalState()
+    const token = signedOut.match(action) ? previous.auth.token : previous.storeAuth.token
+    if (token) fetch(baseUrl + '/auth/logout', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + token }, keepalive: true,
+    }).catch(() => {})
+  },
+})
 
 persistence.startListening({
   matcher: isAnyOf(signedIn, signedOut),
   effect: (action) => {
     if (signedIn.match(action)) {
-      localStorage.setItem('nalli-token', action.payload.token)
+      sessionStorage.setItem('nalli-token', action.payload.token)
       localStorage.setItem('nalli-user', JSON.stringify(action.payload.user))
     } else {
-      localStorage.removeItem('nalli-token')
+      sessionStorage.removeItem('nalli-token')
       localStorage.removeItem('nalli-user')
     }
   },
@@ -25,10 +38,10 @@ persistence.startListening({
   matcher: isAnyOf(storeSignedIn, storeSignedOut),
   effect: (action) => {
     if (storeSignedIn.match(action)) {
-      localStorage.setItem('nalli-store-token', action.payload.token)
+      sessionStorage.setItem('nalli-store-token', action.payload.token)
       localStorage.setItem('nalli-store-account', JSON.stringify(action.payload.store))
     } else {
-      localStorage.removeItem('nalli-store-token')
+      sessionStorage.removeItem('nalli-store-token')
       localStorage.removeItem('nalli-store-account')
     }
   },

@@ -10,6 +10,9 @@ import requestLogger from './middleware/requestLogger.js';
 
 const app = express();
 app.disable('x-powered-by');
+// Trust only explicitly configured proxy IPs/subnets, never arbitrary hop counts.
+const trustedProxies = (process.env.TRUSTED_PROXIES || '').split(',').map(value => value.trim()).filter(Boolean);
+if (trustedProxies.length) app.set('trust proxy', trustedProxies);
 app.use(requestLogger);
 
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
